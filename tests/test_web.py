@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -30,6 +32,31 @@ def test_toggle_enabled(client):
     status = client.post("/api/enabled", json={"enabled": True}).json()
     assert status["enabled"] is True
     assert client.engine.config.enabled is True
+
+
+def test_log_endpoint_reports_a_missing_console_log(client):
+    body = client.get("/api/log").json()
+    assert body["log_exists"] is False
+    assert body["lines"] == []
+
+
+def test_log_endpoint_shows_the_lines_the_tailer_read(client, tmp_path):
+    log = tmp_path / "console.log"
+    log.write_text("")
+    client.engine.config.game.console_log_path = str(log)
+
+    deadline = time.monotonic() + 5
+    while not client.engine.log_attached and time.monotonic() < deadline:
+        time.sleep(0.05)
+    log.write_text("[ALL] someone: hey\nDropped player from server\n")
+    while client.engine.lines_seen < 2 and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    body = client.get("/api/log").json()
+    assert body["log_exists"] is True
+    assert body["lines_seen"] == 2
+    assert body["lines"][0] == {"line": "[ALL] someone: hey", "chat": True}
+    assert body["lines"][1]["chat"] is False
 
 
 def test_parse_endpoint_reports_dead_players(client):

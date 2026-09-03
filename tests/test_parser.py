@@ -2,6 +2,20 @@ from cs2bot.models import ChatChannel, LifeState, Team
 from cs2bot.parser import parse_chat_line
 
 
+def test_untagged_all_chat_is_recognised_by_the_bidi_marks_cs2_adds():
+    message = parse_chat_line("\u200eplayer one\u200e\u200e: \u200egg wp")
+    assert message is not None
+    assert message.sender == "player one"
+    assert message.text == "gg wp"
+    assert message.channel is ChatChannel.ALL
+    assert message.sender_state is LifeState.ALIVE
+
+
+def test_console_output_shaped_like_chat_is_still_ignored():
+    assert parse_chat_line("Loading map: de_dust2") is None
+    assert parse_chat_line("Host_Error: something broke") is None
+
+
 def test_all_chat_with_timestamp():
     message = parse_chat_line("07/02 17:35:36  [ALL] someguy\u200e: hey there")
     assert message is not None

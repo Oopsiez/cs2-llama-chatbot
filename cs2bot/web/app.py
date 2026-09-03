@@ -47,6 +47,17 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     async def status() -> dict[str, Any]:
         return engine.status()
 
+    @app.get("/api/log")
+    async def log_view() -> dict[str, Any]:
+        """Every line the tailer has read, chat or not, newest last."""
+        return {
+            "path": engine.config.game.console_log_path,
+            "attached": engine.log_attached,
+            "lines_seen": engine.lines_seen,
+            "lines": list(engine.recent_lines),
+            **engine.log_file_state(),
+        }
+
     @app.get("/api/config")
     async def get_config() -> dict[str, Any]:
         return {

@@ -352,6 +352,16 @@
     </div>
 
     <div class="panel" data-panel="test">
+      <label>What the bot is reading out of console.log
+        <span class="hint">Every line it has read, chat or not. Empty while you are in a match
+          means CS2 is not writing the log the panel points at.</span>
+      </label>
+      <div class="actions">
+        <button class="action" id="log-refresh">Refresh log</button>
+        <span class="note" id="log-note"></span>
+      </div>
+      <div class="result" id="log-output">—</div>
+      <div class="divider"></div>
       <label>Paste console.log lines to check parsing
         <textarea id="parse-input" rows="4" placeholder="[ALL] someone: hey&#10;*DEAD* [ALL] someone else: gg"></textarea>
       </label>

@@ -430,6 +430,8 @@ function bindActions() {
     $("gsi-note").textContent = response.ok ? `written to ${body.path} — restart CS2` : body.detail;
   });
 
+  $("log-refresh").addEventListener("click", renderLog);
+
   $("parse-run").addEventListener("click", async () => {
     const response = await fetch("/api/parse", {
       method: "POST",
@@ -468,6 +470,26 @@ function bindActions() {
       ? `reply: ${body.reply}${aimed}`
       : `no reply — ${body.reason}${aimed}`;
   });
+}
+
+async function renderLog() {
+  const body = await (await fetch("/api/log")).json();
+  const size = body.log_exists ? `${body.log_size} bytes, last written ${body.log_modified}` : "missing";
+  $("log-note").textContent = `${body.path || "no path set"} — ${size}`;
+  if (!body.log_exists) {
+    $("log-output").textContent =
+      "CS2 has not created this file. Add -condebug to the launch options and restart the game.";
+    return;
+  }
+  if (!body.lines.length) {
+    $("log-output").textContent = body.attached
+      ? "watching, but CS2 has not written a line since the bot started"
+      : "not reading the log yet — press Start bot";
+    return;
+  }
+  $("log-output").textContent = body.lines
+    .map(({ line, chat }) => `${chat ? "chat  " : "      "}${line}`)
+    .join("\n");
 }
 
 async function renderCallouts() {
