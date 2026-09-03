@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cs2bot"
-version = "1.0.1"
+version = "1.1.0"
 description = "Local-LLM chatbot that reads Counter-Strike 2 chat and replies in-game, with a web control panel"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,7 +19,6 @@ dependencies = [
 
 [project.optional-dependencies]
 llama = ["llama-cpp-python>=0.2.79"]
-windows = ["pydirectinput>=1.0.4"]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.5", "mypy>=1.10"]
 
 [project.scripts]
