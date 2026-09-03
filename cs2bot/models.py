@@ -38,6 +38,8 @@ class ChatMessage(BaseModel):
     sender_state: LifeState = LifeState.UNKNOWN
     sender_team: Team = Team.UNKNOWN
     is_self: bool = False
+    addressed_to_me: bool = False
+    mention_reason: str = ""
     timestamp: float = Field(default_factory=time.time)
 
 

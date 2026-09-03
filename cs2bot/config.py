@@ -22,7 +22,9 @@ class GameSettings(BaseModel):
     cfg_dir: str = ""
     exec_cfg_name: str = "message.cfg"
     bind_key: str = "p"
-    own_name: str = ""
+    own_name: str = ""  # blank -> detect from GSI and the console log
+    name_aliases: list[str] = Field(default_factory=list)
+    auto_detect_name: bool = True
     chat_char_limit: int = 221
     chat_send_delay: float = 0.6
     require_focus: bool = True
@@ -79,6 +81,8 @@ class BehaviorSettings(BaseModel):
     history_turns: int = 6
     trigger_words: list[str] = Field(default_factory=list)  # empty -> reply to everything
     ignore_players: list[str] = Field(default_factory=list)
+    only_reply_when_addressed: bool = False
+    always_reply_when_addressed: bool = True  # bypass triggers, cooldown and the probability roll
     typing_simulation: bool = True
     typing_delay_per_char: float = 0.02
 

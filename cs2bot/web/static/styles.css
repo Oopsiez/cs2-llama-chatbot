@@ -123,6 +123,7 @@ main {
 .event.chat.dead .who { color: var(--dead); }
 .event.chat.ct .who { color: var(--ct); }
 .event.chat.t .who { color: var(--t); }
+.event.chat.mention { background: #1d1a10; border-left-color: var(--accent); }
 .event.reply { background: #14201a; border-left-color: var(--ok); }
 .event.reply.failed { background: #201517; border-left-color: var(--dead); }
 .event.skipped { color: var(--muted); border-left-color: #333b45; }

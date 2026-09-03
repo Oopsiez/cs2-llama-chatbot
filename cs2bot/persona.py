@@ -54,8 +54,15 @@ _CHANNEL_LABEL = {
 }
 
 
-def game_context(player: LocalPlayer, local_state: LifeState, incoming: ChatMessage) -> str:
+def game_context(
+    player: LocalPlayer,
+    local_state: LifeState,
+    incoming: ChatMessage,
+    own_name: str = "",
+) -> str:
     bits: list[str] = []
+    if own_name:
+        bits.append(f"Your in-game name: {own_name}")
     if player.map_name:
         bits.append(f"Map: {player.map_name}")
     if player.mode:
@@ -76,11 +83,23 @@ def game_context(player: LocalPlayer, local_state: LifeState, incoming: ChatMess
     return "; ".join(bits)
 
 
+def _address_note(incoming: ChatMessage, own_name: str) -> str | None:
+    if not incoming.addressed_to_me:
+        return None
+    who = own_name or "you"
+    return (
+        f"{incoming.sender} is talking to {who} directly"
+        f"{f' ({incoming.mention_reason})' if incoming.mention_reason else ''}. "
+        "Answer them, and do not repeat your own name back at them."
+    )
+
+
 def build_system_prompt(
     config: AppConfig,
     player: LocalPlayer,
     local_state: LifeState,
     incoming: ChatMessage,
+    own_name: str = "",
 ) -> str:
     persona = config.persona
     lines = [persona.description.strip()]
@@ -95,7 +114,10 @@ def build_system_prompt(
     )
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
-    lines.append("Live game context - " + game_context(player, local_state, incoming))
+    lines.append("Live game context - " + game_context(player, local_state, incoming, own_name))
+    note = _address_note(incoming, own_name)
+    if note:
+        lines.append(note)
     return "\n".join(lines)
 
 
@@ -105,8 +127,10 @@ def build_turns(
     local_state: LifeState,
     incoming: ChatMessage,
     history: list[ChatMessage],
+    own_name: str = "",
 ) -> list[ChatTurn]:
-    turns = [ChatTurn(role="system", content=build_system_prompt(config, player, local_state, incoming))]
+    system = build_system_prompt(config, player, local_state, incoming, own_name)
+    turns = [ChatTurn(role="system", content=system)]
     for message in history[-config.behavior.history_turns :]:
         role = "assistant" if message.is_self else "user"
         content = message.text if message.is_self else f"{message.sender}: {message.text}"

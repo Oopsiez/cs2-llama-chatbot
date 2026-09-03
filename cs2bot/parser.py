@@ -12,13 +12,10 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Sequence
 
+from .identity import TIMESTAMP, is_same_player
 from .models import ChatChannel, ChatMessage, LifeState, Team
-
-# `MM/DD HH:MM:SS  ` and `MM/DD/YYYY - HH:MM:SS: ` timestamp prefixes.
-_TIMESTAMP = re.compile(
-    r"^\d{2}/\d{2}(?:/\d{2,4})?\s*(?:-\s*)?\d{2}:\d{2}:\d{2}\s*:?\s+"
-)
 
 _SRCDS = re.compile(
     r'^"(?P<name>.*?)<\d+><(?P<sid>[^>]*)><(?P<team>[^>]*)>"\s+(?P<cmd>say|say_team)\s+"(?P<text>.*)"\s*$'
@@ -59,16 +56,12 @@ def _team(value: str | None) -> Team:
     return _TEAM_BY_NAME.get(value.strip().lower(), Team.UNKNOWN)
 
 
-def _same_player(sender: str, own_name: str) -> bool:
-    if not own_name:
-        return False
-    return sender.strip().casefold() == own_name.strip().casefold()
-
-
-def parse_chat_line(line: str, own_name: str = "") -> ChatMessage | None:
+def parse_chat_line(
+    line: str, own_name: str = "", aliases: Sequence[str] = ()
+) -> ChatMessage | None:
     """Parse a single console line. Returns None when the line is not player chat."""
     raw = line.rstrip("\r\n")
-    body = _clean(_TIMESTAMP.sub("", _clean(raw)))
+    body = _clean(TIMESTAMP.sub("", _clean(raw)))
     if not body:
         return None
 
@@ -81,7 +74,7 @@ def parse_chat_line(line: str, own_name: str = "") -> ChatMessage | None:
             text=_clean(srcds.group("text")),
             channel=ChatChannel.TEAM if srcds.group("cmd") == "say_team" else ChatChannel.ALL,
             sender_team=_team(srcds.group("team")),
-            is_self=_same_player(sender, own_name),
+            is_self=is_same_player(sender, own_name, aliases),
         )
 
     channel = ChatChannel.UNKNOWN
@@ -162,5 +155,5 @@ def parse_chat_line(line: str, own_name: str = "") -> ChatMessage | None:
         channel=channel,
         sender_state=state,
         sender_team=team,
-        is_self=_same_player(sender, own_name),
+        is_self=is_same_player(sender, own_name, aliases),
     )

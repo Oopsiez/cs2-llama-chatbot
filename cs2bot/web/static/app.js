@@ -20,6 +20,8 @@ const BINDINGS = {
   trigger_words: ["behavior.trigger_words", "list"],
   ignore_players: ["behavior.ignore_players", "list"],
   "typing-sim": ["behavior.typing_simulation", "bool"],
+  "addressed-always": ["behavior.always_reply_when_addressed", "bool"],
+  "addressed-only": ["behavior.only_reply_when_addressed", "bool"],
 
   "auto-sampling": ["generation.auto_from_intelligence", "bool"],
   temperature: ["generation.temperature", "float"],
@@ -49,6 +51,8 @@ const BINDINGS = {
   "log-path": ["game.console_log_path", "text"],
   "cfg-dir": ["game.cfg_dir", "text"],
   "own-name": ["game.own_name", "text"],
+  "name-aliases": ["game.name_aliases", "list"],
+  "auto-detect-name": ["game.auto_detect_name", "bool"],
   "bind-key": ["game.bind_key", "text"],
   "char-limit": ["game.chat_char_limit", "int"],
   "send-delay": ["game.chat_send_delay", "float"],
@@ -187,6 +191,7 @@ function chatClass(message) {
   if (message.sender_state === "dead") classes.push("dead");
   if (message.sender_team === "CT") classes.push("ct");
   if (message.sender_team === "T") classes.push("t");
+  if (message.addressed_to_me) classes.push("mention");
   return classes.join(" ");
 }
 
@@ -194,7 +199,11 @@ function pushEvent(event) {
   const data = event.data || {};
   if (event.kind === "chat") {
     const tag = `[${data.channel}]${data.sender_state === "dead" ? " *DEAD*" : ""}`;
-    line(`${escapeHtml(tag)} <span class="who">${escapeHtml(data.sender)}</span>: ${escapeHtml(data.text)}`, chatClass(data));
+    line(
+      `${escapeHtml(tag)} <span class="who">${escapeHtml(data.sender)}</span>: ${escapeHtml(data.text)}`,
+      chatClass(data),
+      data.addressed_to_me ? escapeHtml(`→ you (${data.mention_reason})`) : "",
+    );
   } else if (event.kind === "reply") {
     line(
       `<span class="who">bot →</span> ${escapeHtml(data.text)}`,
@@ -205,6 +214,8 @@ function pushEvent(event) {
     line(`skipped ${escapeHtml(data.message.sender)}`, "skipped", escapeHtml(data.reason));
   } else if (event.kind === "error") {
     line(escapeHtml(data.message), "error");
+  } else if (event.kind === "identity") {
+    line(`your name looks like "${escapeHtml(data.name)}"`, "gamestate", escapeHtml(data.source));
   } else if (event.kind === "gamestate") {
     line(
       `game state: ${escapeHtml(data.state)}${data.health != null ? ` (${data.health} hp)` : ""}`,
@@ -229,6 +240,12 @@ function renderStatus(status) {
     status.llm_status.startsWith("error") ? "bad" : status.llm_status === "not checked" ? "" : "good",
   );
   setPill("pill-sender", `output: ${status.sender}`);
+  setPill(
+    "pill-name",
+    `you: ${status.own_name || "unknown"}`,
+    status.own_name ? "good" : "warn",
+  );
+  $("pill-name").title = `name source: ${status.name_source}`;
   const toggle = $("toggle");
   toggle.dataset.on = String(status.enabled);
   toggle.textContent = status.enabled ? "Stop bot" : "Start bot";
@@ -325,12 +342,16 @@ function bindActions() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: $("parse-input").value }),
     });
-    const { results } = await response.json();
-    $("parse-output").textContent = results
-      .map(({ line, parsed }) =>
-        parsed
-          ? `✓ ${parsed.channel} | ${parsed.sender} | ${parsed.sender_state} | ${parsed.sender_team} | "${parsed.text}"`
-          : `✗ not chat: ${line}`,
+    const { results, own_name, name_source } = await response.json();
+    const header = `your name: ${own_name || "unknown"} (${name_source})`;
+    $("parse-output").textContent = [header]
+      .concat(
+        results.map(({ line, parsed, detected_name }) => {
+          if (detected_name) return `name detected: ${detected_name}`;
+          if (!parsed) return `not chat: ${line}`;
+          const aimed = parsed.addressed_to_me ? ` | TO YOU (${parsed.mention_reason})` : "";
+          return `${parsed.channel} | ${parsed.sender} | ${parsed.sender_state} | ${parsed.sender_team} | "${parsed.text}"${aimed}`;
+        }),
       )
       .join("\n");
   });
@@ -348,9 +369,10 @@ function bindActions() {
       $("sim-output").textContent = body.detail;
       return;
     }
+    const aimed = body.message.addressed_to_me ? ` (talking to you: ${body.message.mention_reason})` : "";
     $("sim-output").textContent = body.would_reply
-      ? `reply: ${body.reply}`
-      : `no reply — ${body.reason}`;
+      ? `reply: ${body.reply}${aimed}`
+      : `no reply — ${body.reason}${aimed}`;
   });
 }
 

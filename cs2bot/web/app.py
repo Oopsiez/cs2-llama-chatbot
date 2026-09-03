@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from ..config import AppConfig, PersonaSettings, config_path, load_config, save_config
 from ..engine import Engine
 from ..gamestate import install_gsi_cfg
+from ..identity import detect_name_from_line
 from ..llm import BACKENDS
 from ..models import LifeState
 from ..parser import parse_chat_line
@@ -106,27 +107,29 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     async def parse_lines(payload: dict[str, Any]) -> dict[str, Any]:
         """Paste raw console.log lines and see exactly what the bot makes of them."""
         text = str(payload.get("text") or "")
-        own_name = engine.config.game.own_name or engine.game_state.player.name
+        aliases = engine.config.game.name_aliases
         results = []
         for line in text.splitlines():
             if not line.strip():
                 continue
-            message = parse_chat_line(line, own_name)
+            message = parse_chat_line(line, engine.own_name, aliases)
             results.append(
                 {
                     "line": line,
-                    "parsed": message.model_dump(mode="json") if message else None,
+                    "parsed": engine.annotate(message).model_dump(mode="json") if message else None,
+                    "detected_name": detect_name_from_line(line, engine.own_name),
                 }
             )
-        return {"results": results}
+        return {"results": results, "own_name": engine.own_name, "name_source": engine.name_source}
 
     @app.post("/api/simulate")
     async def simulate(payload: dict[str, Any]) -> dict[str, Any]:
         """Generate a reply for a made-up message without touching the game."""
         line = str(payload.get("line") or "")
-        message = parse_chat_line(line, engine.config.game.own_name)
-        if message is None:
+        parsed = parse_chat_line(line, engine.own_name, engine.config.game.name_aliases)
+        if parsed is None:
             raise HTTPException(status_code=422, detail="line is not recognised as CS2 chat")
+        message = engine.annotate(parsed)
         state_override = payload.get("local_state")
         local_state = (
             LifeState(state_override)

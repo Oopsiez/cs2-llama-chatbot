@@ -11,6 +11,7 @@ from .config import AppConfig, load_config, save_config
 from .events import EventBus
 from .gamestate import GameStateStore
 from .humanize import humanize, sampling_for_intelligence
+from .identity import addressed_to, detect_name_from_line
 from .llm import LLMBackend, LLMError, SamplingParams, build_backend
 from .logtail import LogTailer
 from .models import BotReply, ChatChannel, ChatMessage, LifeState
@@ -20,6 +21,8 @@ from .persona import build_turns
 from .rules import should_reply
 
 POLL_INTERVAL = 0.25
+# How long after the bot speaks a bare "you" still counts as a reply to it.
+REPLY_WINDOW_SECONDS = 25.0
 
 
 class Engine:
@@ -29,6 +32,8 @@ class Engine:
         self.game_state = GameStateStore()
         self.history: list[ChatMessage] = []
         self.last_reply_at = 0.0
+        self.last_spoke_at = 0.0
+        self.detected_name: str = ""
         self.last_error: str = ""
         self.llm_status: str = "not checked"
         self._backend: LLMBackend | None = None
@@ -36,6 +41,54 @@ class Engine:
         self._tailer: LogTailer | None = None
         self._task: asyncio.Task[None] | None = None
         self._random = random.Random()
+
+    # ---- identity ---------------------------------------------------------------
+
+    @property
+    def own_name(self) -> str:
+        """The user's in-game name: panel setting first, then GSI, then the console log."""
+        configured = self.config.game.own_name.strip()
+        if configured:
+            return configured
+        if not self.config.game.auto_detect_name:
+            return ""
+        return self.game_state.player.name or self.detected_name
+
+    @property
+    def name_source(self) -> str:
+        if self.config.game.own_name.strip():
+            return "set in panel"
+        if not self.config.game.auto_detect_name:
+            return "auto-detect off"
+        if self.game_state.player.name:
+            return "game state integration"
+        if self.detected_name:
+            return "console log"
+        return "unknown"
+
+    def _note_identity(self, line: str) -> None:
+        """Watch non-chat console lines for the user's name."""
+        if not self.config.game.auto_detect_name:
+            return
+        found = detect_name_from_line(line, self.own_name)
+        if not found or found == self.detected_name:
+            return
+        self.detected_name = found
+        self.bus.publish("identity", {"name": self.own_name, "source": self.name_source})
+
+    def annotate(self, message: ChatMessage) -> ChatMessage:
+        """Mark whether the sender is the user, and whether they are talking to the user."""
+        if message.is_self:
+            return message
+        mention = addressed_to(
+            message.text,
+            self.own_name,
+            self.config.game.name_aliases,
+            replying_to_bot=(time.time() - self.last_spoke_at) < REPLY_WINDOW_SECONDS,
+        )
+        return message.model_copy(
+            update={"addressed_to_me": mention.addressed, "mention_reason": mention.reason}
+        )
 
     # ---- wiring -----------------------------------------------------------------
 
@@ -114,14 +167,16 @@ class Engine:
         if self._tailer is None:
             self._tailer = LogTailer(path)
         for line in self._tailer.read_lines():
-            message = parse_chat_line(line, self.config.game.own_name or self.game_state.player.name)
+            message = parse_chat_line(line, self.own_name, self.config.game.name_aliases)
             if message is None:
+                self._note_identity(line)
                 continue
             await self.handle_message(message)
 
     # ---- message handling -------------------------------------------------------
 
     async def handle_message(self, message: ChatMessage) -> BotReply | None:
+        message = self.annotate(message)
         self.history.append(message)
         del self.history[:-50]
         self.bus.publish("chat", message.model_dump(mode="json"))
@@ -135,14 +190,17 @@ class Engine:
             self.bus.publish("skipped", {"message": message.model_dump(mode="json"), "reason": reason})
             return None
 
+        # Someone talking straight at you gets an answer regardless of pacing.
+        urgent = message.addressed_to_me and self.config.behavior.always_reply_when_addressed
+
         now = time.monotonic()
-        if now - self.last_reply_at < self.config.behavior.cooldown_seconds:
+        if not urgent and now - self.last_reply_at < self.config.behavior.cooldown_seconds:
             self.bus.publish(
                 "skipped",
                 {"message": message.model_dump(mode="json"), "reason": "cooling down"},
             )
             return None
-        if self._random.random() > self.config.behavior.reply_probability:
+        if not urgent and self._random.random() > self.config.behavior.reply_probability:
             self.bus.publish(
                 "skipped",
                 {"message": message.model_dump(mode="json"), "reason": "reply probability roll failed"},
@@ -173,9 +231,10 @@ class Engine:
             reason=detail,
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
+        self.last_spoke_at = time.time()
         own_message = message.model_copy(
             update={
-                "sender": self.config.game.own_name or self.game_state.player.name or "me",
+                "sender": self.own_name or "me",
                 "text": text,
                 "is_self": True,
                 "sender_state": local_state,
@@ -187,7 +246,14 @@ class Engine:
 
     async def generate_reply(self, message: ChatMessage, local_state: LifeState) -> str:
         params = self._sampling_params()
-        turns = build_turns(self.config, self.game_state.player, local_state, message, self.history[:-1])
+        turns = build_turns(
+            self.config,
+            self.game_state.player,
+            local_state,
+            message,
+            self.history[:-1],
+            self.own_name,
+        )
         raw = await self.backend.generate(turns, params)
         return humanize(
             raw,
@@ -226,6 +292,8 @@ class Engine:
             "sender": self.sender.describe(),
             "log_path": self.config.game.console_log_path,
             "log_attached": bool(self._tailer and self._tailer.is_open),
+            "own_name": self.own_name,
+            "name_source": self.name_source,
             "local_state": self.game_state.local_state(
                 self.config.dead_alive.assume_alive_without_gsi
             ).value,

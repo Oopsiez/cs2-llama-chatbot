@@ -19,6 +19,11 @@ and rules that understand who is alive and who is dead.
 - **Dead vs alive.** `*DEAD*` senders are detected from the log, and CS2 Game State Integration
   reports whether *you* are alive. The bot will not answer messages a living player could not have
   seen, and will not type into chat that nobody alive can read (see below).
+- **Knows who you are.** Your in-game name is taken from the panel, or read from Game State
+  Integration and the console log, and is handed to the model as prompt context.
+- **Knows when it is being spoken to.** `you: gg`, `@you`, your name inside a sentence, nickname
+  aliases and follow-ups to the bot's own last line are flagged as directed at you; those can jump
+  the trigger-word filter, cooldown and reply-chance roll, or be the only thing the bot answers.
 - **Live panel.** Streaming feed of chat, replies, and every skip reason; parser tester for pasting
   real log lines; reply simulator that needs no game running.
 
@@ -48,7 +53,8 @@ Then open <http://127.0.0.1:8420>.
 1. **Game tab** - point `console.log` at
    `.../Counter-Strike Global Offensive/game/csgo/console.log` and the cfg directory at
    `.../game/csgo/cfg` (both are auto-detected when Steam is installed in a standard location).
-   Set your in-game name and the bind key.
+   Set the bind key. Leave *Your in-game name* blank to auto-detect it; add aliases if people
+   shorten your name.
 2. **Model tab** - pick a backend, set the GGUF path or Ollama model, press *Check model*.
 3. **Game tab → Install GSI config** - writes `gamestate_integration_cs2bot.cfg` into the cfg
    directory so CS2 reports your alive/dead state. Restart CS2 afterwards.
@@ -69,6 +75,15 @@ spectators. That gives two rules, both toggleable on the *Dead / alive* tab:
 Warmup, deathmatch and `sv_deadtalk` servers merge the audiences again; the *treat warmup as one
 shared chat* and *global dead chat* toggles cover those. Without GSI the bot assumes it is alive.
 
+## How it knows your name
+
+In priority order: the name typed into the *Game* tab, the player name reported by GSI, then the
+console log (`"name" = "..."`, `name "..."`, rename notices). The resolved name and its source are
+shown in the status bar. A message counts as directed at you when it starts with your name, uses
+`@name`, contains your name or one of your aliases (accents, leetspeak and clan tags are ignored),
+or uses "you" shortly after the bot spoke. Dead/alive visibility is still enforced first - being
+named never makes the bot answer chat it should not be able to see.
+
 ## Trying it without CS2
 
 ```bash
@@ -83,6 +98,7 @@ The *Test* tab also parses pasted log lines and generates one-off replies with n
 | Path | Purpose |
 | ---- | ------- |
 | `cs2bot/logtail.py` | incremental `console.log` follower (handles append, truncate, relaunch) |
+| `cs2bot/identity.py` | your name: detection, aliases, and "is this aimed at me?" |
 | `cs2bot/parser.py` | chat line → `ChatMessage` (channel, sender, dead/alive, team) |
 | `cs2bot/gamestate.py` | CS2 Game State Integration listener + cfg generator |
 | `cs2bot/rules.py` | who may be answered, and why not |

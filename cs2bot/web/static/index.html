@@ -15,6 +15,7 @@
     <span class="pill" id="pill-log">log: detached</span>
     <span class="pill" id="pill-llm">llm: not checked</span>
     <span class="pill" id="pill-sender">output: -</span>
+    <span class="pill" id="pill-name">you: unknown</span>
     <button class="toggle" id="toggle" data-on="false">Start bot</button>
   </div>
 </header>
@@ -110,6 +111,11 @@
       </div>
       <label>Ignore players (comma separated)<input type="text" id="ignore_players" /></label>
       <div class="row">
+        <label class="check"><input type="checkbox" id="addressed-always" /><span>Always answer when someone talks to you
+          <small>Skips trigger words, cooldown and the probability roll.</small></span></label>
+        <label class="check"><input type="checkbox" id="addressed-only" /><span>Only answer when someone talks to you</span></label>
+      </div>
+      <div class="row">
         <label class="check"><input type="checkbox" id="reply-all" /><span>Reply in all chat</span></label>
         <label class="check"><input type="checkbox" id="reply-team" /><span>Reply in team chat</span></label>
       </div>
@@ -173,9 +179,17 @@
         <input type="text" id="cfg-dir" />
       </label>
       <div class="row">
-        <label>Your in-game name<input type="text" id="own-name" /></label>
+        <label>Your in-game name
+          <span class="hint">Leave blank to detect it from GSI and the console log.</span>
+          <input type="text" id="own-name" placeholder="auto-detect" />
+        </label>
         <label>Bind key <span class="hint">bind &lt;key&gt; "exec message.cfg"</span><input type="text" id="bind-key" /></label>
       </div>
+      <label>Also answer to (comma separated)
+        <span class="hint">Nicknames people shorten your name to, e.g. clan tag removed.</span>
+        <input type="text" id="name-aliases" />
+      </label>
+      <label class="check"><input type="checkbox" id="auto-detect-name" /><span>Detect my name automatically</span></label>
       <div class="row">
         <label>Chat character limit<input type="number" id="char-limit" min="40" max="255" /></label>
         <label>Delay between chunks (s)<input type="number" id="send-delay" step="0.1" min="0" /></label>

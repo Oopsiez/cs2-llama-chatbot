@@ -69,6 +69,14 @@ def should_reply(
     if message.channel not in config.behavior.reply_channels:
         return False, f"{message.channel.value} chat is disabled"
 
+    # Being spoken to directly outranks the trigger-word filter.
+    if message.addressed_to_me and config.behavior.always_reply_when_addressed:
+        reason = visibility_reason(config, message, local_state, player)
+        return (False, reason) if reason else (True, message.mention_reason or "addressed to you")
+
+    if config.behavior.only_reply_when_addressed and not message.addressed_to_me:
+        return False, "nobody is talking to you"
+
     triggers = [t for t in config.behavior.trigger_words if t.strip()]
     if triggers:
         lowered = message.text.casefold()
