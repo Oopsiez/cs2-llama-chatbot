@@ -11,6 +11,7 @@ import ctypes
 from ctypes import create_unicode_buffer
 from pathlib import Path
 
+from . import keyboard
 from .base import ChatSender, chunk_message, sanitize_for_console
 
 CS2_WINDOW_TITLE = "Counter-Strike 2"
@@ -52,9 +53,7 @@ class WindowsCfgSender(ChatSender):
         return f"writes {self.cfg_path} and presses '{self.bind_key}'"
 
     def _press_key(self) -> None:
-        import pydirectinput
-
-        pydirectinput.press(self.bind_key)
+        keyboard.press(self.bind_key)
 
     async def send(self, text: str, team_only: bool = False) -> tuple[bool, str]:
         command = "say_team" if team_only else "say"
@@ -78,8 +77,8 @@ class WindowsCfgSender(ChatSender):
                 await asyncio.sleep(self.typing_delay_per_char * len(chunk))
             try:
                 await asyncio.to_thread(self._press_key)
-            except ImportError:
-                return False, "pydirectinput is not installed (pip install 'cs2bot[windows]')"
+            except keyboard.KeyPressError as exc:
+                return False, str(exc)
             except Exception as exc:  # pragma: no cover - depends on the desktop session
                 return False, f"keypress failed: {exc}"
             await asyncio.sleep(self.send_delay)
