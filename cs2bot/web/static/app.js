@@ -1,0 +1,372 @@
+const $ = (id) => document.getElementById(id);
+
+let config = null;
+let presets = {};
+let saving = null;
+
+/* id -> [config path, kind] */
+const BINDINGS = {
+  "persona-name": ["persona.name", "text"],
+  "persona-description": ["persona.description", "text"],
+  "persona-style": ["persona.style_notes", "text"],
+  "persona-dead": ["persona.dead_notes", "text"],
+  "persona-banned": ["persona.banned_words", "list"],
+  "persona-maxchars": ["persona.max_reply_chars", "int"],
+
+  iq: ["behavior.intelligence", "int"],
+  reply_probability: ["behavior.reply_probability", "float"],
+  cooldown: ["behavior.cooldown_seconds", "float"],
+  history_turns: ["behavior.history_turns", "int"],
+  trigger_words: ["behavior.trigger_words", "list"],
+  ignore_players: ["behavior.ignore_players", "list"],
+  "typing-sim": ["behavior.typing_simulation", "bool"],
+
+  "auto-sampling": ["generation.auto_from_intelligence", "bool"],
+  temperature: ["generation.temperature", "float"],
+  top_p: ["generation.top_p", "float"],
+  top_k: ["generation.top_k", "int"],
+  repeat_penalty: ["generation.repeat_penalty", "float"],
+  max_tokens: ["generation.max_tokens", "int"],
+
+  "llm-backend": ["llm.backend", "text"],
+  "model-path": ["llm.model_path", "text"],
+  n_ctx: ["llm.n_ctx", "int"],
+  n_gpu_layers: ["llm.n_gpu_layers", "int"],
+  n_threads: ["llm.n_threads", "int"],
+  request_timeout: ["llm.request_timeout", "float"],
+  "ollama-url": ["llm.ollama_url", "text"],
+  "ollama-model": ["llm.ollama_model", "text"],
+
+  "da-enabled": ["dead_alive.enabled", "bool"],
+  "da-reply-when-dead": ["dead_alive.reply_when_dead", "bool"],
+  "da-dead-when-alive": ["dead_alive.reply_to_dead_when_alive", "bool"],
+  "da-alive-when-dead": ["dead_alive.reply_to_alive_when_dead", "bool"],
+  "da-warmup": ["dead_alive.treat_warmup_as_global", "bool"],
+  "da-global": ["dead_alive.dead_chat_is_global", "bool"],
+  "da-persona": ["dead_alive.use_dead_persona", "bool"],
+  "da-assume": ["dead_alive.assume_alive_without_gsi", "bool"],
+
+  "log-path": ["game.console_log_path", "text"],
+  "cfg-dir": ["game.cfg_dir", "text"],
+  "own-name": ["game.own_name", "text"],
+  "bind-key": ["game.bind_key", "text"],
+  "char-limit": ["game.chat_char_limit", "int"],
+  "send-delay": ["game.chat_send_delay", "float"],
+  "output-backend": ["game.output_backend", "text"],
+  "require-focus": ["game.require_focus", "bool"],
+
+  "gsi-port": ["gsi.port", "int"],
+  "gsi-token": ["gsi.auth_token", "text"],
+};
+
+const IQ_DESCRIPTIONS = [
+  [15, "Barely literate: a few lowercase words, no punctuation, frequent typos."],
+  [35, "Casual and careless: one short line, chat abbreviations, some typos."],
+  [60, "Average player: short sentences, light slang, simple opinions."],
+  [85, "Sharp: clear callouts and reasoning, minimal slang, clean grammar."],
+  [101, "Analyst: precise, specific tactical reasoning, correct grammar."],
+];
+
+function getPath(obj, path) {
+  return path.split(".").reduce((acc, key) => (acc == null ? acc : acc[key]), obj);
+}
+
+function setPath(obj, path, value) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  const target = keys.reduce((acc, key) => (acc[key] ??= {}), obj);
+  target[last] = value;
+}
+
+function readField(el, kind) {
+  if (kind === "bool") return el.checked;
+  if (kind === "int") return parseInt(el.value || "0", 10);
+  if (kind === "float") return parseFloat(el.value || "0");
+  if (kind === "list") return el.value.split(",").map((s) => s.trim()).filter(Boolean);
+  return el.value;
+}
+
+function writeField(el, kind, value) {
+  if (kind === "bool") el.checked = Boolean(value);
+  else if (kind === "list") el.value = (value || []).join(", ");
+  else el.value = value ?? "";
+}
+
+function renderConfig() {
+  for (const [id, [path, kind]] of Object.entries(BINDINGS)) {
+    const el = $(id);
+    if (el) writeField(el, kind, getPath(config, path));
+  }
+  $("reply-all").checked = config.behavior.reply_channels.includes("all");
+  $("reply-team").checked = config.behavior.reply_channels.includes("team");
+  renderIq();
+  renderSavedPersonas();
+}
+
+function renderIq() {
+  const value = config.behavior.intelligence;
+  $("iq-value").textContent = value;
+  $("iq-desc").textContent = IQ_DESCRIPTIONS.find(([limit]) => value < limit)[1];
+}
+
+function renderSavedPersonas() {
+  const select = $("persona-saved");
+  const names = Object.keys(config.saved_personas || {});
+  select.innerHTML = names.length
+    ? names.map((n) => `<option value="${n}">${n}</option>`).join("")
+    : '<option value="">(nothing saved)</option>';
+}
+
+function scheduleSave() {
+  clearTimeout(saving);
+  saving = setTimeout(saveConfig, 350);
+}
+
+async function saveConfig() {
+  const response = await fetch("/api/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!response.ok) {
+    pushEvent({ kind: "error", data: { message: `saving settings failed (${response.status})` } });
+    return;
+  }
+  config = await response.json();
+}
+
+function bindInputs() {
+  for (const [id, [path, kind]] of Object.entries(BINDINGS)) {
+    const el = $(id);
+    if (!el) continue;
+    el.addEventListener("input", () => {
+      setPath(config, path, readField(el, kind));
+      if (id === "iq") renderIq();
+      scheduleSave();
+    });
+  }
+  for (const [id, channel] of [["reply-all", "all"], ["reply-team", "team"]]) {
+    $(id).addEventListener("input", () => {
+      const channels = new Set(config.behavior.reply_channels);
+      $(id).checked ? channels.add(channel) : channels.delete(channel);
+      config.behavior.reply_channels = [...channels];
+      scheduleSave();
+    });
+  }
+}
+
+function bindTabs() {
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+      document.querySelectorAll(".panel").forEach((panel) => {
+        panel.dataset.active = String(panel.dataset.panel === tab.dataset.tab);
+      });
+    });
+  });
+}
+
+/* ---------- live feed ---------- */
+
+function line(text, className, meta) {
+  const feed = $("feed");
+  const stick = feed.scrollTop + feed.clientHeight > feed.scrollHeight - 60;
+  const row = document.createElement("div");
+  row.className = `event ${className}`;
+  row.innerHTML = text + (meta ? `<span class="meta">${meta}</span>` : "");
+  feed.appendChild(row);
+  while (feed.childElementCount > 400) feed.removeChild(feed.firstChild);
+  if (stick) feed.scrollTop = feed.scrollHeight;
+}
+
+const escapeHtml = (value) =>
+  String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function chatClass(message) {
+  const classes = ["chat"];
+  if (message.sender_state === "dead") classes.push("dead");
+  if (message.sender_team === "CT") classes.push("ct");
+  if (message.sender_team === "T") classes.push("t");
+  return classes.join(" ");
+}
+
+function pushEvent(event) {
+  const data = event.data || {};
+  if (event.kind === "chat") {
+    const tag = `[${data.channel}]${data.sender_state === "dead" ? " *DEAD*" : ""}`;
+    line(`${escapeHtml(tag)} <span class="who">${escapeHtml(data.sender)}</span>: ${escapeHtml(data.text)}`, chatClass(data));
+  } else if (event.kind === "reply") {
+    line(
+      `<span class="who">bot →</span> ${escapeHtml(data.text)}`,
+      `reply ${data.delivered ? "" : "failed"}`,
+      `${data.latency_ms}ms · ${escapeHtml(data.reason)}`,
+    );
+  } else if (event.kind === "skipped") {
+    line(`skipped ${escapeHtml(data.message.sender)}`, "skipped", escapeHtml(data.reason));
+  } else if (event.kind === "error") {
+    line(escapeHtml(data.message), "error");
+  } else if (event.kind === "gamestate") {
+    line(
+      `game state: ${escapeHtml(data.state)}${data.health != null ? ` (${data.health} hp)` : ""}`,
+      "gamestate",
+      escapeHtml([data.map_name, data.round_phase].filter(Boolean).join(" · ")),
+    );
+  }
+}
+
+function renderStatus(status) {
+  const setPill = (id, text, cls) => {
+    const el = $(id);
+    el.textContent = text;
+    el.className = `pill ${cls || ""}`;
+  };
+  setPill("pill-state", `you: ${status.local_state}`, status.local_state === "dead" ? "bad" : "good");
+  setPill("pill-gsi", status.gsi_connected ? "gsi: connected" : "gsi: waiting", status.gsi_connected ? "good" : "warn");
+  setPill("pill-log", status.log_attached ? "log: attached" : "log: detached", status.log_attached ? "good" : "warn");
+  setPill(
+    "pill-llm",
+    `llm: ${status.llm_backend}`,
+    status.llm_status.startsWith("error") ? "bad" : status.llm_status === "not checked" ? "" : "good",
+  );
+  setPill("pill-sender", `output: ${status.sender}`);
+  const toggle = $("toggle");
+  toggle.dataset.on = String(status.enabled);
+  toggle.textContent = status.enabled ? "Stop bot" : "Start bot";
+  $("feed-note").textContent = status.last_error || status.log_path || "";
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = (raw) => {
+    const event = JSON.parse(raw.data);
+    if (event.kind === "snapshot") {
+      renderStatus(event.data.status);
+      event.data.events.forEach(pushEvent);
+      return;
+    }
+    if (event.kind === "status") return renderStatus(event.data);
+    if (event.kind === "config") {
+      config = event.data;
+      return;
+    }
+    pushEvent(event);
+  };
+  ws.onclose = () => setTimeout(connect, 1500);
+}
+
+/* ---------- actions ---------- */
+
+function bindActions() {
+  $("toggle").addEventListener("click", async () => {
+    const enabled = $("toggle").dataset.on !== "true";
+    const response = await fetch("/api/enabled", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    renderStatus(await response.json());
+  });
+
+  $("clear-feed").addEventListener("click", () => ($("feed").innerHTML = ""));
+
+  $("preset").addEventListener("change", () => {
+    const preset = presets[$("preset").value];
+    if (!preset) return;
+    config.persona = structuredClone(preset);
+    renderConfig();
+    scheduleSave();
+  });
+
+  $("check-llm").addEventListener("click", async () => {
+    $("llm-note").textContent = "checking…";
+    await saveConfig();
+    const response = await fetch("/api/llm/check", { method: "POST" });
+    $("llm-note").textContent = (await response.json()).status;
+  });
+
+  $("persona-save").addEventListener("click", async () => {
+    const name = prompt("Save persona as:", config.persona.name);
+    if (!name) return;
+    await fetch("/api/personas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, persona: config.persona }),
+    });
+    config.saved_personas[name] = structuredClone(config.persona);
+    renderSavedPersonas();
+  });
+
+  $("persona-load").addEventListener("click", () => {
+    const saved = config.saved_personas[$("persona-saved").value];
+    if (!saved) return;
+    config.persona = structuredClone(saved);
+    renderConfig();
+    scheduleSave();
+  });
+
+  $("persona-delete").addEventListener("click", async () => {
+    const name = $("persona-saved").value;
+    if (!name || !confirm(`Delete persona "${name}"?`)) return;
+    await fetch(`/api/personas/${encodeURIComponent(name)}`, { method: "DELETE" });
+    delete config.saved_personas[name];
+    renderSavedPersonas();
+  });
+
+  $("install-gsi").addEventListener("click", async () => {
+    await saveConfig();
+    const response = await fetch("/api/gsi/install", { method: "POST" });
+    const body = await response.json();
+    $("gsi-note").textContent = response.ok ? `written to ${body.path} — restart CS2` : body.detail;
+  });
+
+  $("parse-run").addEventListener("click", async () => {
+    const response = await fetch("/api/parse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: $("parse-input").value }),
+    });
+    const { results } = await response.json();
+    $("parse-output").textContent = results
+      .map(({ line, parsed }) =>
+        parsed
+          ? `✓ ${parsed.channel} | ${parsed.sender} | ${parsed.sender_state} | ${parsed.sender_team} | "${parsed.text}"`
+          : `✗ not chat: ${line}`,
+      )
+      .join("\n");
+  });
+
+  $("sim-run").addEventListener("click", async () => {
+    $("sim-output").textContent = "generating…";
+    await saveConfig();
+    const response = await fetch("/api/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ line: $("sim-line").value, local_state: $("sim-state").value }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      $("sim-output").textContent = body.detail;
+      return;
+    }
+    $("sim-output").textContent = body.would_reply
+      ? `reply: ${body.reply}`
+      : `no reply — ${body.reason}`;
+  });
+}
+
+async function init() {
+  const response = await fetch("/api/config");
+  const body = await response.json();
+  config = body.config;
+  presets = body.presets;
+  $("preset").innerHTML =
+    '<option value="">— choose a preset —</option>' +
+    Object.keys(presets).map((name) => `<option value="${name}">${name}</option>`).join("");
+  renderConfig();
+  bindInputs();
+  bindTabs();
+  bindActions();
+  connect();
+}
+
+init();

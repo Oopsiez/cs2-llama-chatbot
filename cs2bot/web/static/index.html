@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CS2 Chatbot</title>
+<link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+<header>
+  <div class="brand">CS2 <span>Chatbot</span></div>
+  <div class="status-strip">
+    <span class="pill" id="pill-state">state: unknown</span>
+    <span class="pill" id="pill-gsi">gsi: waiting</span>
+    <span class="pill" id="pill-log">log: detached</span>
+    <span class="pill" id="pill-llm">llm: not checked</span>
+    <span class="pill" id="pill-sender">output: -</span>
+    <button class="toggle" id="toggle" data-on="false">Start bot</button>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Live chat
+      <span class="note" id="feed-note">waiting for console.log activity</span>
+      <button class="action" id="clear-feed" style="margin-left:auto">Clear</button>
+    </h2>
+    <div id="feed"></div>
+  </section>
+
+  <section class="card">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="persona" aria-selected="true">Personality</button>
+      <button class="tab" role="tab" data-tab="brain">Intelligence</button>
+      <button class="tab" role="tab" data-tab="model">Model</button>
+      <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
+      <button class="tab" role="tab" data-tab="game">Game</button>
+      <button class="tab" role="tab" data-tab="test">Test</button>
+    </div>
+
+    <div class="panel" data-panel="persona" data-active="true">
+      <label>Preset
+        <select id="preset"></select>
+      </label>
+      <label>Persona name
+        <input type="text" id="persona-name" />
+      </label>
+      <label>Who the bot is
+        <span class="hint">System prompt describing character, mood and motivation.</span>
+        <textarea id="persona-description" rows="5"></textarea>
+      </label>
+      <label>Style rules
+        <textarea id="persona-style" rows="3"></textarea>
+      </label>
+      <label>When dead
+        <span class="hint">Added to the prompt only while the bot is dead.</span>
+        <textarea id="persona-dead" rows="2"></textarea>
+      </label>
+      <div class="row">
+        <label>Banned words (comma separated)
+          <input type="text" id="persona-banned" />
+        </label>
+        <label>Max reply characters
+          <input type="number" id="persona-maxchars" min="20" max="221" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="action" id="persona-save">Save as…</button>
+        <select id="persona-saved" style="max-width:200px"></select>
+        <button class="action" id="persona-load">Load</button>
+        <button class="action" id="persona-delete">Delete</button>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="brain">
+      <div class="dial">
+        <div class="dial-head">
+          <strong>Intelligence</strong>
+          <span class="dial-value" id="iq-value">60</span>
+        </div>
+        <input type="range" id="iq" min="0" max="100" step="1" />
+        <div class="dial-desc" id="iq-desc"></div>
+      </div>
+      <label class="check">
+        <input type="checkbox" id="auto-sampling" />
+        <span>Derive sampling from the dial
+          <small>Lower intelligence raises temperature and shortens replies; typos and chat
+          abbreviations are applied after generation.</small>
+        </span>
+      </label>
+      <div class="row-3">
+        <label>Temperature<input type="number" id="temperature" step="0.05" min="0" max="2" /></label>
+        <label>Top P<input type="number" id="top_p" step="0.01" min="0" max="1" /></label>
+        <label>Top K<input type="number" id="top_k" step="1" min="0" max="200" /></label>
+      </div>
+      <div class="row">
+        <label>Repeat penalty<input type="number" id="repeat_penalty" step="0.01" min="1" max="2" /></label>
+        <label>Max tokens<input type="number" id="max_tokens" step="1" min="8" max="512" /></label>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <label>Reply probability<input type="number" id="reply_probability" step="0.05" min="0" max="1" /></label>
+        <label>Cooldown (seconds)<input type="number" id="cooldown" step="0.5" min="0" /></label>
+      </div>
+      <div class="row">
+        <label>History turns<input type="number" id="history_turns" min="0" max="20" /></label>
+        <label>Trigger words (comma separated, blank = all)
+          <input type="text" id="trigger_words" />
+        </label>
+      </div>
+      <label>Ignore players (comma separated)<input type="text" id="ignore_players" /></label>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="reply-all" /><span>Reply in all chat</span></label>
+        <label class="check"><input type="checkbox" id="reply-team" /><span>Reply in team chat</span></label>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="model">
+      <label>Backend
+        <select id="llm-backend">
+          <option value="llama_cpp">llama.cpp (local GGUF)</option>
+          <option value="ollama">Ollama</option>
+          <option value="mock">Mock (no model)</option>
+        </select>
+      </label>
+      <label>GGUF model path
+        <span class="hint">e.g. models/Meta-Llama-3-8B-Instruct.Q4_K_M.gguf</span>
+        <input type="text" id="model-path" />
+      </label>
+      <div class="row">
+        <label>Context size<input type="number" id="n_ctx" min="512" step="512" /></label>
+        <label>GPU layers <span class="hint">-1 = all</span><input type="number" id="n_gpu_layers" min="-1" /></label>
+      </div>
+      <div class="row">
+        <label>Threads <span class="hint">0 = auto</span><input type="number" id="n_threads" min="0" /></label>
+        <label>Request timeout (s)<input type="number" id="request_timeout" min="1" step="1" /></label>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <label>Ollama URL<input type="text" id="ollama-url" /></label>
+        <label>Ollama model<input type="text" id="ollama-model" /></label>
+      </div>
+      <div class="actions">
+        <button class="action primary" id="check-llm">Check model</button>
+        <span class="note" id="llm-note"></span>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="deadalive">
+      <p class="note">
+        CS2 shows a dead player's chat only to other dead players and spectators. These rules stop
+        the bot from answering messages it could not have seen, and from typing replies nobody can read.
+      </p>
+      <label class="check"><input type="checkbox" id="da-enabled" /><span>Enforce dead/alive chat visibility</span></label>
+      <label class="check"><input type="checkbox" id="da-reply-when-dead" /><span>Keep replying while dead
+        <small>Replies go to dead players and spectators only.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-dead-when-alive" /><span>Answer dead players while alive
+        <small>Off by default: a living player is not supposed to see dead chat.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead
+        <small>They will not see the reply unless the server allows dead talk.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-warmup" /><span>Treat warmup as one shared chat</span></label>
+      <label class="check"><input type="checkbox" id="da-global" /><span>Server has global dead chat (deathmatch / sv_deadtalk)</span></label>
+      <label class="check"><input type="checkbox" id="da-persona" /><span>Use the "when dead" persona while dead</span></label>
+      <label class="check"><input type="checkbox" id="da-assume" /><span>Assume alive when GSI is not connected</span></label>
+    </div>
+
+    <div class="panel" data-panel="game">
+      <label>console.log path
+        <span class="hint">Requires <span class="mono">-condebug</span> in the CS2 launch options.</span>
+        <input type="text" id="log-path" />
+      </label>
+      <label>CS2 cfg directory
+        <input type="text" id="cfg-dir" />
+      </label>
+      <div class="row">
+        <label>Your in-game name<input type="text" id="own-name" /></label>
+        <label>Bind key <span class="hint">bind &lt;key&gt; "exec message.cfg"</span><input type="text" id="bind-key" /></label>
+      </div>
+      <div class="row">
+        <label>Chat character limit<input type="number" id="char-limit" min="40" max="255" /></label>
+        <label>Delay between chunks (s)<input type="number" id="send-delay" step="0.1" min="0" /></label>
+      </div>
+      <label>Output
+        <select id="output-backend">
+          <option value="auto">Auto</option>
+          <option value="windows">Type into CS2 (Windows)</option>
+          <option value="dry_run">Dry run (panel only)</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="require-focus" /><span>Only type when CS2 is the focused window</span></label>
+      <label class="check"><input type="checkbox" id="typing-sim" /><span>Simulate typing time before sending</span></label>
+      <div class="divider"></div>
+      <div class="row">
+        <label>GSI port<input type="number" id="gsi-port" min="1" max="65535" /></label>
+        <label>GSI auth token (optional)<input type="text" id="gsi-token" /></label>
+      </div>
+      <div class="actions">
+        <button class="action" id="install-gsi">Install GSI config into CS2</button>
+        <span class="note" id="gsi-note"></span>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="test">
+      <label>Paste console.log lines to check parsing
+        <textarea id="parse-input" rows="4" placeholder="[ALL] someone: hey&#10;*DEAD* [ALL] someone else: gg"></textarea>
+      </label>
+      <div class="actions"><button class="action" id="parse-run">Parse</button></div>
+      <div class="result" id="parse-output">—</div>
+      <div class="divider"></div>
+      <label>Try a reply (no game needed)
+        <input type="text" id="sim-line" placeholder="[ALL] enemy: ez" />
+      </label>
+      <div class="row">
+        <label>Bot is
+          <select id="sim-state">
+            <option value="alive">alive</option>
+            <option value="dead">dead</option>
+          </select>
+        </label>
+        <div class="actions" style="align-items:end"><button class="action primary" id="sim-run">Generate</button></div>
+      </div>
+      <div class="result" id="sim-output">—</div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
