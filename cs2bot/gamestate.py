@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .callouts import Position
 from .models import LifeState, LocalPlayer, Team
 
 GSI_CFG_NAME = "gamestate_integration_cs2bot.cfg"
@@ -34,6 +35,7 @@ class GameStateStore:
         player = payload.get("player") or {}
         round_info = payload.get("map") or {}
         round_state = payload.get("round") or {}
+        bomb = payload.get("bomb") or {}
 
         snapshot = LocalPlayer(
             name=self.player.name,
@@ -45,6 +47,10 @@ class GameStateStore:
             map_phase=str(round_info.get("phase") or ""),
             map_name=str(round_info.get("name") or ""),
             mode=str(round_info.get("mode") or ""),
+            position=self.player.position,
+            active_weapon=self.player.active_weapon,
+            bomb=str(bomb.get("state") or round_state.get("bomb") or ""),
+            round_number=int(round_info.get("round") or 0),
             updated_at=time.time(),
         )
 
@@ -60,6 +66,8 @@ class GameStateStore:
             else:
                 snapshot.health = int(health)
                 snapshot.state = LifeState.ALIVE if int(health) > 0 else LifeState.DEAD
+            snapshot.position = Position.parse(player.get("position")) or snapshot.position
+            snapshot.active_weapon = _active_weapon(player) or snapshot.active_weapon
 
         self.player = snapshot
         return snapshot
@@ -68,6 +76,18 @@ class GameStateStore:
         if self.player.is_stale or self.player.state is LifeState.UNKNOWN:
             return LifeState.ALIVE if assume_alive_without_gsi else LifeState.UNKNOWN
         return self.player.state
+
+
+def _active_weapon(player: dict[str, Any]) -> str:
+    """The weapon currently in the player's hands, out of the `weapon_0`/`weapon_1`/... map."""
+    weapons = player.get("weapons")
+    if not isinstance(weapons, dict):
+        return ""
+    for weapon in weapons.values():
+        if isinstance(weapon, dict) and weapon.get("state") == "active":
+            name = str(weapon.get("name") or "")
+            return name.removeprefix("weapon_")
+    return ""
 
 
 def render_gsi_cfg(endpoint: str, auth_token: str = "") -> str:
@@ -91,6 +111,9 @@ def render_gsi_cfg(endpoint: str, auth_token: str = "") -> str:
         '        "round" "1"\n'
         '        "player_id" "1"\n'
         '        "player_state" "1"\n'
+        '        "player_weapons" "1"\n'
+        '        "player_position" "1"\n'
+        '        "bomb" "1"\n'
         '        "player_match_stats" "1"\n'
         "    }\n"
         "}\n"

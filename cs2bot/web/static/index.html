@@ -8,13 +8,14 @@
 </head>
 <body>
 <header>
-  <div class="brand">CS2 <span>Chatbot</span></div>
+  <div class="brand">CS2 <span>Chatbot</span> <small id="version"></small></div>
   <div class="status-strip">
     <span class="pill" id="pill-state">state: unknown</span>
     <span class="pill" id="pill-gsi">gsi: waiting</span>
     <span class="pill" id="pill-log">log: detached</span>
     <span class="pill" id="pill-llm">llm: not checked</span>
     <span class="pill" id="pill-sender">output: -</span>
+    <span class="pill" id="pill-name">you: unknown</span>
     <button class="toggle" id="toggle" data-on="false">Start bot</button>
   </div>
 </header>
@@ -34,6 +35,7 @@
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
       <button class="tab" role="tab" data-tab="model">Model</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
+      <button class="tab" role="tab" data-tab="snitch">Snitch</button>
       <button class="tab" role="tab" data-tab="game">Game</button>
       <button class="tab" role="tab" data-tab="test">Test</button>
     </div>
@@ -56,6 +58,11 @@
         <span class="hint">Added to the prompt only while the bot is dead.</span>
         <textarea id="persona-dead" rows="2"></textarea>
       </label>
+      <label>Custom prompt
+        <span class="hint">Typed mid-match and appended to the prompt word for word. Takes effect
+          on the next reply - no restart, no reload.</span>
+        <textarea id="persona-extra" rows="3" placeholder="e.g. you are convinced the enemy AWPer is your ex"></textarea>
+      </label>
       <div class="row">
         <label>Banned words (comma separated)
           <input type="text" id="persona-banned" />
@@ -65,26 +72,40 @@
         </label>
       </div>
       <div class="actions">
-        <button class="action" id="persona-save">Save as…</button>
+        <input type="text" id="persona-save-name" placeholder="save as…" style="max-width:200px" />
+        <button class="action primary" id="persona-save">Save persona</button>
         <select id="persona-saved" style="max-width:200px"></select>
         <button class="action" id="persona-load">Load</button>
         <button class="action" id="persona-delete">Delete</button>
+        <span class="note" id="persona-note"></span>
       </div>
     </div>
 
     <div class="panel" data-panel="brain">
       <div class="dial">
         <div class="dial-head">
-          <strong>Intelligence</strong>
+          <strong>Literacy</strong>
+          <span class="dial-value" id="literacy-value">60</span>
+        </div>
+        <input type="range" id="literacy" min="0" max="100" step="1" />
+        <div class="dial-desc" id="literacy-desc"></div>
+      </div>
+      <div class="dial">
+        <div class="dial-head">
+          <strong>Game IQ</strong>
           <span class="dial-value" id="iq-value">60</span>
         </div>
         <input type="range" id="iq" min="0" max="100" step="1" />
         <div class="dial-desc" id="iq-desc"></div>
       </div>
+      <p class="note">
+        The two are independent: low literacy with high game IQ is a smart player who types like a
+        goblin, and the reverse is a well-spoken fool.
+      </p>
       <label class="check">
         <input type="checkbox" id="auto-sampling" />
-        <span>Derive sampling from the dial
-          <small>Lower intelligence raises temperature and shortens replies; typos and chat
+        <span>Derive sampling from the dials
+          <small>Low game IQ raises temperature, low literacy shortens replies; typos and chat
           abbreviations are applied after generation.</small>
         </span>
       </label>
@@ -109,6 +130,34 @@
         </label>
       </div>
       <label>Ignore players (comma separated)<input type="text" id="ignore_players" /></label>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="addressed-always" /><span>Always answer when someone talks to you
+          <small>Skips trigger words, cooldown and the probability roll.</small></span></label>
+        <label class="check"><input type="checkbox" id="addressed-only" /><span>Only answer when someone talks to you</span></label>
+      </div>
+      <div class="divider"></div>
+      <div class="dial">
+        <div class="dial-head">
+          <strong>Reply delay</strong>
+          <span class="dial-value" id="delay-value">1.0s</span>
+        </div>
+        <input type="range" id="reply-delay" min="0" max="15" step="0.5" />
+        <div class="dial-desc">How long it waits before the reply appears in chat.</div>
+      </div>
+      <label class="check"><input type="checkbox" id="humanized-typing" /><span>Use humanized typing speed instead
+        <small>Ignores the slider: waits to "read" the message, then takes as long as typing the
+        reply would at the speed set on the CS2 tab.</small></span></label>
+      <div class="divider"></div>
+      <label class="check"><input type="checkbox" id="unprompted" /><span>Give advice unprompted
+        <small>Volunteers a pointer instead of only answering what was said.</small></span></label>
+      <label class="check"><input type="checkbox" id="avoid-repeats" /><span>Do not repeat itself
+        <small>Rejects a reply that is too close to a recent one and generates again.</small></span></label>
+      <div class="row-3">
+        <label>Lines remembered<input type="number" id="repeat-memory" min="0" max="40" step="1" /></label>
+        <label>Similarity limit <span class="hint">0-1</span><input type="number" id="repeat-similarity" min="0" max="1" step="0.05" /></label>
+        <label>Retries<input type="number" id="repeat-retries" min="0" max="5" step="1" /></label>
+      </div>
+      <div class="divider"></div>
       <div class="row">
         <label class="check"><input type="checkbox" id="reply-all" /><span>Reply in all chat</span></label>
         <label class="check"><input type="checkbox" id="reply-team" /><span>Reply in team chat</span></label>
@@ -137,8 +186,18 @@
       </div>
       <div class="divider"></div>
       <div class="row">
-        <label>Ollama URL<input type="text" id="ollama-url" /></label>
+        <label>Ollama URL
+          <span class="hint">Remote is fine: http://gpu-box:11434 or a proxy over https.</span>
+          <input type="text" id="ollama-url" />
+        </label>
         <label>Ollama model<input type="text" id="ollama-model" /></label>
+      </div>
+      <div class="row">
+        <label>Ollama API key <span class="hint">optional, sent as a bearer token</span>
+          <input type="password" id="ollama-key" />
+        </label>
+        <label class="check"><input type="checkbox" id="ollama-verify" /><span>Verify TLS certificate
+          <small>Turn off only for a self-signed certificate on your own server.</small></span></label>
       </div>
       <div class="actions">
         <button class="action primary" id="check-llm">Check model</button>
@@ -148,20 +207,100 @@
 
     <div class="panel" data-panel="deadalive">
       <p class="note">
-        CS2 shows a dead player's chat only to other dead players and spectators. These rules stop
-        the bot from answering messages it could not have seen, and from typing replies nobody can read.
+        CS2 tags a dead player's chat with <span class="mono">[DEAD]</span>. The bot reads that tag,
+        pairs it with your own alive/dead state from GSI, and writes a different kind of reply for
+        each combination - it does not filter anything out.
       </p>
-      <label class="check"><input type="checkbox" id="da-enabled" /><span>Enforce dead/alive chat visibility</span></label>
-      <label class="check"><input type="checkbox" id="da-reply-when-dead" /><span>Keep replying while dead
-        <small>Replies go to dead players and spectators only.</small></span></label>
-      <label class="check"><input type="checkbox" id="da-dead-when-alive" /><span>Answer dead players while alive
-        <small>Off by default: a living player is not supposed to see dead chat.</small></span></label>
-      <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead
-        <small>They will not see the reply unless the server allows dead talk.</small></span></label>
-      <label class="check"><input type="checkbox" id="da-warmup" /><span>Treat warmup as one shared chat</span></label>
-      <label class="check"><input type="checkbox" id="da-global" /><span>Server has global dead chat (deathmatch / sv_deadtalk)</span></label>
+      <label class="check"><input type="checkbox" id="da-adapt" /><span>Adapt replies to who is dead
+        <small>Tells the model whether the sender is dead, and whether you are.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-track" /><span>Remember who died this round
+        <small>Only the first line is tagged; later untagged lines from the same player still count as dead.</small></span></label>
       <label class="check"><input type="checkbox" id="da-persona" /><span>Use the "when dead" persona while dead</span></label>
       <label class="check"><input type="checkbox" id="da-assume" /><span>Assume alive when GSI is not connected</span></label>
+      <p class="note">
+        Only for servers that split the chat so the living cannot see dead chat. Leave off when
+        everyone sees everything.
+      </p>
+      <label class="check"><input type="checkbox" id="da-enforce" /><span>Skip messages the bot could not have seen
+        <small>Turns the rules below on.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-reply-when-dead" /><span>Keep replying while dead</span></label>
+      <label class="check"><input type="checkbox" id="da-dead-when-alive" /><span>Answer dead players while alive</span></label>
+      <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead</span></label>
+      <label class="check"><input type="checkbox" id="da-warmup" /><span>Treat warmup as one shared chat</span></label>
+      <label class="check"><input type="checkbox" id="da-global" /><span>Server has global dead chat (deathmatch / sv_deadtalk)</span></label>
+    </div>
+
+    <div class="panel" data-panel="snitch">
+      <p class="note">
+        The bot gives away <strong>your own</strong> position - the only thing CS2's Game State
+        Integration reports while you are playing. Nothing here reads game memory and nothing here
+        can see the enemy.
+      </p>
+      <label class="check"><input type="checkbox" id="snitch-enabled" /><span>Snitch on me
+        <small>The bot knows where you are and will say so.</small></span></label>
+      <label class="check"><input type="checkbox" id="snitch-asked" /><span>Answer when somebody asks where you are
+        <small>Bypasses the cooldown, the same way being named does.</small></span></label>
+      <label>Ask phrases (comma separated)<input type="text" id="snitch-phrases" /></label>
+      <div class="row">
+        <label>Announce every (seconds) <span class="hint">0 = never</span>
+          <input type="number" id="snitch-interval" min="0" step="5" />
+        </label>
+        <label>Say it in
+          <select id="snitch-channel">
+            <option value="all">all chat</option>
+            <option value="team">team chat</option>
+          </select>
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="snitch-death" /><span>Announce where you died</span></label>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="snitch-position" /><span>Give away position</span></label>
+        <label class="check"><input type="checkbox" id="snitch-health" /><span>Give away health</span></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="snitch-weapon" /><span>Give away weapon</span></label>
+        <label class="check"><input type="checkbox" id="snitch-bomb" /><span>Give away bomb state</span></label>
+      </div>
+      <div class="divider"></div>
+      <h3>End of match</h3>
+      <label class="check"><input type="checkbox" id="reveal-enabled" /><span>Own up when the match ends
+        <small>One line on the final scoreboard, once per match. Untick to never reveal itself.</small></span></label>
+      <div class="row">
+        <label>How it signs off
+          <select id="reveal-mode">
+            <option value="character">In character (written fresh each match)</option>
+            <option value="fixed">Always the same line</option>
+          </select>
+        </label>
+        <label>Say it in
+          <select id="reveal-channel">
+            <option value="all">all chat</option>
+            <option value="team">team chat</option>
+          </select>
+        </label>
+      </div>
+      <label>What to confess <span class="hint">in-character mode: the instruction it is given</span>
+        <textarea id="reveal-instructions" rows="3"></textarea>
+      </label>
+      <label>Fixed line <span class="hint">used in "always the same line" mode, and if the model is unreachable</span>
+        <input type="text" id="reveal-message" />
+      </label>
+      <label>Link to add <span class="hint">appended to whatever it says; clear it to add nothing</span>
+        <input type="text" id="reveal-link" />
+      </label>
+      <div class="divider"></div>
+      <h3>Callouts</h3>
+      <p class="note">
+        GSI reports coordinates, not callout names, so you teach it: stand somewhere in game, type
+        the name and record it. Anything within ~400 units of a recorded point resolves to that
+        name. If CS2 is not reporting a position, the bot falls back to health and bomb state.
+      </p>
+      <div class="actions">
+        <input type="text" id="callout-name" placeholder="banana" style="max-width:200px" />
+        <button class="action primary" id="callout-add">Record where I am standing</button>
+        <button class="action" id="callout-refresh">Refresh</button>
+      </div>
+      <div class="result" id="callout-output">—</div>
     </div>
 
     <div class="panel" data-panel="game">
@@ -173,9 +312,17 @@
         <input type="text" id="cfg-dir" />
       </label>
       <div class="row">
-        <label>Your in-game name<input type="text" id="own-name" /></label>
+        <label>Your in-game name
+          <span class="hint">Leave blank to detect it from GSI and the console log.</span>
+          <input type="text" id="own-name" placeholder="auto-detect" />
+        </label>
         <label>Bind key <span class="hint">bind &lt;key&gt; "exec message.cfg"</span><input type="text" id="bind-key" /></label>
       </div>
+      <label>Also answer to (comma separated)
+        <span class="hint">Nicknames people shorten your name to, e.g. clan tag removed.</span>
+        <input type="text" id="name-aliases" />
+      </label>
+      <label class="check"><input type="checkbox" id="auto-detect-name" /><span>Detect my name automatically</span></label>
       <div class="row">
         <label>Chat character limit<input type="number" id="char-limit" min="40" max="255" /></label>
         <label>Delay between chunks (s)<input type="number" id="send-delay" step="0.1" min="0" /></label>
@@ -189,6 +336,10 @@
       </label>
       <label class="check"><input type="checkbox" id="require-focus" /><span>Only type when CS2 is the focused window</span></label>
       <label class="check"><input type="checkbox" id="typing-sim" /><span>Simulate typing time before sending</span></label>
+      <label>Typing speed (seconds per character)
+        <span class="hint">Also used by "humanized typing speed" on the Brain tab.</span>
+        <input type="number" id="typing-speed" min="0" max="1" step="0.01" />
+      </label>
       <div class="divider"></div>
       <div class="row">
         <label>GSI port<input type="number" id="gsi-port" min="1" max="65535" /></label>

@@ -38,11 +38,17 @@ def test_parse_endpoint_reports_dead_players(client):
     assert results["results"][1]["parsed"] is None
 
 
-def test_simulate_respects_dead_alive_rules(client):
+def test_simulate_answers_from_either_side_of_the_grave(client):
     dead_view = client.post(
         "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "dead"}
     ).json()
-    assert dead_view["would_reply"] is False
+    assert dead_view["would_reply"] is True
+
+    dead_sender = client.post(
+        "/api/simulate", json={"line": "[DEAD] ghost: unlucky", "local_state": "alive"}
+    ).json()
+    assert dead_sender["message"]["sender_state"] == "dead"
+    assert dead_sender["would_reply"] is True
 
     alive_view = client.post(
         "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}
@@ -77,3 +83,61 @@ def test_persona_save_and_delete(client):
     assert "Test Guy" in client.get("/api/personas").json()["saved"]
     assert client.delete("/api/personas/Test Guy").status_code == 200
     assert client.get("/api/personas").json()["saved"] == {}
+
+def test_a_custom_prompt_survives_a_save_and_reload(client):
+    persona = client.get("/api/personas").json()["current"]
+    persona["extra_instructions"] = "you only speak in questions"
+    client.post("/api/personas", json={"name": "Interrogator", "persona": persona})
+
+    saved = client.get("/api/personas").json()["saved"]["Interrogator"]
+    assert saved["extra_instructions"] == "you only speak in questions"
+
+
+def test_custom_prompt_reaches_the_model(client):
+    config = client.get("/api/config").json()["config"]
+    config["persona"]["extra_instructions"] = "you only speak in questions"
+    assert client.put("/api/config", json=config).status_code == 200
+
+    prompt = client.post(
+        "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}
+    ).json()["prompt"]
+    assert "you only speak in questions" in prompt
+
+
+def test_recording_a_callout_needs_gsi(client):
+    assert client.post("/api/callouts", json={"name": "banana"}).status_code == 422
+
+    client.post(
+        "/api/gsi",
+        json={
+            "provider": {"steamid": "1"},
+            "player": {"steamid": "1", "name": "me"},
+            "map": {"name": "de_dust2", "phase": "live"},
+        },
+    )
+    response = client.post("/api/callouts", json={"name": "banana"})
+    assert response.status_code == 422
+    assert "position" in response.json()["detail"]
+
+
+def test_recording_and_deleting_a_callout(client):
+    client.post(
+        "/api/gsi",
+        json={
+            "provider": {"steamid": "1"},
+            "player": {"steamid": "1", "name": "me", "position": "100.0, 200.0, 30.0"},
+            "map": {"name": "de_dust2", "phase": "live"},
+        },
+    )
+    body = client.post("/api/callouts", json={"name": "banana"}).json()
+    assert body["callouts"] == [
+        {"name": "banana", "x": 100.0, "y": 200.0, "z": 30.0, "radius": 400.0}
+    ]
+
+    listed = client.get("/api/callouts").json()
+    assert listed["callout"] == "banana"
+    assert listed["map"] == "de_dust2"
+
+    assert client.delete("/api/callouts/de_dust2/banana").status_code == 200
+    assert client.get("/api/callouts").json()["callouts"] == []
+    assert client.delete("/api/callouts/de_dust2/banana").status_code == 404

@@ -1,15 +1,11 @@
 """Decide whether the bot should answer a given chat message.
 
-The dead/alive part exists because CS2 splits the chat audience: a dead player's messages are
-only rendered for other dead players and spectators. Two consequences drive the rules below.
+Dead/alive is normally just context for the reply, not a filter: on a server where everyone sees
+everything, the bot answers a corpse and a living player alike and only changes *how* it writes.
 
-1. While the bot is alive, a `*DEAD*` message is one it should not be able to read, so replying
-   to it looks like cheating.
-2. While the bot is dead, anything it types is invisible to living players, so answering them is
-   shouting into the void.
-
-Warmup, deathmatch and servers running `sv_deadtalk` merge the audiences again, which is what
-`treat_warmup_as_global` / `dead_chat_is_global` are for.
+The optional `enforce_visibility` mode is for servers that split the audience, where a dead
+player's chat reaches only other dead players and spectators. There, answering a `[DEAD]` line
+while alive looks like cheating, and typing while dead is shouting into the void.
 """
 
 from __future__ import annotations
@@ -31,7 +27,7 @@ def visibility_reason(
     player: LocalPlayer,
 ) -> str | None:
     """Return why the reply would not be seen, or None when it would be."""
-    if not config.dead_alive.enabled or dead_chat_is_global(config, player):
+    if not config.dead_alive.enforce_visibility or dead_chat_is_global(config, player):
         return None
 
     if local_state is LifeState.DEAD:
@@ -68,6 +64,14 @@ def should_reply(
 
     if message.channel not in config.behavior.reply_channels:
         return False, f"{message.channel.value} chat is disabled"
+
+    # Being spoken to directly outranks the trigger-word filter.
+    if message.addressed_to_me and config.behavior.always_reply_when_addressed:
+        reason = visibility_reason(config, message, local_state, player)
+        return (False, reason) if reason else (True, message.mention_reason or "addressed to you")
+
+    if config.behavior.only_reply_when_addressed and not message.addressed_to_me:
+        return False, "nobody is talking to you"
 
     triggers = [t for t in config.behavior.trigger_words if t.strip()]
     if triggers:

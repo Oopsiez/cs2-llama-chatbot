@@ -10,6 +10,7 @@ from pathlib import Path
 from platformdirs import user_config_dir
 from pydantic import BaseModel, Field
 
+from .callouts import CalloutBook
 from .models import ChatChannel
 
 CONFIG_ENV_VAR = "CS2BOT_CONFIG"
@@ -22,7 +23,9 @@ class GameSettings(BaseModel):
     cfg_dir: str = ""
     exec_cfg_name: str = "message.cfg"
     bind_key: str = "p"
-    own_name: str = ""
+    own_name: str = ""  # blank -> detect from GSI and the console log
+    name_aliases: list[str] = Field(default_factory=list)
+    auto_detect_name: bool = True
     chat_char_limit: int = 221
     chat_send_delay: float = 0.6
     require_focus: bool = True
@@ -34,8 +37,11 @@ class LLMSettings(BaseModel):
 
     backend: str = "mock"  # llama_cpp | ollama | mock
     model_path: str = ""  # GGUF file for llama_cpp
+    # Point this at another machine to run the model remotely, e.g. http://gpu-box:11434
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3:8b-instruct-q4_K_M"
+    ollama_api_key: str = ""  # sent as `Authorization: Bearer ...` for proxied servers
+    ollama_verify_tls: bool = True  # off for a self-signed certificate on your own proxy
     n_ctx: int = 4096
     n_gpu_layers: int = -1
     n_threads: int = 0  # 0 -> let the runtime decide
@@ -63,6 +69,8 @@ class PersonaSettings(BaseModel):
     )
     style_notes: str = "Keep it short, like real chat. No emoji spam. No asterisk roleplay actions."
     dead_notes: str = "You just died, so you are salty and backseat-gaming from the grave."
+    # Typed in the panel mid-match and appended to the prompt verbatim; saved with the persona.
+    extra_instructions: str = ""
     banned_words: list[str] = Field(default_factory=list)
     max_reply_chars: int = 160
 
@@ -70,7 +78,13 @@ class PersonaSettings(BaseModel):
 class BehaviorSettings(BaseModel):
     """When and how often the bot talks."""
 
-    intelligence: int = 60  # 0..100
+    intelligence: int = 60  # 0..100, game IQ: how good the tactical thinking is
+    literacy: int = 60  # 0..100, how well it writes: spelling, punctuation, sentence length
+    unprompted_advice: bool = False  # volunteer pointers instead of only answering
+    avoid_repeats: bool = True
+    repeat_memory: int = 8  # how many of the bot's own lines to remember
+    repeat_similarity: float = 0.75  # 0..1, above this a reply counts as a repeat
+    repeat_retries: int = 2
     reply_probability: float = 1.0
     cooldown_seconds: float = 3.0
     reply_channels: list[ChatChannel] = Field(
@@ -79,26 +93,91 @@ class BehaviorSettings(BaseModel):
     history_turns: int = 6
     trigger_words: list[str] = Field(default_factory=list)  # empty -> reply to everything
     ignore_players: list[str] = Field(default_factory=list)
+    only_reply_when_addressed: bool = False
+    always_reply_when_addressed: bool = True  # bypass triggers, cooldown and the probability roll
+    reply_delay: float = 1.0  # seconds to wait before answering
+    humanized_typing: bool = False  # ignore reply_delay, take as long as typing it would
     typing_simulation: bool = True
     typing_delay_per_char: float = 0.02
 
 
 class DeadAliveSettings(BaseModel):
-    """Rules built around who can actually see a chat message.
+    """What the bot does with the `[DEAD]` marker CS2 puts on a corpse's chat.
 
-    In CS2, a dead player's chat is only shown to other dead players and spectators, so a
-    reply typed while dead never reaches the living. These toggles keep the bot from talking
-    into the void (or from answering messages it "shouldn't" have seen).
+    By default the marker is only *context*: the bot answers everyone, but it knows whether the
+    sender is dead or alive (and whether it is dead itself) and writes accordingly. The
+    visibility rules below exist for servers that split dead and living chat; they are off
+    unless you turn them on.
+    """
+
+    adapt_replies: bool = True  # tell the model who is dead so it answers differently
+    track_players: bool = True  # remember who is dead for the rest of the round
+    enforce_visibility: bool = False  # skip messages the bot "should not" have seen
+    reply_to_dead_when_alive: bool = True
+    reply_to_alive_when_dead: bool = True
+    reply_when_dead: bool = True
+    treat_warmup_as_global: bool = True
+    dead_chat_is_global: bool = True  # most servers show dead chat to everyone
+    use_dead_persona: bool = True
+    assume_alive_without_gsi: bool = True
+
+
+class SnitchSettings(BaseModel):
+    """Whether the bot gives away the player's own position, and when.
+
+    Only the local player is described, because that is all Game State Integration reports while
+    you are playing - there is no enemy information here and none is wanted.
+    """
+
+    enabled: bool = False
+    channel: str = "all"  # all | team
+    answer_when_asked: bool = True
+    request_phrases: list[str] = Field(
+        default_factory=lambda: [
+            "where are you",
+            "where u at",
+            "where you at",
+            "where r u",
+            "wru",
+            "where are u",
+        ]
+    )
+    announce_on_death: bool = False
+    announce_interval: float = 0.0  # seconds between unprompted position drops; 0 turns it off
+    reveal_position: bool = True
+    reveal_health: bool = True
+    reveal_weapon: bool = False
+    reveal_bomb: bool = True
+
+
+PROJECT_URL = "https://github.com/Oopsiez/cs2-llama-chatbot"
+
+
+class RevealSettings(BaseModel):
+    """Owning up at the end of the match.
+
+    The scoreboard is the one moment nobody is being shot at, so it is where the bot admits what
+    it was and points at the project. It fires once per match - `gameover` is reported repeatedly
+    while the scoreboard sits there, and repeating the line would undo the joke.
+
+    In `character` mode the model writes the confession itself, so the Gaming Therapist signs off
+    differently from Angry and Toxic; `fixed` sends `message` verbatim for anyone who wants the
+    same line every time.
     """
 
     enabled: bool = True
-    reply_to_dead_when_alive: bool = False
-    reply_to_alive_when_dead: bool = False
-    reply_when_dead: bool = True
-    treat_warmup_as_global: bool = True
-    dead_chat_is_global: bool = False  # deathmatch / sv_deadtalk servers
-    use_dead_persona: bool = True
-    assume_alive_without_gsi: bool = True
+    channel: str = "all"  # all | team
+    mode: str = "character"  # character | fixed
+    # What the model is told to do in `character` mode.
+    instructions: str = (
+        "The match is over and you are on the final scoreboard. Break character just enough to "
+        "admit you were an AI playing this persona all match - name the persona, in your own "
+        "voice, and stay funny about it. Do not apologise."
+    )
+    # Sent verbatim in `fixed` mode, and used if the model cannot be reached in `character` mode.
+    message: str = "gg - you were talking to an AI this whole match"
+    # Appended to whatever the reveal says, so the project is always credited.
+    link: str = PROJECT_URL
 
 
 class GSISettings(BaseModel):
@@ -121,6 +200,9 @@ class AppConfig(BaseModel):
     persona: PersonaSettings = Field(default_factory=PersonaSettings)
     behavior: BehaviorSettings = Field(default_factory=BehaviorSettings)
     dead_alive: DeadAliveSettings = Field(default_factory=DeadAliveSettings)
+    snitch: SnitchSettings = Field(default_factory=SnitchSettings)
+    reveal: RevealSettings = Field(default_factory=RevealSettings)
+    callouts: CalloutBook = Field(default_factory=CalloutBook)
     gsi: GSISettings = Field(default_factory=GSISettings)
     web: WebSettings = Field(default_factory=WebSettings)
     saved_personas: dict[str, PersonaSettings] = Field(default_factory=dict)

@@ -1,0 +1,64 @@
+name: Release
+
+# Tag a version (`git tag v0.1.0 && git push --tags`) and this attaches `CS2 Chatbot Setup.exe`
+# to the GitHub release, so users download one file, run it, and get a Start Menu shortcut.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install . pyinstaller
+      - run: python scripts/build_exe.py
+      - name: Check the executable actually starts
+        shell: pwsh
+        # A frozen build can compile fine and still die on the first import, which looks to a user
+        # like a console window that flashes and closes. Serve the panel once before publishing.
+        run: |
+          $env:CS2BOT_CONFIG = "$env:RUNNER_TEMP\smoke.json"
+          $app = Start-Process -FilePath "dist\CS2 Chatbot.exe" -ArgumentList "--no-browser","--port","8477" -PassThru
+          try {
+            $ok = $false
+            foreach ($attempt in 1..30) {
+              Start-Sleep -Seconds 2
+              if ($app.HasExited) { throw "the executable exited with code $($app.ExitCode)" }
+              try {
+                $status = Invoke-RestMethod "http://127.0.0.1:8477/api/status"
+                Write-Host "panel is up, version $($status.version)"
+                $ok = $true
+                break
+              } catch { }
+            }
+            if (-not $ok) { throw "the panel never answered on port 8477" }
+          } finally {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+          }
+      - name: Build the installer
+        shell: pwsh
+        # Inno Setup ships on the windows runner image.
+        run: |
+          $version = "0.0.0"
+          if ("${{ github.ref_type }}" -eq "tag") { $version = "${{ github.ref_name }}" -replace '^v', '' }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" installer\cs2-chatbot.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cs2-chatbot-windows
+          path: |
+            dist/CS2 Chatbot Setup.exe
+            dist/CS2 Chatbot.exe
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/CS2 Chatbot Setup.exe
+            dist/CS2 Chatbot.exe

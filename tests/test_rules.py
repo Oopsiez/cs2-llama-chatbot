@@ -22,43 +22,62 @@ def config() -> AppConfig:
     return AppConfig()
 
 
+@pytest.fixture
+def split_chat(config) -> AppConfig:
+    """A server where the living cannot see dead chat."""
+    config.dead_alive.enforce_visibility = True
+    config.dead_alive.dead_chat_is_global = False
+    config.dead_alive.reply_to_dead_when_alive = False
+    config.dead_alive.reply_to_alive_when_dead = False
+    return config
+
+
 def test_alive_bot_answers_alive_player(config):
     allowed, _ = should_reply(config, message(), LifeState.ALIVE, LocalPlayer())
     assert allowed
 
 
-def test_alive_bot_ignores_dead_player(config):
-    allowed, reason = should_reply(
+def test_dead_and_alive_both_get_answers_by_default(config):
+    allowed, _ = should_reply(
         config, message(sender_state=LifeState.DEAD), LifeState.ALIVE, LocalPlayer()
+    )
+    assert allowed
+    allowed, _ = should_reply(config, message(), LifeState.DEAD, LocalPlayer())
+    assert allowed
+
+
+def test_alive_bot_ignores_dead_player(split_chat):
+    allowed, reason = should_reply(
+        split_chat, message(sender_state=LifeState.DEAD), LifeState.ALIVE, LocalPlayer()
     )
     assert not allowed
     assert "dead" in reason
 
 
-def test_dead_bot_ignores_alive_player(config):
-    allowed, reason = should_reply(config, message(), LifeState.DEAD, LocalPlayer())
+def test_dead_bot_ignores_alive_player(split_chat):
+    allowed, reason = should_reply(split_chat, message(), LifeState.DEAD, LocalPlayer())
     assert not allowed
     assert "cannot see dead chat" in reason
 
 
-def test_dead_bot_answers_dead_player(config):
+def test_dead_bot_answers_dead_player(split_chat):
     allowed, _ = should_reply(
-        config, message(sender_state=LifeState.DEAD), LifeState.DEAD, LocalPlayer()
+        split_chat, message(sender_state=LifeState.DEAD), LifeState.DEAD, LocalPlayer()
     )
     assert allowed
 
 
-def test_warmup_merges_the_audiences(config):
+def test_warmup_merges_the_audiences(split_chat):
     player = LocalPlayer(map_phase="warmup")
     allowed, _ = should_reply(
-        config, message(sender_state=LifeState.DEAD), LifeState.ALIVE, player
+        split_chat, message(sender_state=LifeState.DEAD), LifeState.ALIVE, player
     )
     assert allowed
 
 
-def test_global_dead_chat_override(config):
-    config.dead_alive.dead_chat_is_global = True
-    allowed, _ = should_reply(config, message(), LifeState.DEAD, LocalPlayer())
+def test_global_dead_chat_override(split_chat):
+    split_chat.dead_alive.dead_chat_is_global = True
+    allowed, _ = should_reply(split_chat, message(), LifeState.DEAD, LocalPlayer())
     assert allowed
 
 

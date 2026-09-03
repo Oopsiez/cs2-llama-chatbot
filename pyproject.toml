@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cs2bot"
-version = "0.1.0"
+version = "1.0.1"
 description = "Local-LLM chatbot that reads Counter-Strike 2 chat and replies in-game, with a web control panel"
 readme = "README.md"
 requires-python = ">=3.10"

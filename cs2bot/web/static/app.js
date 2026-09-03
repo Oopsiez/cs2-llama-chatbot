@@ -10,16 +10,28 @@ const BINDINGS = {
   "persona-description": ["persona.description", "text"],
   "persona-style": ["persona.style_notes", "text"],
   "persona-dead": ["persona.dead_notes", "text"],
+  "persona-extra": ["persona.extra_instructions", "text"],
   "persona-banned": ["persona.banned_words", "list"],
   "persona-maxchars": ["persona.max_reply_chars", "int"],
 
   iq: ["behavior.intelligence", "int"],
+  literacy: ["behavior.literacy", "int"],
+  unprompted: ["behavior.unprompted_advice", "bool"],
+  "avoid-repeats": ["behavior.avoid_repeats", "bool"],
+  "repeat-memory": ["behavior.repeat_memory", "int"],
+  "repeat-similarity": ["behavior.repeat_similarity", "float"],
+  "repeat-retries": ["behavior.repeat_retries", "int"],
   reply_probability: ["behavior.reply_probability", "float"],
   cooldown: ["behavior.cooldown_seconds", "float"],
   history_turns: ["behavior.history_turns", "int"],
   trigger_words: ["behavior.trigger_words", "list"],
   ignore_players: ["behavior.ignore_players", "list"],
   "typing-sim": ["behavior.typing_simulation", "bool"],
+  "typing-speed": ["behavior.typing_delay_per_char", "float"],
+  "reply-delay": ["behavior.reply_delay", "float"],
+  "humanized-typing": ["behavior.humanized_typing", "bool"],
+  "addressed-always": ["behavior.always_reply_when_addressed", "bool"],
+  "addressed-only": ["behavior.only_reply_when_addressed", "bool"],
 
   "auto-sampling": ["generation.auto_from_intelligence", "bool"],
   temperature: ["generation.temperature", "float"],
@@ -36,8 +48,12 @@ const BINDINGS = {
   request_timeout: ["llm.request_timeout", "float"],
   "ollama-url": ["llm.ollama_url", "text"],
   "ollama-model": ["llm.ollama_model", "text"],
+  "ollama-key": ["llm.ollama_api_key", "text"],
+  "ollama-verify": ["llm.ollama_verify_tls", "bool"],
 
-  "da-enabled": ["dead_alive.enabled", "bool"],
+  "da-adapt": ["dead_alive.adapt_replies", "bool"],
+  "da-track": ["dead_alive.track_players", "bool"],
+  "da-enforce": ["dead_alive.enforce_visibility", "bool"],
   "da-reply-when-dead": ["dead_alive.reply_when_dead", "bool"],
   "da-dead-when-alive": ["dead_alive.reply_to_dead_when_alive", "bool"],
   "da-alive-when-dead": ["dead_alive.reply_to_alive_when_dead", "bool"],
@@ -46,9 +62,29 @@ const BINDINGS = {
   "da-persona": ["dead_alive.use_dead_persona", "bool"],
   "da-assume": ["dead_alive.assume_alive_without_gsi", "bool"],
 
+  "snitch-enabled": ["snitch.enabled", "bool"],
+  "snitch-asked": ["snitch.answer_when_asked", "bool"],
+  "snitch-phrases": ["snitch.request_phrases", "list"],
+  "snitch-interval": ["snitch.announce_interval", "float"],
+  "snitch-channel": ["snitch.channel", "text"],
+  "snitch-death": ["snitch.announce_on_death", "bool"],
+  "snitch-position": ["snitch.reveal_position", "bool"],
+  "snitch-health": ["snitch.reveal_health", "bool"],
+  "snitch-weapon": ["snitch.reveal_weapon", "bool"],
+  "snitch-bomb": ["snitch.reveal_bomb", "bool"],
+
+  "reveal-enabled": ["reveal.enabled", "bool"],
+  "reveal-message": ["reveal.message", "text"],
+  "reveal-channel": ["reveal.channel", "text"],
+  "reveal-mode": ["reveal.mode", "text"],
+  "reveal-instructions": ["reveal.instructions", "text"],
+  "reveal-link": ["reveal.link", "text"],
+
   "log-path": ["game.console_log_path", "text"],
   "cfg-dir": ["game.cfg_dir", "text"],
   "own-name": ["game.own_name", "text"],
+  "name-aliases": ["game.name_aliases", "list"],
+  "auto-detect-name": ["game.auto_detect_name", "bool"],
   "bind-key": ["game.bind_key", "text"],
   "char-limit": ["game.chat_char_limit", "int"],
   "send-delay": ["game.chat_send_delay", "float"],
@@ -59,12 +95,20 @@ const BINDINGS = {
   "gsi-token": ["gsi.auth_token", "text"],
 };
 
-const IQ_DESCRIPTIONS = [
+const LITERACY_DESCRIPTIONS = [
   [15, "Barely literate: a few lowercase words, no punctuation, frequent typos."],
-  [35, "Casual and careless: one short line, chat abbreviations, some typos."],
-  [60, "Average player: short sentences, light slang, simple opinions."],
-  [85, "Sharp: clear callouts and reasoning, minimal slang, clean grammar."],
-  [101, "Analyst: precise, specific tactical reasoning, correct grammar."],
+  [35, "Careless: one short lowercase line, chat abbreviations, some typos."],
+  [60, "Average: short sentences, mostly lowercase, light slang."],
+  [85, "Clear: plain sentences, correct spelling, minimal slang."],
+  [101, "Precise: correct grammar and punctuation, well-chosen words."],
+];
+
+const IQ_DESCRIPTIONS = [
+  [15, "Clueless: no tactics, wrong callouts, reacts to the last thing said."],
+  [35, "Weak game sense: vague advice, confident but usually wrong."],
+  [60, "Average game sense: basic economy and callouts, no deep reads."],
+  [85, "Strong: concrete callouts, economy awareness, reads the enemy."],
+  [101, "Professional: map knowledge, utility, timings - and right about them."],
 ];
 
 function getPath(obj, path) {
@@ -99,14 +143,23 @@ function renderConfig() {
   }
   $("reply-all").checked = config.behavior.reply_channels.includes("all");
   $("reply-team").checked = config.behavior.reply_channels.includes("team");
-  renderIq();
+  renderDials();
   renderSavedPersonas();
 }
 
-function renderIq() {
-  const value = config.behavior.intelligence;
-  $("iq-value").textContent = value;
-  $("iq-desc").textContent = IQ_DESCRIPTIONS.find(([limit]) => value < limit)[1];
+function renderDials() {
+  for (const [id, field, table] of [
+    ["iq", "intelligence", IQ_DESCRIPTIONS],
+    ["literacy", "literacy", LITERACY_DESCRIPTIONS],
+  ]) {
+    const value = config.behavior[field];
+    $(`${id}-value`).textContent = value;
+    $(`${id}-desc`).textContent = table.find(([limit]) => value < limit)[1];
+  }
+  $("delay-value").textContent = config.behavior.humanized_typing
+    ? "typing speed"
+    : `${Number(config.behavior.reply_delay).toFixed(1)}s`;
+  $("reply-delay").disabled = config.behavior.humanized_typing;
 }
 
 function renderSavedPersonas() {
@@ -141,7 +194,7 @@ function bindInputs() {
     if (!el) continue;
     el.addEventListener("input", () => {
       setPath(config, path, readField(el, kind));
-      if (id === "iq") renderIq();
+      if (["iq", "literacy", "reply-delay", "humanized-typing"].includes(id)) renderDials();
       scheduleSave();
     });
   }
@@ -187,6 +240,7 @@ function chatClass(message) {
   if (message.sender_state === "dead") classes.push("dead");
   if (message.sender_team === "CT") classes.push("ct");
   if (message.sender_team === "T") classes.push("t");
+  if (message.addressed_to_me) classes.push("mention");
   return classes.join(" ");
 }
 
@@ -194,17 +248,41 @@ function pushEvent(event) {
   const data = event.data || {};
   if (event.kind === "chat") {
     const tag = `[${data.channel}]${data.sender_state === "dead" ? " *DEAD*" : ""}`;
-    line(`${escapeHtml(tag)} <span class="who">${escapeHtml(data.sender)}</span>: ${escapeHtml(data.text)}`, chatClass(data));
+    line(
+      `${escapeHtml(tag)} <span class="who">${escapeHtml(data.sender)}</span>: ${escapeHtml(data.text)}`,
+      chatClass(data),
+      data.addressed_to_me ? escapeHtml(`→ you (${data.mention_reason})`) : "",
+    );
   } else if (event.kind === "reply") {
     line(
       `<span class="who">bot →</span> ${escapeHtml(data.text)}`,
       `reply ${data.delivered ? "" : "failed"}`,
       `${data.latency_ms}ms · ${escapeHtml(data.reason)}`,
     );
+  } else if (event.kind === "reveal") {
+    line(
+      `<span class="who">reveal →</span> ${escapeHtml(data.text)}`,
+      `reply ${data.delivered ? "" : "failed"}`,
+      escapeHtml(data.reason),
+    );
+  } else if (event.kind === "snitch") {
+    line(
+      `<span class="who">snitch →</span> ${escapeHtml(data.text)}`,
+      `reply ${data.delivered ? "" : "failed"}`,
+      escapeHtml(data.reason),
+    );
   } else if (event.kind === "skipped") {
     line(`skipped ${escapeHtml(data.message.sender)}`, "skipped", escapeHtml(data.reason));
+  } else if (event.kind === "repeat") {
+    line(
+      `too similar, retrying: ${escapeHtml(data.text)}`,
+      "skipped",
+      escapeHtml(`echoes "${data.echoed}" · attempt ${data.attempt}/${data.attempts}`),
+    );
   } else if (event.kind === "error") {
     line(escapeHtml(data.message), "error");
+  } else if (event.kind === "identity") {
+    line(`your name looks like "${escapeHtml(data.name)}"`, "gamestate", escapeHtml(data.source));
   } else if (event.kind === "gamestate") {
     line(
       `game state: ${escapeHtml(data.state)}${data.health != null ? ` (${data.health} hp)` : ""}`,
@@ -229,6 +307,13 @@ function renderStatus(status) {
     status.llm_status.startsWith("error") ? "bad" : status.llm_status === "not checked" ? "" : "good",
   );
   setPill("pill-sender", `output: ${status.sender}`);
+  setPill(
+    "pill-name",
+    `you: ${status.own_name || "unknown"}`,
+    status.own_name ? "good" : "warn",
+  );
+  $("pill-name").title = `name source: ${status.name_source}`;
+  $("version").textContent = status.version ? `v${status.version}` : "";
   const toggle = $("toggle");
   toggle.dataset.on = String(status.enabled);
   toggle.textContent = status.enabled ? "Stop bot" : "Start bot";
@@ -285,15 +370,23 @@ function bindActions() {
   });
 
   $("persona-save").addEventListener("click", async () => {
-    const name = prompt("Save persona as:", config.persona.name);
+    const name = ($("persona-save-name").value || config.persona.name).trim();
     if (!name) return;
-    await fetch("/api/personas", {
+    await saveConfig();
+    const response = await fetch("/api/personas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, persona: config.persona }),
     });
+    if (!response.ok) {
+      $("persona-note").textContent = "could not save";
+      return;
+    }
     config.saved_personas[name] = structuredClone(config.persona);
+    $("persona-save-name").value = "";
     renderSavedPersonas();
+    $("persona-saved").value = name;
+    $("persona-note").textContent = `saved "${name}"`;
   });
 
   $("persona-load").addEventListener("click", () => {
@@ -312,6 +405,24 @@ function bindActions() {
     renderSavedPersonas();
   });
 
+  $("callout-add").addEventListener("click", async () => {
+    const name = $("callout-name").value.trim();
+    if (!name) return;
+    const response = await fetch("/api/callouts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) {
+      $("callout-output").textContent = (await response.json()).detail;
+      return;
+    }
+    $("callout-name").value = "";
+    renderCallouts();
+  });
+
+  $("callout-refresh").addEventListener("click", renderCallouts);
+
   $("install-gsi").addEventListener("click", async () => {
     await saveConfig();
     const response = await fetch("/api/gsi/install", { method: "POST" });
@@ -325,12 +436,16 @@ function bindActions() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: $("parse-input").value }),
     });
-    const { results } = await response.json();
-    $("parse-output").textContent = results
-      .map(({ line, parsed }) =>
-        parsed
-          ? `✓ ${parsed.channel} | ${parsed.sender} | ${parsed.sender_state} | ${parsed.sender_team} | "${parsed.text}"`
-          : `✗ not chat: ${line}`,
+    const { results, own_name, name_source } = await response.json();
+    const header = `your name: ${own_name || "unknown"} (${name_source})`;
+    $("parse-output").textContent = [header]
+      .concat(
+        results.map(({ line, parsed, detected_name }) => {
+          if (detected_name) return `name detected: ${detected_name}`;
+          if (!parsed) return `not chat: ${line}`;
+          const aimed = parsed.addressed_to_me ? ` | TO YOU (${parsed.mention_reason})` : "";
+          return `${parsed.channel} | ${parsed.sender} | ${parsed.sender_state} | ${parsed.sender_team} | "${parsed.text}"${aimed}`;
+        }),
       )
       .join("\n");
   });
@@ -348,10 +463,25 @@ function bindActions() {
       $("sim-output").textContent = body.detail;
       return;
     }
+    const aimed = body.message.addressed_to_me ? ` (talking to you: ${body.message.mention_reason})` : "";
     $("sim-output").textContent = body.would_reply
-      ? `reply: ${body.reply}`
-      : `no reply — ${body.reason}`;
+      ? `reply: ${body.reply}${aimed}`
+      : `no reply — ${body.reason}${aimed}`;
   });
+}
+
+async function renderCallouts() {
+  const body = await (await fetch("/api/callouts")).json();
+  const head = body.map
+    ? `${body.map}${body.callout ? ` - you are at ${body.callout}` : ""}`
+    : "no map yet (is GSI connected?)";
+  const where = body.position
+    ? `position ${body.position.x.toFixed(0)}, ${body.position.y.toFixed(0)}, ${body.position.z.toFixed(0)}`
+    : "CS2 is not reporting a position";
+  const recorded = body.callouts.length
+    ? body.callouts.map((c) => `  ${c.name} (${c.x.toFixed(0)}, ${c.y.toFixed(0)}, ${c.z.toFixed(0)})`)
+    : ["  nothing recorded for this map yet"];
+  $("callout-output").textContent = [head, where, "recorded:"].concat(recorded).join("\n");
 }
 
 async function init() {

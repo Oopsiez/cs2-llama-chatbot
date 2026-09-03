@@ -11,13 +11,17 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..callouts import DEFAULT_RADIUS, Callout
 from ..config import AppConfig, PersonaSettings, config_path, load_config, save_config
 from ..engine import Engine
 from ..gamestate import install_gsi_cfg
+from ..identity import detect_name_from_line
 from ..llm import BACKENDS
 from ..models import LifeState
 from ..parser import parse_chat_line
-from ..persona import PRESETS
+from ..persona import PRESETS, build_system_prompt
+from ..rules import should_reply
+from ..snitch import where
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -102,45 +106,96 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         await engine.apply_config(engine.config.model_copy(update={"saved_personas": saved}))
         return {"saved": sorted(saved)}
 
+    @app.get("/api/callouts")
+    async def list_callouts() -> dict[str, Any]:
+        player = engine.game_state.player
+        return {
+            "map": player.map_name,
+            "position": player.position.model_dump() if player.position else None,
+            "callout": where(player, engine.config.callouts),
+            "callouts": [c.model_dump() for c in engine.config.callouts.for_map(player.map_name)],
+            "maps": {name: len(v) for name, v in engine.config.callouts.maps.items()},
+        }
+
+    @app.post("/api/callouts")
+    async def record_callout(payload: dict[str, Any]) -> dict[str, Any]:
+        """Name the spot the player is standing in right now, as reported by GSI."""
+        name = str(payload.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="callout name is required")
+        player = engine.game_state.player
+        map_name = str(payload.get("map") or player.map_name).strip()
+        if not map_name:
+            raise HTTPException(status_code=422, detail="no map yet - is GSI connected?")
+        if player.position is None:
+            raise HTTPException(
+                status_code=422,
+                detail="CS2 has not reported a position; install the GSI config and join a map",
+            )
+        book = engine.config.callouts.model_copy(deep=True)
+        book.record(
+            map_name,
+            Callout(
+                name=name,
+                x=player.position.x,
+                y=player.position.y,
+                z=player.position.z,
+                radius=float(payload.get("radius") or DEFAULT_RADIUS),
+            ),
+        )
+        await engine.apply_config(engine.config.model_copy(update={"callouts": book}))
+        return {"map": map_name, "callouts": [c.model_dump() for c in book.for_map(map_name)]}
+
+    @app.delete("/api/callouts/{map_name}/{name}")
+    async def delete_callout(map_name: str, name: str) -> dict[str, Any]:
+        book = engine.config.callouts.model_copy(deep=True)
+        if not book.forget(map_name, name):
+            raise HTTPException(status_code=404, detail="unknown callout")
+        await engine.apply_config(engine.config.model_copy(update={"callouts": book}))
+        return {"map": map_name, "callouts": [c.model_dump() for c in book.for_map(map_name)]}
+
     @app.post("/api/parse")
     async def parse_lines(payload: dict[str, Any]) -> dict[str, Any]:
         """Paste raw console.log lines and see exactly what the bot makes of them."""
         text = str(payload.get("text") or "")
-        own_name = engine.config.game.own_name or engine.game_state.player.name
+        aliases = engine.config.game.name_aliases
         results = []
         for line in text.splitlines():
             if not line.strip():
                 continue
-            message = parse_chat_line(line, own_name)
+            message = parse_chat_line(line, engine.own_name, aliases)
             results.append(
                 {
                     "line": line,
-                    "parsed": message.model_dump(mode="json") if message else None,
+                    "parsed": engine.annotate(message).model_dump(mode="json") if message else None,
+                    "detected_name": detect_name_from_line(line, engine.own_name),
                 }
             )
-        return {"results": results}
+        return {"results": results, "own_name": engine.own_name, "name_source": engine.name_source}
 
     @app.post("/api/simulate")
     async def simulate(payload: dict[str, Any]) -> dict[str, Any]:
         """Generate a reply for a made-up message without touching the game."""
         line = str(payload.get("line") or "")
-        message = parse_chat_line(line, engine.config.game.own_name)
-        if message is None:
+        parsed = parse_chat_line(line, engine.own_name, engine.config.game.name_aliases)
+        if parsed is None:
             raise HTTPException(status_code=422, detail="line is not recognised as CS2 chat")
+        message = engine.annotate(engine.flag_own_echo(engine.track_state(parsed)))
         state_override = payload.get("local_state")
         local_state = (
             LifeState(state_override)
             if state_override in {s.value for s in LifeState}
             else engine.game_state.local_state(engine.config.dead_alive.assume_alive_without_gsi)
         )
-        from ..rules import should_reply
-
         allowed, reason = should_reply(engine.config, message, local_state, engine.game_state.player)
         result: dict[str, Any] = {
             "message": message.model_dump(mode="json"),
             "local_state": local_state.value,
             "would_reply": allowed,
             "reason": reason,
+            "prompt": build_system_prompt(
+                engine.config, engine.game_state.player, local_state, message, engine.own_name
+            ),
         }
         if allowed and payload.get("generate", True):
             result["reply"] = await engine.generate_reply(message, local_state)

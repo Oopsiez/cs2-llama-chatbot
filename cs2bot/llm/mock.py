@@ -13,6 +13,9 @@ _CANNED = [
     "who queued for this map",
     "eco next round, trust me",
     "smoke is up, take it",
+    "they are stacking B, play retake",
+    "drop me an AK and I will carry",
+    "that utility was criminal",
 ]
 
 
@@ -25,10 +28,7 @@ class MockBackend(LLMBackend):
 
     async def generate(self, turns: list[ChatTurn], params: SamplingParams) -> str:
         await asyncio.sleep(self._delay)
-        last_user = next((t.content for t in reversed(turns) if t.role == "user"), "")
         reply = self._random.choice(_CANNED)
-        if last_user:
-            reply = f"{reply} ({last_user.strip()[:40]})"
         return reply[: max(16, params.max_tokens * 4)]
 
     async def health(self) -> str:

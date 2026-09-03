@@ -45,6 +45,7 @@ header {
   font-size: 13px;
 }
 .brand span { color: var(--accent); }
+.brand small { font-family: var(--mono); font-size: 10px; opacity: 0.5; letter-spacing: 0; }
 
 .status-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
 
@@ -123,6 +124,7 @@ main {
 .event.chat.dead .who { color: var(--dead); }
 .event.chat.ct .who { color: var(--ct); }
 .event.chat.t .who { color: var(--t); }
+.event.chat.mention { background: #1d1a10; border-left-color: var(--accent); }
 .event.reply { background: #14201a; border-left-color: var(--ok); }
 .event.reply.failed { background: #201517; border-left-color: var(--dead); }
 .event.skipped { color: var(--muted); border-left-color: #333b45; }
