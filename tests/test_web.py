@@ -38,11 +38,17 @@ def test_parse_endpoint_reports_dead_players(client):
     assert results["results"][1]["parsed"] is None
 
 
-def test_simulate_respects_dead_alive_rules(client):
+def test_simulate_answers_from_either_side_of_the_grave(client):
     dead_view = client.post(
         "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "dead"}
     ).json()
-    assert dead_view["would_reply"] is False
+    assert dead_view["would_reply"] is True
+
+    dead_sender = client.post(
+        "/api/simulate", json={"line": "[DEAD] ghost: unlucky", "local_state": "alive"}
+    ).json()
+    assert dead_sender["message"]["sender_state"] == "dead"
+    assert dead_sender["would_reply"] is True
 
     alive_view = client.post(
         "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}

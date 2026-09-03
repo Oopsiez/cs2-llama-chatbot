@@ -124,6 +124,41 @@ def game_context(
     return "; ".join(bits)
 
 
+def state_note(local_state: LifeState, incoming: ChatMessage) -> str | None:
+    """How the bot should pitch a reply given who in the exchange is dead.
+
+    CS2 marks a dead player's chat with `[DEAD]`, so the sender's state is known from the line
+    itself; the bot's own state comes from Game State Integration.
+    """
+    sender_dead = incoming.sender_state is LifeState.DEAD
+    sender_alive = incoming.sender_state is LifeState.ALIVE
+    bot_dead = local_state is LifeState.DEAD
+
+    if bot_dead and sender_dead:
+        return (
+            f"You and {incoming.sender} are both dead and watching the round play out. Talk like "
+            "spectators: react to what is happening, second-guess the living, nothing urgent."
+        )
+    if bot_dead and sender_alive:
+        return (
+            f"You are dead and {incoming.sender} is still alive and playing. Keep it to one short "
+            "line - information or encouragement they can use right now, no long chatter while "
+            "they are in a fight."
+        )
+    if sender_dead:
+        return (
+            f"{incoming.sender} is dead and you are still alive. They are out of the round, so "
+            "treat them as a backseat voice: you can rib them for dying or take their info, but "
+            "you are the one still playing and you are busy."
+        )
+    if sender_alive:
+        return (
+            f"You and {incoming.sender} are both alive and in the round. Keep it to a quick line "
+            "you could realistically type mid-round."
+        )
+    return None
+
+
 def _address_note(incoming: ChatMessage, own_name: str) -> str | None:
     if not incoming.addressed_to_me:
         return None
@@ -163,6 +198,10 @@ def build_system_prompt(
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
     lines.append("Live game context - " + game_context(player, local_state, incoming, own_name))
+    if config.dead_alive.adapt_replies:
+        state = state_note(local_state, incoming)
+        if state:
+            lines.append(state)
     note = _address_note(incoming, own_name)
     if note:
         lines.append(note)

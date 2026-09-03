@@ -48,7 +48,9 @@ const BINDINGS = {
   "ollama-url": ["llm.ollama_url", "text"],
   "ollama-model": ["llm.ollama_model", "text"],
 
-  "da-enabled": ["dead_alive.enabled", "bool"],
+  "da-adapt": ["dead_alive.adapt_replies", "bool"],
+  "da-track": ["dead_alive.track_players", "bool"],
+  "da-enforce": ["dead_alive.enforce_visibility", "bool"],
   "da-reply-when-dead": ["dead_alive.reply_when_dead", "bool"],
   "da-dead-when-alive": ["dead_alive.reply_to_dead_when_alive", "bool"],
   "da-alive-when-dead": ["dead_alive.reply_to_alive_when_dead", "bool"],

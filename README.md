@@ -26,9 +26,10 @@ and rules that understand who is alive and who is dead.
   configurable). If every attempt is a rerun, it stays quiet.
 - **Reply timing.** A delay slider for how fast or slow it answers, or a checkbox to bypass it and
   take realistically long: read the message, then type it out at the configured typing speed.
-- **Dead vs alive.** `*DEAD*` senders are detected from the log, and CS2 Game State Integration
-  reports whether *you* are alive. The bot will not answer messages a living player could not have
-  seen, and will not type into chat that nobody alive can read (see below).
+- **Dead vs alive.** `[DEAD]` senders are read straight off the log and remembered for the rest of
+  the round, and CS2 Game State Integration reports whether *you* are alive. Each of the four
+  combinations gets its own instruction in the prompt, so a corpse gets a different answer than a
+  teammate mid-fight (see below).
 - **Knows who you are.** Your in-game name is taken from the panel, or read from Game State
   Integration and the console log, and is handed to the model as prompt context.
 - **Knows when it is being spoken to.** `you: gg`, `@you`, your name inside a sentence, nickname
@@ -72,18 +73,22 @@ Then open <http://127.0.0.1:8420>.
 
 ## How the dead/alive logic works
 
-CS2 splits the chat audience: a dead player's messages are only rendered for other dead players and
-spectators. That gives two rules, both toggleable on the *Dead / alive* tab:
+CS2 prefixes a dead player's chat with `[DEAD]` (some servers use `*DEAD*`). The parser reads that
+tag, and because only the tagged lines carry it, the bot also remembers who died until the round
+resets - so an untagged line from a player already seen dead still counts as coming from the grave.
+Pair that with your own state from GSI and the prompt gets one of four instructions:
 
-| Bot is | Sender is | Default | Why |
-| ------ | --------- | ------- | --- |
-| alive  | alive     | reply   | normal case |
-| alive  | dead      | skip    | a living player is not supposed to see dead chat |
-| dead   | dead      | reply   | both are in the dead audience |
-| dead   | alive     | skip    | the reply would be invisible to them |
+| Bot is | Sender is | How it answers |
+| ------ | --------- | -------------- |
+| alive  | alive     | quick line you could realistically type mid-round |
+| alive  | dead      | treats them as a backseat voice; it is the one still playing |
+| dead   | alive     | one short, useful line - they are in a fight |
+| dead   | dead      | spectator talk: react to the round, second-guess the living |
 
-Warmup, deathmatch and `sv_deadtalk` servers merge the audiences again; the *treat warmup as one
-shared chat* and *global dead chat* toggles cover those. Without GSI the bot assumes it is alive.
+Nothing is filtered out by default: everyone sees everyone's chat. For servers that split the
+audience so the living cannot read dead chat, turn on *Skip messages the bot could not have seen*
+on the *Dead / alive* tab and the old visibility rules apply. Without GSI the bot assumes it is
+alive.
 
 ## How it knows your name
 
@@ -91,7 +96,7 @@ In priority order: the name typed into the *Game* tab, the player name reported 
 console log (`"name" = "..."`, `name "..."`, rename notices). The resolved name and its source are
 shown in the status bar. A message counts as directed at you when it starts with your name, uses
 `@name`, contains your name or one of your aliases (accents, leetspeak and clan tags are ignored),
-or uses "you" shortly after the bot spoke. Dead/alive visibility is still enforced first - being
+or uses "you" shortly after the bot spoke. When visibility enforcement is on, it still wins - being
 named never makes the bot answer chat it should not be able to see.
 
 ## Trying it without CS2
@@ -111,6 +116,7 @@ The *Test* tab also parses pasted log lines and generates one-off replies with n
 | `cs2bot/identity.py` | your name: detection, aliases, and "is this aimed at me?" |
 | `cs2bot/parser.py` | chat line → `ChatMessage` (channel, sender, dead/alive, team) |
 | `cs2bot/gamestate.py` | CS2 Game State Integration listener + cfg generator |
+| `cs2bot/liveness.py` | per-round memory of who is dead, learned from `[DEAD]` tags |
 | `cs2bot/rules.py` | who may be answered, and why not |
 | `cs2bot/persona.py` | prompt construction (persona + dials + live game context) |
 | `cs2bot/humanize.py` | literacy / game IQ dials → sampling and post-processing |

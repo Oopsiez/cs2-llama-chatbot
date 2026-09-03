@@ -96,19 +96,22 @@ class BehaviorSettings(BaseModel):
 
 
 class DeadAliveSettings(BaseModel):
-    """Rules built around who can actually see a chat message.
+    """What the bot does with the `[DEAD]` marker CS2 puts on a corpse's chat.
 
-    In CS2, a dead player's chat is only shown to other dead players and spectators, so a
-    reply typed while dead never reaches the living. These toggles keep the bot from talking
-    into the void (or from answering messages it "shouldn't" have seen).
+    By default the marker is only *context*: the bot answers everyone, but it knows whether the
+    sender is dead or alive (and whether it is dead itself) and writes accordingly. The
+    visibility rules below exist for servers that split dead and living chat; they are off
+    unless you turn them on.
     """
 
-    enabled: bool = True
-    reply_to_dead_when_alive: bool = False
-    reply_to_alive_when_dead: bool = False
+    adapt_replies: bool = True  # tell the model who is dead so it answers differently
+    track_players: bool = True  # remember who is dead for the rest of the round
+    enforce_visibility: bool = False  # skip messages the bot "should not" have seen
+    reply_to_dead_when_alive: bool = True
+    reply_to_alive_when_dead: bool = True
     reply_when_dead: bool = True
     treat_warmup_as_global: bool = True
-    dead_chat_is_global: bool = False  # deathmatch / sv_deadtalk servers
+    dead_chat_is_global: bool = True  # most servers show dead chat to everyone
     use_dead_persona: bool = True
     assume_alive_without_gsi: bool = True
 

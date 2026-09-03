@@ -129,7 +129,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         parsed = parse_chat_line(line, engine.own_name, engine.config.game.name_aliases)
         if parsed is None:
             raise HTTPException(status_code=422, detail="line is not recognised as CS2 chat")
-        message = engine.annotate(parsed)
+        message = engine.annotate(engine.track_state(parsed))
         state_override = payload.get("local_state")
         local_state = (
             LifeState(state_override)

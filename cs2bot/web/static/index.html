@@ -189,20 +189,27 @@
 
     <div class="panel" data-panel="deadalive">
       <p class="note">
-        CS2 shows a dead player's chat only to other dead players and spectators. These rules stop
-        the bot from answering messages it could not have seen, and from typing replies nobody can read.
+        CS2 tags a dead player's chat with <span class="mono">[DEAD]</span>. The bot reads that tag,
+        pairs it with your own alive/dead state from GSI, and writes a different kind of reply for
+        each combination - it does not filter anything out.
       </p>
-      <label class="check"><input type="checkbox" id="da-enabled" /><span>Enforce dead/alive chat visibility</span></label>
-      <label class="check"><input type="checkbox" id="da-reply-when-dead" /><span>Keep replying while dead
-        <small>Replies go to dead players and spectators only.</small></span></label>
-      <label class="check"><input type="checkbox" id="da-dead-when-alive" /><span>Answer dead players while alive
-        <small>Off by default: a living player is not supposed to see dead chat.</small></span></label>
-      <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead
-        <small>They will not see the reply unless the server allows dead talk.</small></span></label>
-      <label class="check"><input type="checkbox" id="da-warmup" /><span>Treat warmup as one shared chat</span></label>
-      <label class="check"><input type="checkbox" id="da-global" /><span>Server has global dead chat (deathmatch / sv_deadtalk)</span></label>
+      <label class="check"><input type="checkbox" id="da-adapt" /><span>Adapt replies to who is dead
+        <small>Tells the model whether the sender is dead, and whether you are.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-track" /><span>Remember who died this round
+        <small>Only the first line is tagged; later untagged lines from the same player still count as dead.</small></span></label>
       <label class="check"><input type="checkbox" id="da-persona" /><span>Use the "when dead" persona while dead</span></label>
       <label class="check"><input type="checkbox" id="da-assume" /><span>Assume alive when GSI is not connected</span></label>
+      <p class="note">
+        Only for servers that split the chat so the living cannot see dead chat. Leave off when
+        everyone sees everything.
+      </p>
+      <label class="check"><input type="checkbox" id="da-enforce" /><span>Skip messages the bot could not have seen
+        <small>Turns the rules below on.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-reply-when-dead" /><span>Keep replying while dead</span></label>
+      <label class="check"><input type="checkbox" id="da-dead-when-alive" /><span>Answer dead players while alive</span></label>
+      <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead</span></label>
+      <label class="check"><input type="checkbox" id="da-warmup" /><span>Treat warmup as one shared chat</span></label>
+      <label class="check"><input type="checkbox" id="da-global" /><span>Server has global dead chat (deathmatch / sv_deadtalk)</span></label>
     </div>
 
     <div class="panel" data-panel="game">

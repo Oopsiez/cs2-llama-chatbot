@@ -13,6 +13,7 @@ from .events import EventBus
 from .gamestate import GameStateStore
 from .humanize import humanize, sampling_for
 from .identity import addressed_to, detect_name_from_line
+from .liveness import DeathBoard
 from .llm import LLMBackend, LLMError, SamplingParams, build_backend
 from .logtail import LogTailer
 from .models import BotReply, ChatChannel, ChatMessage, LifeState
@@ -34,6 +35,7 @@ class Engine:
         self.config = config or load_config()
         self.bus = EventBus()
         self.game_state = GameStateStore()
+        self.deaths = DeathBoard()
         self.history: list[ChatMessage] = []
         self.last_reply_at = 0.0
         self.last_spoke_at = 0.0
@@ -182,7 +184,7 @@ class Engine:
     # ---- message handling -------------------------------------------------------
 
     async def handle_message(self, message: ChatMessage) -> BotReply | None:
-        message = self.annotate(message)
+        message = self.annotate(self.track_state(message))
         self.history.append(message)
         del self.history[:-50]
         self.bus.publish("chat", message.model_dump(mode="json"))
@@ -256,6 +258,13 @@ class Engine:
         self.history.append(own_message)
         self.bus.publish("reply", reply.model_dump(mode="json"))
         return reply
+
+    def track_state(self, message: ChatMessage) -> ChatMessage:
+        """Learn the sender's life state from `[DEAD]`, and remember it for the round."""
+        if not self.config.dead_alive.track_players:
+            return message
+        self.deaths.note_phase(self.game_state.player.round_phase)
+        return self.deaths.observe(message)
 
     async def generate_reply(self, message: ChatMessage, local_state: LifeState) -> str:
         """Generate a reply, retrying while it echoes something the bot recently said."""
@@ -351,6 +360,7 @@ class Engine:
             "local_state": self.game_state.local_state(
                 self.config.dead_alive.assume_alive_without_gsi
             ).value,
+            "dead_players": self.deaths.dead_players,
             "gsi_connected": not player.is_stale,
             "player": player.model_dump(mode="json"),
             "last_error": self.last_error,

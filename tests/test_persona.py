@@ -1,6 +1,6 @@
 from cs2bot.config import AppConfig
 from cs2bot.models import ChatChannel, ChatMessage, LifeState, LocalPlayer
-from cs2bot.persona import PRESETS, build_system_prompt, build_turns
+from cs2bot.persona import PRESETS, build_system_prompt, build_turns, state_note
 
 
 def message(**kwargs) -> ChatMessage:
@@ -47,6 +47,27 @@ def test_recent_replies_are_listed_only_when_avoiding_repeats():
     assert "rotate b now" in prompt(config, ["rotate b now"])
     config.behavior.avoid_repeats = False
     assert "rotate b now" not in prompt(config, ["rotate b now"])
+
+
+def test_each_dead_alive_combination_gets_its_own_instruction():
+    notes = {
+        (bot, sender): state_note(bot, message(sender_state=sender))
+        for bot in (LifeState.ALIVE, LifeState.DEAD)
+        for sender in (LifeState.ALIVE, LifeState.DEAD)
+    }
+    assert all(notes.values())
+    assert len(set(notes.values())) == 4
+    assert state_note(LifeState.ALIVE, message(sender_state=LifeState.UNKNOWN)) is None
+
+
+def test_dead_state_guidance_can_be_switched_off():
+    config = AppConfig()
+    dead = message(sender_state=LifeState.DEAD)
+    assert "dead" in build_system_prompt(config, LocalPlayer(), LifeState.ALIVE, dead, "noodle")
+
+    config.dead_alive.adapt_replies = False
+    without = build_system_prompt(config, LocalPlayer(), LifeState.ALIVE, dead, "noodle")
+    assert state_note(LifeState.ALIVE, dead) not in without
 
 
 def test_turns_carry_the_recent_replies_into_the_system_turn():

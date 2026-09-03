@@ -36,10 +36,35 @@ async def test_replies_and_delivers():
 
 
 @pytest.mark.asyncio
-async def test_dead_sender_is_skipped_while_alive():
+async def test_dead_sender_still_gets_an_answer():
     engine = build_engine()
+    reply = await engine.handle_message(chat(sender_state=LifeState.DEAD))
+    assert reply is not None and reply.delivered
+
+
+@pytest.mark.asyncio
+async def test_dead_sender_is_skipped_when_visibility_is_enforced():
+    engine = build_engine(
+        **{
+            "dead_alive.enforce_visibility": True,
+            "dead_alive.dead_chat_is_global": False,
+            "dead_alive.reply_to_dead_when_alive": False,
+        }
+    )
     assert await engine.handle_message(chat(sender_state=LifeState.DEAD)) is None
     assert not engine._sender.sent
+
+
+@pytest.mark.asyncio
+async def test_dead_players_stay_dead_until_the_round_resets():
+    engine = build_engine()
+    await engine.handle_message(chat(sender_state=LifeState.DEAD))
+    plain = engine.track_state(chat(sender_state=LifeState.UNKNOWN, text="still salty"))
+    assert plain.sender_state is LifeState.DEAD
+
+    engine.game_state.player.round_phase = "freezetime"
+    fresh = engine.track_state(chat(sender_state=LifeState.UNKNOWN, text="new round"))
+    assert fresh.sender_state is LifeState.UNKNOWN
 
 
 @pytest.mark.asyncio
