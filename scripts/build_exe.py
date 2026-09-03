@@ -34,6 +34,12 @@ def main() -> int:
         # The panel is HTML served off disk, so it has to travel inside the executable.
         "--add-data",
         f"{static}{separator}cs2bot/web/static",
+        # Pull the package in from the checkout: an editable install hides the real files behind a
+        # finder that PyInstaller cannot follow, and the launcher only imports one module by name.
+        "--paths",
+        str(ROOT),
+        "--collect-submodules",
+        "cs2bot",
         # uvicorn loads these by name at runtime, so static analysis cannot see them.
         "--hidden-import",
         "uvicorn.protocols.http.h11_impl",
@@ -43,7 +49,9 @@ def main() -> int:
         "uvicorn.lifespan.on",
         "--hidden-import",
         "uvicorn.loops.asyncio",
-        str(ROOT / "cs2bot" / "__main__.py"),
+        # Freeze the launcher, not `cs2bot/__main__.py`: PyInstaller runs its entry script as a
+        # package-less `__main__`, where the package's relative imports blow up on startup.
+        str(ROOT / "scripts" / "launcher.py"),
     ]
     result = subprocess.run(command, cwd=ROOT)
     if result.returncode:
