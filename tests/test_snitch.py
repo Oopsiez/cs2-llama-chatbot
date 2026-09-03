@@ -3,9 +3,23 @@ import pytest
 from cs2bot.callouts import Callout, CalloutBook, Position
 from cs2bot.config import SnitchSettings
 from cs2bot.gamestate import GameStateStore
+from cs2bot.llm import LLMError
 from cs2bot.models import LifeState, LocalPlayer
+from cs2bot.persona import build_reveal_turns
 from cs2bot.snitch import announcement, facts, is_request, prompt_note
-from tests.test_engine import build_engine, chat
+from tests.test_engine import StubBackend, build_engine, chat
+
+
+class BrokenBackend:
+    """Stands in for an Ollama box that is switched off."""
+
+    name = "broken"
+
+    async def generate(self, turns, params) -> str:
+        raise LLMError("model is not loaded")
+
+    async def health(self) -> str:
+        raise LLMError("model is not loaded")
 
 
 def book_with(*callouts: Callout, map_name: str = "de_dust2") -> CalloutBook:
@@ -218,6 +232,53 @@ async def test_the_bot_owns_up_once_when_the_match_ends():
     sent = [text for text, _ in engine._sender.sent]
     assert len(sent) == 1
     assert "github.com/Oopsiez/cs2-llama-chatbot" in sent[0]
+
+
+@pytest.mark.asyncio
+async def test_the_reveal_is_written_in_character():
+    engine = build_engine()
+    engine._backend = StubBackend(["cry about it, i was the angry one and i was never real"])
+    engine.game_state.update(
+        {"provider": {"steamid": "1"}, "map": {"name": "de_dust2", "phase": "gameover"}}
+    )
+    await engine.maybe_reveal()
+
+    text = engine._sender.sent[0][0]
+    assert "i was the angry one" in text
+    assert text.endswith("https://github.com/Oopsiez/cs2-llama-chatbot")
+
+
+@pytest.mark.asyncio
+async def test_the_persona_name_is_offered_to_the_model():
+    engine = build_engine()
+    engine.config.persona.name = "Gaming Therapist"
+    turns = build_reveal_turns(engine.config)
+    assert "Gaming Therapist" in turns[0].content
+    assert "no links" in turns[0].content
+
+
+@pytest.mark.asyncio
+async def test_a_fixed_reveal_skips_the_model_entirely():
+    engine = build_engine(**{"reveal.mode": "fixed", "reveal.message": "gg from a robot"})
+    engine._backend = StubBackend(["something in character"])
+    engine.game_state.update(
+        {"provider": {"steamid": "1"}, "map": {"name": "de_dust2", "phase": "gameover"}}
+    )
+    await engine.maybe_reveal()
+
+    assert engine._sender.sent[0][0].startswith("gg from a robot")
+
+
+@pytest.mark.asyncio
+async def test_the_canned_line_is_used_when_the_model_is_down():
+    engine = build_engine(**{"reveal.message": "gg, bot here"})
+    engine._backend = BrokenBackend()
+    engine.game_state.update(
+        {"provider": {"steamid": "1"}, "map": {"name": "de_dust2", "phase": "gameover"}}
+    )
+    await engine.maybe_reveal()
+
+    assert engine._sender.sent[0][0].startswith("gg, bot here")
 
 
 @pytest.mark.asyncio

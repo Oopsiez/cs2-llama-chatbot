@@ -264,9 +264,14 @@
       <div class="divider"></div>
       <h3>End of match</h3>
       <label class="check"><input type="checkbox" id="reveal-enabled" /><span>Own up when the match ends
-        <small>One line on the final scoreboard, once per match.</small></span></label>
+        <small>One line on the final scoreboard, once per match. Untick to never reveal itself.</small></span></label>
       <div class="row">
-        <label>Reveal message<input type="text" id="reveal-message" /></label>
+        <label>How it signs off
+          <select id="reveal-mode">
+            <option value="character">In character (written fresh each match)</option>
+            <option value="fixed">Always the same line</option>
+          </select>
+        </label>
         <label>Say it in
           <select id="reveal-channel">
             <option value="all">all chat</option>
@@ -274,6 +279,15 @@
           </select>
         </label>
       </div>
+      <label>What to confess <span class="hint">in-character mode: the instruction it is given</span>
+        <textarea id="reveal-instructions" rows="3"></textarea>
+      </label>
+      <label>Fixed line <span class="hint">used in "always the same line" mode, and if the model is unreachable</span>
+        <input type="text" id="reveal-message" />
+      </label>
+      <label>Link to add <span class="hint">appended to whatever it says; clear it to add nothing</span>
+        <input type="text" id="reveal-link" />
+      </label>
       <div class="divider"></div>
       <h3>Callouts</h3>
       <p class="note">

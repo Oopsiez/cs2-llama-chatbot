@@ -21,7 +21,7 @@ from .models import BotReply, ChatChannel, ChatMessage, LifeState
 from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
-from .persona import build_turns
+from .persona import build_reveal_turns, build_turns
 from .rules import should_reply
 from .snitch import announcement, is_request, where
 
@@ -348,7 +348,7 @@ class Engine:
         if self._revealed or not (self.config.enabled and settings.enabled):
             return
 
-        text = settings.message.strip()
+        text = await self._reveal_text()
         if not text:
             return
         self._revealed = True
@@ -357,6 +357,30 @@ class Engine:
         delivered, detail = await self.sender.send(text, team_only=settings.channel == "team")
         self.last_spoke_at = time.time()
         self.bus.publish("reveal", {"text": text, "delivered": delivered, "reason": detail})
+
+    async def _reveal_text(self) -> str:
+        """The confession itself, written in character unless a fixed line was configured."""
+        settings = self.config.reveal
+        written = settings.message.strip()
+        if settings.mode == "character":
+            try:
+                generated = await self.backend.generate(
+                    build_reveal_turns(self.config), self._sampling_params()
+                )
+            except LLMError as exc:
+                # The match is over either way; the canned line is better than silence.
+                self.last_error = str(exc)
+                generated = ""
+            written = humanize(
+                generated,
+                literacy=self.config.behavior.literacy,
+                max_chars=max(40, self.config.persona.max_reply_chars - len(settings.link) - 1),
+                seed=self._random.randrange(2**32),
+            ) or written
+        link = settings.link.strip()
+        if link and link not in written:
+            written = f"{written} {link}".strip()
+        return written
 
     def track_state(self, message: ChatMessage) -> ChatMessage:
         """Learn the sender's life state from `[DEAD]`, and remember it for the round."""

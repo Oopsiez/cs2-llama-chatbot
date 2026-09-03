@@ -76,6 +76,9 @@ const BINDINGS = {
   "reveal-enabled": ["reveal.enabled", "bool"],
   "reveal-message": ["reveal.message", "text"],
   "reveal-channel": ["reveal.channel", "text"],
+  "reveal-mode": ["reveal.mode", "text"],
+  "reveal-instructions": ["reveal.instructions", "text"],
+  "reveal-link": ["reveal.link", "text"],
 
   "log-path": ["game.console_log_path", "text"],
   "cfg-dir": ["game.cfg_dir", "text"],

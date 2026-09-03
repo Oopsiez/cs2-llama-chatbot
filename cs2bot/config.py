@@ -159,11 +159,25 @@ class RevealSettings(BaseModel):
     The scoreboard is the one moment nobody is being shot at, so it is where the bot admits what
     it was and points at the project. It fires once per match - `gameover` is reported repeatedly
     while the scoreboard sits there, and repeating the line would undo the joke.
+
+    In `character` mode the model writes the confession itself, so the Gaming Therapist signs off
+    differently from Angry and Toxic; `fixed` sends `message` verbatim for anyone who wants the
+    same line every time.
     """
 
     enabled: bool = True
     channel: str = "all"  # all | team
-    message: str = f"gg - fun fact, you were talking to a local llama 3 bot this whole match: {PROJECT_URL}"
+    mode: str = "character"  # character | fixed
+    # What the model is told to do in `character` mode.
+    instructions: str = (
+        "The match is over and you are on the final scoreboard. Break character just enough to "
+        "admit you were an AI playing this persona all match - name the persona, in your own "
+        "voice, and stay funny about it. Do not apologise."
+    )
+    # Sent verbatim in `fixed` mode, and used if the model cannot be reached in `character` mode.
+    message: str = "gg - you were talking to an AI this whole match"
+    # Appended to whatever the reveal says, so the project is always credited.
+    link: str = PROJECT_URL
 
 
 class GSISettings(BaseModel):
