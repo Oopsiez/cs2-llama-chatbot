@@ -109,6 +109,13 @@ def detect_name_from_line(line: str, known: str = "") -> str | None:
     return None
 
 
+def _is_drawn_out(word: str, variant: str) -> bool:
+    """`noodleee` is still `noodle`; `noodles` is a different word."""
+    if len(word) <= len(variant) or not word.startswith(variant):
+        return False
+    return set(word[len(variant) :]) == {variant[-1]}
+
+
 def addressed_to(
     text: str,
     name: str,
@@ -135,15 +142,10 @@ def addressed_to(
             if first in variants:
                 return Mention(True, "@mention")
 
-        haystack = normalize_handle(stripped)
-        words = {normalize_handle(word) for word in stripped.split()}
-        words.discard("")
-        for variant in variants:
-            if variant in words:
-                return Mention(True, "name mentioned")
-        for variant in variants:
-            # Catches `noodleee`, `hey-noodle!` and other run-together spellings.
-            if len(variant) >= 4 and variant in haystack:
+        # Whole words only: `hey-noodle!` counts, `i love noodles` does not.
+        words = _WORD.findall(_DECORATION.sub(" ", stripped.casefold().translate(_LEET)))
+        for word in words:
+            if word in variants or any(_is_drawn_out(word, variant) for variant in variants):
                 return Mention(True, "name mentioned")
 
     if replying_to_bot and _SECOND_PERSON.search(stripped):

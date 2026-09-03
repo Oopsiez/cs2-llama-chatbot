@@ -2,7 +2,7 @@
 
 A Counter-Strike 2 chat bot that reads in-game chat from `console.log`, generates a reply with a
 **local quantized Llama 3 8B**, and types it back into the game. Everything is driven from a web
-control panel: personality, how smart the bot sounds, and what it is allowed to answer.
+control panel: personality, how well it writes, how well it plays, and what it is allowed to answer.
 
 Same premise as the original character.ai-based bot, rebuilt around a local model, a browser UI,
 and rules that understand who is alive and who is dead.
@@ -12,10 +12,20 @@ and rules that understand who is alive and who is dead.
 - **Local model.** llama.cpp (GGUF, e.g. `Meta-Llama-3-8B-Instruct.Q4_K_M`) or Ollama. No API keys,
   no account, nothing leaves the machine. A `mock` backend lets you try the UI with no model at all.
 - **Personality.** Editable system prompt (character, style rules, a separate "when dead" voice),
-  four presets, and named personas you can save and reload.
-- **Intelligence dial (0-100).** Controls how articulate the bot sounds: prompt directives, sampling
-  (temperature / top-p / top-k / length), plus post-processing that adds chat abbreviations, lowercase
-  and typos at the low end. Sampling can also be set by hand.
+  presets, and named personas you can save and reload. Presets: Cheeky Teammate, Calm IGL, Silver
+  Enjoyer, Deadpan Bot, **Coach** (volunteers pointers), **Gaming Therapist** (counsels you through
+  being bad at the game) and **Angry and Toxic**.
+- **Two dials, 0-100.** *Literacy* is how well it writes (spelling, punctuation, sentence length,
+  typos, abbreviations); *Game IQ* is how good its Counter-Strike thinking is (callouts, economy,
+  utility, timings). They are independent, so a smart player who types like a goblin - or a
+  well-spoken fool - are both one slider apart. Sampling follows the dials, or can be set by hand.
+- **Unsolicited advice.** A toggle that makes the bot volunteer a pointer instead of only answering
+  what was said; pair it with the Coach preset.
+- **No repeating itself.** Recent replies are fed back into the prompt as "don't say these again",
+  and a reply too similar to a recent one is thrown away and regenerated (limit and retries are
+  configurable). If every attempt is a rerun, it stays quiet.
+- **Reply timing.** A delay slider for how fast or slow it answers, or a checkbox to bypass it and
+  take realistically long: read the message, then type it out at the configured typing speed.
 - **Dead vs alive.** `*DEAD*` senders are detected from the log, and CS2 Game State Integration
   reports whether *you* are alive. The bot will not answer messages a living player could not have
   seen, and will not type into chat that nobody alive can read (see below).
@@ -102,8 +112,9 @@ The *Test* tab also parses pasted log lines and generates one-off replies with n
 | `cs2bot/parser.py` | chat line → `ChatMessage` (channel, sender, dead/alive, team) |
 | `cs2bot/gamestate.py` | CS2 Game State Integration listener + cfg generator |
 | `cs2bot/rules.py` | who may be answered, and why not |
-| `cs2bot/persona.py` | prompt construction (persona + intelligence + live game context) |
-| `cs2bot/humanize.py` | intelligence dial → sampling and post-processing |
+| `cs2bot/persona.py` | prompt construction (persona + dials + live game context) |
+| `cs2bot/humanize.py` | literacy / game IQ dials → sampling and post-processing |
+| `cs2bot/novelty.py` | similarity check that keeps replies from repeating |
 | `cs2bot/llm/` | llama.cpp / Ollama / mock backends |
 | `cs2bot/output/` | delivery: Windows `message.cfg` + keypress, or dry run |
 | `cs2bot/web/` | FastAPI panel and static UI |

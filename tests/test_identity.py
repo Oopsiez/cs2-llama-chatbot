@@ -57,6 +57,12 @@ def test_unrelated_chatter_is_not_addressed():
     assert not addressed_to("you there?", "noodle")
 
 
+def test_name_inside_a_longer_word_is_not_a_mention():
+    assert not addressed_to("i love noodles", "noodle")
+    assert not addressed_to("nice doodle", "noodle")
+    assert addressed_to("hey-noodle!", "noodle")
+
+
 def test_second_person_counts_only_right_after_the_bot_speaks():
     assert addressed_to("are you serious", "noodle", replying_to_bot=True)
     assert not addressed_to("are you serious", "noodle", replying_to_bot=False)

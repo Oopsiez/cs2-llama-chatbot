@@ -11,6 +11,7 @@ def build_engine(**overrides) -> Engine:
     config.llm.backend = "mock"
     config.game.output_backend = "dry_run"
     config.behavior.cooldown_seconds = 0
+    config.behavior.reply_delay = 0
     for path, value in overrides.items():
         section, field = path.split(".")
         setattr(getattr(config, section), field, value)
@@ -109,6 +110,75 @@ async def test_bare_you_counts_only_after_the_bot_speaks():
     assert engine.annotate(chat(text="you suck")).addressed_to_me is False
     await engine.handle_message(chat(text="noodle hey"))
     assert engine.annotate(chat(text="you suck")).addressed_to_me is True
+
+
+class StubBackend:
+    """Says the same thing forever unless told otherwise."""
+
+    name = "stub"
+
+    def __init__(self, replies: list[str]) -> None:
+        self.replies = replies
+        self.calls = 0
+
+    async def generate(self, turns, params) -> str:
+        self.calls += 1
+        return self.replies[min(self.calls - 1, len(self.replies) - 1)]
+
+    async def health(self) -> str:
+        return "stub"
+
+    async def aclose(self) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_repeated_reply_is_regenerated():
+    engine = build_engine()
+    engine._backend = StubBackend(["rotate b now", "rotate b now!", "save for next round"])
+    first = await engine.handle_message(chat())
+    second = await engine.handle_message(chat(text="and now"))
+    assert first is not None and second is not None
+    assert first.text == "rotate b now"
+    assert second.text == "save for next round"
+
+
+@pytest.mark.asyncio
+async def test_bot_stays_quiet_when_every_retry_repeats():
+    engine = build_engine()
+    engine._backend = StubBackend(["rotate b now"])
+    assert await engine.handle_message(chat()) is not None
+    assert await engine.handle_message(chat(text="and now")) is None
+    assert engine.recent_replies == ["rotate b now"]
+
+
+@pytest.mark.asyncio
+async def test_repeats_are_allowed_when_the_check_is_off():
+    engine = build_engine(**{"behavior.avoid_repeats": False})
+    engine._backend = StubBackend(["rotate b now"])
+    await engine.handle_message(chat())
+    second = await engine.handle_message(chat(text="and now"))
+    assert second is not None and second.text == "rotate b now"
+
+
+@pytest.mark.asyncio
+async def test_recent_replies_are_capped_by_memory():
+    engine = build_engine(**{"behavior.repeat_memory": 2, "behavior.avoid_repeats": False})
+    engine._backend = StubBackend(["one", "two", "three"])
+    for text in ("a", "b", "c"):
+        await engine.handle_message(chat(text=text))
+    assert engine.recent_replies == ["two", "three"]
+
+
+def test_reply_delay_follows_the_slider_or_typing_speed():
+    engine = build_engine(**{"behavior.reply_delay": 4.0})
+    assert engine.reply_delay_for("anything") == 4.0
+
+    engine.config.behavior.humanized_typing = True
+    short = engine.reply_delay_for("gg")
+    long = engine.reply_delay_for("g" * 100)
+    assert short < long
+    assert short > 0  # it still reads the message first
 
 
 @pytest.mark.asyncio

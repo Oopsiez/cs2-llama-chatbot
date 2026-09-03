@@ -5,22 +5,26 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+from dataclasses import replace
 from typing import Any
 
 from .config import AppConfig, load_config, save_config
 from .events import EventBus
 from .gamestate import GameStateStore
-from .humanize import humanize, sampling_for_intelligence
+from .humanize import humanize, sampling_for
 from .identity import addressed_to, detect_name_from_line
 from .llm import LLMBackend, LLMError, SamplingParams, build_backend
 from .logtail import LogTailer
 from .models import BotReply, ChatChannel, ChatMessage, LifeState
+from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
 from .persona import build_turns
 from .rules import should_reply
 
 POLL_INTERVAL = 0.25
+# Reading the message and deciding what to say, before any typing time.
+THINK_SECONDS = 0.8
 # How long after the bot speaks a bare "you" still counts as a reply to it.
 REPLY_WINDOW_SECONDS = 25.0
 
@@ -34,6 +38,8 @@ class Engine:
         self.last_reply_at = 0.0
         self.last_spoke_at = 0.0
         self.detected_name: str = ""
+        self.recent_replies: list[str] = []
+        self.last_generation_repeated = False
         self.last_error: str = ""
         self.llm_status: str = "not checked"
         self._backend: LLMBackend | None = None
@@ -217,11 +223,18 @@ class Engine:
             return None
 
         if not text:
+            reason = (
+                "kept repeating itself"
+                if self.last_generation_repeated
+                else "model returned nothing"
+            )
             self.bus.publish(
-                "skipped",
-                {"message": message.model_dump(mode="json"), "reason": "model returned nothing"},
+                "skipped", {"message": message.model_dump(mode="json"), "reason": reason}
             )
             return None
+
+        self._remember_reply(text)
+        await self._pause_before_sending(text, elapsed=time.perf_counter() - started)
 
         delivered, detail = await self.sender.send(text, team_only=message.channel is ChatChannel.TEAM)
         reply = BotReply(
@@ -245,7 +258,8 @@ class Engine:
         return reply
 
     async def generate_reply(self, message: ChatMessage, local_state: LifeState) -> str:
-        params = self._sampling_params()
+        """Generate a reply, retrying while it echoes something the bot recently said."""
+        behavior = self.config.behavior
         turns = build_turns(
             self.config,
             self.game_state.player,
@@ -253,18 +267,58 @@ class Engine:
             message,
             self.history[:-1],
             self.own_name,
+            self.recent_replies,
         )
-        raw = await self.backend.generate(turns, params)
-        return humanize(
-            raw,
-            intelligence=self.config.behavior.intelligence,
-            max_chars=self.config.persona.max_reply_chars,
-        )
+        attempts = 1 + (behavior.repeat_retries if behavior.avoid_repeats else 0)
+        self.last_generation_repeated = False
+        text = ""
+        for attempt in range(attempts):
+            params = self._sampling_params()
+            if attempt:
+                # Nudge it out of the groove it just fell into.
+                params = replace(
+                    params, temperature=min(1.6, params.temperature + 0.15 * attempt)
+                )
+            raw = await self.backend.generate(turns, params)
+            text = humanize(
+                raw,
+                literacy=behavior.literacy,
+                max_chars=self.config.persona.max_reply_chars,
+            )
+            if not behavior.avoid_repeats or not text:
+                return text
+            echoed = is_repetitive(text, self.recent_replies, behavior.repeat_similarity)
+            if echoed is None:
+                return text
+            self.bus.publish(
+                "repeat",
+                {"text": text, "echoed": echoed, "attempt": attempt + 1, "attempts": attempts},
+            )
+        self.last_generation_repeated = True
+        return ""
+
+    def reply_delay_for(self, text: str) -> float:
+        """How long the bot should sit on a reply before it appears in chat."""
+        behavior = self.config.behavior
+        if behavior.humanized_typing:
+            # Read the message, think, then type it out at the configured speed.
+            return THINK_SECONDS + behavior.typing_delay_per_char * len(text)
+        return max(0.0, behavior.reply_delay)
+
+    async def _pause_before_sending(self, text: str, elapsed: float) -> None:
+        remaining = self.reply_delay_for(text) - elapsed
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+
+    def _remember_reply(self, text: str) -> None:
+        self.recent_replies.append(text)
+        keep = max(0, self.config.behavior.repeat_memory)
+        del self.recent_replies[: max(0, len(self.recent_replies) - keep)]
 
     def _sampling_params(self) -> SamplingParams:
         generation = self.config.generation
         if generation.auto_from_intelligence:
-            auto = sampling_for_intelligence(self.config.behavior.intelligence)
+            auto = sampling_for(self.config.behavior.literacy, self.config.behavior.intelligence)
             return SamplingParams(
                 temperature=float(auto["temperature"]),
                 top_p=float(auto["top_p"]),

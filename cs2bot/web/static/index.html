@@ -76,16 +76,28 @@
     <div class="panel" data-panel="brain">
       <div class="dial">
         <div class="dial-head">
-          <strong>Intelligence</strong>
+          <strong>Literacy</strong>
+          <span class="dial-value" id="literacy-value">60</span>
+        </div>
+        <input type="range" id="literacy" min="0" max="100" step="1" />
+        <div class="dial-desc" id="literacy-desc"></div>
+      </div>
+      <div class="dial">
+        <div class="dial-head">
+          <strong>Game IQ</strong>
           <span class="dial-value" id="iq-value">60</span>
         </div>
         <input type="range" id="iq" min="0" max="100" step="1" />
         <div class="dial-desc" id="iq-desc"></div>
       </div>
+      <p class="note">
+        The two are independent: low literacy with high game IQ is a smart player who types like a
+        goblin, and the reverse is a well-spoken fool.
+      </p>
       <label class="check">
         <input type="checkbox" id="auto-sampling" />
-        <span>Derive sampling from the dial
-          <small>Lower intelligence raises temperature and shortens replies; typos and chat
+        <span>Derive sampling from the dials
+          <small>Low game IQ raises temperature, low literacy shortens replies; typos and chat
           abbreviations are applied after generation.</small>
         </span>
       </label>
@@ -115,6 +127,29 @@
           <small>Skips trigger words, cooldown and the probability roll.</small></span></label>
         <label class="check"><input type="checkbox" id="addressed-only" /><span>Only answer when someone talks to you</span></label>
       </div>
+      <div class="divider"></div>
+      <div class="dial">
+        <div class="dial-head">
+          <strong>Reply delay</strong>
+          <span class="dial-value" id="delay-value">1.0s</span>
+        </div>
+        <input type="range" id="reply-delay" min="0" max="15" step="0.5" />
+        <div class="dial-desc">How long it waits before the reply appears in chat.</div>
+      </div>
+      <label class="check"><input type="checkbox" id="humanized-typing" /><span>Use humanized typing speed instead
+        <small>Ignores the slider: waits to "read" the message, then takes as long as typing the
+        reply would at the speed set on the CS2 tab.</small></span></label>
+      <div class="divider"></div>
+      <label class="check"><input type="checkbox" id="unprompted" /><span>Give advice unprompted
+        <small>Volunteers a pointer instead of only answering what was said.</small></span></label>
+      <label class="check"><input type="checkbox" id="avoid-repeats" /><span>Do not repeat itself
+        <small>Rejects a reply that is too close to a recent one and generates again.</small></span></label>
+      <div class="row-3">
+        <label>Lines remembered<input type="number" id="repeat-memory" min="0" max="40" step="1" /></label>
+        <label>Similarity limit <span class="hint">0-1</span><input type="number" id="repeat-similarity" min="0" max="1" step="0.05" /></label>
+        <label>Retries<input type="number" id="repeat-retries" min="0" max="5" step="1" /></label>
+      </div>
+      <div class="divider"></div>
       <div class="row">
         <label class="check"><input type="checkbox" id="reply-all" /><span>Reply in all chat</span></label>
         <label class="check"><input type="checkbox" id="reply-team" /><span>Reply in team chat</span></label>
@@ -203,6 +238,10 @@
       </label>
       <label class="check"><input type="checkbox" id="require-focus" /><span>Only type when CS2 is the focused window</span></label>
       <label class="check"><input type="checkbox" id="typing-sim" /><span>Simulate typing time before sending</span></label>
+      <label>Typing speed (seconds per character)
+        <span class="hint">Also used by "humanized typing speed" on the Brain tab.</span>
+        <input type="number" id="typing-speed" min="0" max="1" step="0.01" />
+      </label>
       <div class="divider"></div>
       <div class="row">
         <label>GSI port<input type="number" id="gsi-port" min="1" max="65535" /></label>

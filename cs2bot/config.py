@@ -72,7 +72,13 @@ class PersonaSettings(BaseModel):
 class BehaviorSettings(BaseModel):
     """When and how often the bot talks."""
 
-    intelligence: int = 60  # 0..100
+    intelligence: int = 60  # 0..100, game IQ: how good the tactical thinking is
+    literacy: int = 60  # 0..100, how well it writes: spelling, punctuation, sentence length
+    unprompted_advice: bool = False  # volunteer pointers instead of only answering
+    avoid_repeats: bool = True
+    repeat_memory: int = 8  # how many of the bot's own lines to remember
+    repeat_similarity: float = 0.75  # 0..1, above this a reply counts as a repeat
+    repeat_retries: int = 2
     reply_probability: float = 1.0
     cooldown_seconds: float = 3.0
     reply_channels: list[ChatChannel] = Field(
@@ -83,6 +89,8 @@ class BehaviorSettings(BaseModel):
     ignore_players: list[str] = Field(default_factory=list)
     only_reply_when_addressed: bool = False
     always_reply_when_addressed: bool = True  # bypass triggers, cooldown and the probability roll
+    reply_delay: float = 1.0  # seconds to wait before answering
+    humanized_typing: bool = False  # ignore reply_delay, take as long as typing it would
     typing_simulation: bool = True
     typing_delay_per_char: float = 0.02
 

@@ -1,8 +1,10 @@
 """Post-processing that makes a reply look like it was typed by a human of a given skill level.
 
-The LLM is told *how smart to sound*, but models are stubbornly articulate, so the low end of
-the intelligence dial is enforced here as well: shorter replies, lowercase, dropped punctuation,
-chat abbreviations and keyboard-neighbour typos.
+Two dials, deliberately independent: *literacy* is how well the bot writes and *game IQ* is how
+good its Counter-Strike thinking is, so a well-spoken fool and a sharp player who types like a
+goblin are both reachable. Models are stubbornly articulate, so the low end of literacy is
+enforced here as well: shorter replies, lowercase, dropped punctuation, chat abbreviations and
+keyboard-neighbour typos.
 """
 
 from __future__ import annotations
@@ -25,44 +27,62 @@ _ABBREVIATIONS = {
 }
 
 
-def sampling_for_intelligence(intelligence: int) -> dict[str, float | int]:
-    """Sampling knobs derived from the dial: dumber means hotter and shorter."""
-    level = max(0, min(100, intelligence)) / 100
+def sampling_for(literacy: int, intelligence: int) -> dict[str, float | int]:
+    """Sampling knobs: low game IQ rambles hotter, low literacy answers shorter."""
+    iq = max(0, min(100, intelligence)) / 100
+    lit = max(0, min(100, literacy)) / 100
     return {
-        "temperature": round(1.35 - 0.65 * level, 3),
-        "top_p": round(0.85 + 0.13 * level, 3),
-        "top_k": int(round(20 + 60 * level)),
-        "repeat_penalty": round(1.25 - 0.15 * level, 3),
-        "max_tokens": int(round(24 + 96 * level)),
+        "temperature": round(1.35 - 0.65 * iq, 3),
+        "top_p": round(0.85 + 0.13 * iq, 3),
+        "top_k": int(round(20 + 60 * iq)),
+        "repeat_penalty": round(1.25 - 0.15 * iq, 3),
+        "max_tokens": int(round(24 + 96 * lit)),
     }
 
 
-def intelligence_directive(intelligence: int) -> str:
-    """The prompt fragment describing how articulate the bot should be."""
-    level = max(0, min(100, intelligence))
+def literacy_directive(literacy: int) -> str:
+    """The prompt fragment describing how well the bot writes."""
+    level = max(0, min(100, literacy))
     if level < 15:
         return (
-            "Type like a barely-literate player: 3-8 words, all lowercase, no punctuation, "
-            "frequent typos, simple words only, no reasoning."
+            "Write like a barely-literate player: 3-8 words, all lowercase, no punctuation, "
+            "frequent typos, simple words only."
         )
     if level < 35:
         return (
-            "Type like a casual player who does not care: one short lowercase sentence, chat "
-            "abbreviations, occasional typos, no complex reasoning."
+            "Write like a casual player who does not care: one short lowercase sentence, chat "
+            "abbreviations, occasional typos."
         )
     if level < 60:
+        return "Write like an average player: one short sentence, mostly lowercase, light slang."
+    if level < 85:
+        return "Write clearly: one or two plain sentences, correct spelling, minimal slang."
+    return (
+        "Write precisely: correct grammar and punctuation, well-chosen words, still no longer "
+        "than two sentences."
+    )
+
+
+def game_iq_directive(intelligence: int) -> str:
+    """The prompt fragment describing how good the bot's Counter-Strike thinking is."""
+    level = max(0, min(100, intelligence))
+    if level < 15:
         return (
-            "Type like an average player: one short sentence, mostly lowercase, light slang, "
-            "simple opinions."
+            "You barely understand the game: no tactics, wrong callouts, react to whatever was "
+            "said last and nothing else."
         )
+    if level < 35:
+        return "Your game sense is weak: vague advice, confident but usually wrong about tactics."
+    if level < 60:
+        return "Your game sense is average: basic economy and callout knowledge, no deep reads."
     if level < 85:
         return (
-            "Type like a sharp, experienced player: one or two clear sentences with concrete "
-            "callouts and reasoning, minimal slang."
+            "Your game sense is strong: concrete callouts, economy awareness, reasoning about "
+            "what the enemy is doing."
         )
     return (
-        "Type like an articulate analyst: precise wording, specific tactical reasoning, "
-        "correct grammar, still no longer than two sentences."
+        "Your game sense is professional: specific map knowledge, utility usage, timings and "
+        "economy, and you are right."
     )
 
 
@@ -82,10 +102,10 @@ def _typo(word: str, rng: random.Random) -> str:
     return word[:index] + word[index + 1 :]  # dropped key
 
 
-def humanize(text: str, intelligence: int, max_chars: int, seed: int | None = None) -> str:
-    """Apply the intelligence-dependent degradation and trim to the chat limit."""
+def humanize(text: str, literacy: int, max_chars: int, seed: int | None = None) -> str:
+    """Apply the literacy-dependent degradation and trim to the chat limit."""
     rng = random.Random(seed)
-    level = max(0, min(100, intelligence))
+    level = max(0, min(100, literacy))
     result = re.sub(r"\s+", " ", text).strip().strip('"')
 
     # Models love to prefix replies with the speaker's name or stage directions.

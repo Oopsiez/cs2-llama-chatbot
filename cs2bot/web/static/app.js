@@ -14,12 +14,21 @@ const BINDINGS = {
   "persona-maxchars": ["persona.max_reply_chars", "int"],
 
   iq: ["behavior.intelligence", "int"],
+  literacy: ["behavior.literacy", "int"],
+  unprompted: ["behavior.unprompted_advice", "bool"],
+  "avoid-repeats": ["behavior.avoid_repeats", "bool"],
+  "repeat-memory": ["behavior.repeat_memory", "int"],
+  "repeat-similarity": ["behavior.repeat_similarity", "float"],
+  "repeat-retries": ["behavior.repeat_retries", "int"],
   reply_probability: ["behavior.reply_probability", "float"],
   cooldown: ["behavior.cooldown_seconds", "float"],
   history_turns: ["behavior.history_turns", "int"],
   trigger_words: ["behavior.trigger_words", "list"],
   ignore_players: ["behavior.ignore_players", "list"],
   "typing-sim": ["behavior.typing_simulation", "bool"],
+  "typing-speed": ["behavior.typing_delay_per_char", "float"],
+  "reply-delay": ["behavior.reply_delay", "float"],
+  "humanized-typing": ["behavior.humanized_typing", "bool"],
   "addressed-always": ["behavior.always_reply_when_addressed", "bool"],
   "addressed-only": ["behavior.only_reply_when_addressed", "bool"],
 
@@ -63,12 +72,20 @@ const BINDINGS = {
   "gsi-token": ["gsi.auth_token", "text"],
 };
 
-const IQ_DESCRIPTIONS = [
+const LITERACY_DESCRIPTIONS = [
   [15, "Barely literate: a few lowercase words, no punctuation, frequent typos."],
-  [35, "Casual and careless: one short line, chat abbreviations, some typos."],
-  [60, "Average player: short sentences, light slang, simple opinions."],
-  [85, "Sharp: clear callouts and reasoning, minimal slang, clean grammar."],
-  [101, "Analyst: precise, specific tactical reasoning, correct grammar."],
+  [35, "Careless: one short lowercase line, chat abbreviations, some typos."],
+  [60, "Average: short sentences, mostly lowercase, light slang."],
+  [85, "Clear: plain sentences, correct spelling, minimal slang."],
+  [101, "Precise: correct grammar and punctuation, well-chosen words."],
+];
+
+const IQ_DESCRIPTIONS = [
+  [15, "Clueless: no tactics, wrong callouts, reacts to the last thing said."],
+  [35, "Weak game sense: vague advice, confident but usually wrong."],
+  [60, "Average game sense: basic economy and callouts, no deep reads."],
+  [85, "Strong: concrete callouts, economy awareness, reads the enemy."],
+  [101, "Professional: map knowledge, utility, timings - and right about them."],
 ];
 
 function getPath(obj, path) {
@@ -103,14 +120,23 @@ function renderConfig() {
   }
   $("reply-all").checked = config.behavior.reply_channels.includes("all");
   $("reply-team").checked = config.behavior.reply_channels.includes("team");
-  renderIq();
+  renderDials();
   renderSavedPersonas();
 }
 
-function renderIq() {
-  const value = config.behavior.intelligence;
-  $("iq-value").textContent = value;
-  $("iq-desc").textContent = IQ_DESCRIPTIONS.find(([limit]) => value < limit)[1];
+function renderDials() {
+  for (const [id, field, table] of [
+    ["iq", "intelligence", IQ_DESCRIPTIONS],
+    ["literacy", "literacy", LITERACY_DESCRIPTIONS],
+  ]) {
+    const value = config.behavior[field];
+    $(`${id}-value`).textContent = value;
+    $(`${id}-desc`).textContent = table.find(([limit]) => value < limit)[1];
+  }
+  $("delay-value").textContent = config.behavior.humanized_typing
+    ? "typing speed"
+    : `${Number(config.behavior.reply_delay).toFixed(1)}s`;
+  $("reply-delay").disabled = config.behavior.humanized_typing;
 }
 
 function renderSavedPersonas() {
@@ -145,7 +171,7 @@ function bindInputs() {
     if (!el) continue;
     el.addEventListener("input", () => {
       setPath(config, path, readField(el, kind));
-      if (id === "iq") renderIq();
+      if (["iq", "literacy", "reply-delay", "humanized-typing"].includes(id)) renderDials();
       scheduleSave();
     });
   }
@@ -212,6 +238,12 @@ function pushEvent(event) {
     );
   } else if (event.kind === "skipped") {
     line(`skipped ${escapeHtml(data.message.sender)}`, "skipped", escapeHtml(data.reason));
+  } else if (event.kind === "repeat") {
+    line(
+      `too similar, retrying: ${escapeHtml(data.text)}`,
+      "skipped",
+      escapeHtml(`echoes "${data.echoed}" · attempt ${data.attempt}/${data.attempts}`),
+    );
   } else if (event.kind === "error") {
     line(escapeHtml(data.message), "error");
   } else if (event.kind === "identity") {
