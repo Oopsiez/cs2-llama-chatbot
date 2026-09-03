@@ -10,6 +10,7 @@ from pathlib import Path
 from platformdirs import user_config_dir
 from pydantic import BaseModel, Field
 
+from .callouts import CalloutBook
 from .models import ChatChannel
 
 CONFIG_ENV_VAR = "CS2BOT_CONFIG"
@@ -36,8 +37,11 @@ class LLMSettings(BaseModel):
 
     backend: str = "mock"  # llama_cpp | ollama | mock
     model_path: str = ""  # GGUF file for llama_cpp
+    # Point this at another machine to run the model remotely, e.g. http://gpu-box:11434
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3:8b-instruct-q4_K_M"
+    ollama_api_key: str = ""  # sent as `Authorization: Bearer ...` for proxied servers
+    ollama_verify_tls: bool = True  # off for a self-signed certificate on your own proxy
     n_ctx: int = 4096
     n_gpu_layers: int = -1
     n_threads: int = 0  # 0 -> let the runtime decide
@@ -65,6 +69,8 @@ class PersonaSettings(BaseModel):
     )
     style_notes: str = "Keep it short, like real chat. No emoji spam. No asterisk roleplay actions."
     dead_notes: str = "You just died, so you are salty and backseat-gaming from the grave."
+    # Typed in the panel mid-match and appended to the prompt verbatim; saved with the persona.
+    extra_instructions: str = ""
     banned_words: list[str] = Field(default_factory=list)
     max_reply_chars: int = 160
 
@@ -116,6 +122,50 @@ class DeadAliveSettings(BaseModel):
     assume_alive_without_gsi: bool = True
 
 
+class SnitchSettings(BaseModel):
+    """Whether the bot gives away the player's own position, and when.
+
+    Only the local player is described, because that is all Game State Integration reports while
+    you are playing - there is no enemy information here and none is wanted.
+    """
+
+    enabled: bool = False
+    channel: str = "all"  # all | team
+    answer_when_asked: bool = True
+    request_phrases: list[str] = Field(
+        default_factory=lambda: [
+            "where are you",
+            "where u at",
+            "where you at",
+            "where r u",
+            "wru",
+            "where are u",
+        ]
+    )
+    announce_on_death: bool = False
+    announce_interval: float = 0.0  # seconds between unprompted position drops; 0 turns it off
+    reveal_position: bool = True
+    reveal_health: bool = True
+    reveal_weapon: bool = False
+    reveal_bomb: bool = True
+
+
+PROJECT_URL = "https://github.com/Oopsiez/cs2-llama-chatbot"
+
+
+class RevealSettings(BaseModel):
+    """Owning up at the end of the match.
+
+    The scoreboard is the one moment nobody is being shot at, so it is where the bot admits what
+    it was and points at the project. It fires once per match - `gameover` is reported repeatedly
+    while the scoreboard sits there, and repeating the line would undo the joke.
+    """
+
+    enabled: bool = True
+    channel: str = "all"  # all | team
+    message: str = f"gg - fun fact, you were talking to a local llama 3 bot this whole match: {PROJECT_URL}"
+
+
 class GSISettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 3000
@@ -136,6 +186,9 @@ class AppConfig(BaseModel):
     persona: PersonaSettings = Field(default_factory=PersonaSettings)
     behavior: BehaviorSettings = Field(default_factory=BehaviorSettings)
     dead_alive: DeadAliveSettings = Field(default_factory=DeadAliveSettings)
+    snitch: SnitchSettings = Field(default_factory=SnitchSettings)
+    reveal: RevealSettings = Field(default_factory=RevealSettings)
+    callouts: CalloutBook = Field(default_factory=CalloutBook)
     gsi: GSISettings = Field(default_factory=GSISettings)
     web: WebSettings = Field(default_factory=WebSettings)
     saved_personas: dict[str, PersonaSettings] = Field(default_factory=dict)

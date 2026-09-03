@@ -7,6 +7,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from .callouts import Position
+
 
 class ChatChannel(str, Enum):
     ALL = "all"
@@ -55,6 +57,10 @@ class LocalPlayer(BaseModel):
     map_phase: str = ""
     map_name: str = ""
     mode: str = ""
+    position: Position | None = None
+    active_weapon: str = ""
+    bomb: str = ""  # planted | carried | dropped | defused | exploded
+    round_number: int = 0
     updated_at: float = 0.0
 
     @property

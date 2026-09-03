@@ -35,6 +35,7 @@
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
       <button class="tab" role="tab" data-tab="model">Model</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
+      <button class="tab" role="tab" data-tab="snitch">Snitch</button>
       <button class="tab" role="tab" data-tab="game">Game</button>
       <button class="tab" role="tab" data-tab="test">Test</button>
     </div>
@@ -57,6 +58,11 @@
         <span class="hint">Added to the prompt only while the bot is dead.</span>
         <textarea id="persona-dead" rows="2"></textarea>
       </label>
+      <label>Custom prompt
+        <span class="hint">Typed mid-match and appended to the prompt word for word. Takes effect
+          on the next reply - no restart, no reload.</span>
+        <textarea id="persona-extra" rows="3" placeholder="e.g. you are convinced the enemy AWPer is your ex"></textarea>
+      </label>
       <div class="row">
         <label>Banned words (comma separated)
           <input type="text" id="persona-banned" />
@@ -66,10 +72,12 @@
         </label>
       </div>
       <div class="actions">
-        <button class="action" id="persona-save">Save as…</button>
+        <input type="text" id="persona-save-name" placeholder="save as…" style="max-width:200px" />
+        <button class="action primary" id="persona-save">Save persona</button>
         <select id="persona-saved" style="max-width:200px"></select>
         <button class="action" id="persona-load">Load</button>
         <button class="action" id="persona-delete">Delete</button>
+        <span class="note" id="persona-note"></span>
       </div>
     </div>
 
@@ -178,8 +186,18 @@
       </div>
       <div class="divider"></div>
       <div class="row">
-        <label>Ollama URL<input type="text" id="ollama-url" /></label>
+        <label>Ollama URL
+          <span class="hint">Remote is fine: http://gpu-box:11434 or a proxy over https.</span>
+          <input type="text" id="ollama-url" />
+        </label>
         <label>Ollama model<input type="text" id="ollama-model" /></label>
+      </div>
+      <div class="row">
+        <label>Ollama API key <span class="hint">optional, sent as a bearer token</span>
+          <input type="password" id="ollama-key" />
+        </label>
+        <label class="check"><input type="checkbox" id="ollama-verify" /><span>Verify TLS certificate
+          <small>Turn off only for a self-signed certificate on your own server.</small></span></label>
       </div>
       <div class="actions">
         <button class="action primary" id="check-llm">Check model</button>
@@ -210,6 +228,65 @@
       <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead</span></label>
       <label class="check"><input type="checkbox" id="da-warmup" /><span>Treat warmup as one shared chat</span></label>
       <label class="check"><input type="checkbox" id="da-global" /><span>Server has global dead chat (deathmatch / sv_deadtalk)</span></label>
+    </div>
+
+    <div class="panel" data-panel="snitch">
+      <p class="note">
+        The bot gives away <strong>your own</strong> position - the only thing CS2's Game State
+        Integration reports while you are playing. Nothing here reads game memory and nothing here
+        can see the enemy.
+      </p>
+      <label class="check"><input type="checkbox" id="snitch-enabled" /><span>Snitch on me
+        <small>The bot knows where you are and will say so.</small></span></label>
+      <label class="check"><input type="checkbox" id="snitch-asked" /><span>Answer when somebody asks where you are
+        <small>Bypasses the cooldown, the same way being named does.</small></span></label>
+      <label>Ask phrases (comma separated)<input type="text" id="snitch-phrases" /></label>
+      <div class="row">
+        <label>Announce every (seconds) <span class="hint">0 = never</span>
+          <input type="number" id="snitch-interval" min="0" step="5" />
+        </label>
+        <label>Say it in
+          <select id="snitch-channel">
+            <option value="all">all chat</option>
+            <option value="team">team chat</option>
+          </select>
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="snitch-death" /><span>Announce where you died</span></label>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="snitch-position" /><span>Give away position</span></label>
+        <label class="check"><input type="checkbox" id="snitch-health" /><span>Give away health</span></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="snitch-weapon" /><span>Give away weapon</span></label>
+        <label class="check"><input type="checkbox" id="snitch-bomb" /><span>Give away bomb state</span></label>
+      </div>
+      <div class="divider"></div>
+      <h3>End of match</h3>
+      <label class="check"><input type="checkbox" id="reveal-enabled" /><span>Own up when the match ends
+        <small>One line on the final scoreboard, once per match.</small></span></label>
+      <div class="row">
+        <label>Reveal message<input type="text" id="reveal-message" /></label>
+        <label>Say it in
+          <select id="reveal-channel">
+            <option value="all">all chat</option>
+            <option value="team">team chat</option>
+          </select>
+        </label>
+      </div>
+      <div class="divider"></div>
+      <h3>Callouts</h3>
+      <p class="note">
+        GSI reports coordinates, not callout names, so you teach it: stand somewhere in game, type
+        the name and record it. Anything within ~400 units of a recorded point resolves to that
+        name. If CS2 is not reporting a position, the bot falls back to health and bomb state.
+      </p>
+      <div class="actions">
+        <input type="text" id="callout-name" placeholder="banana" style="max-width:200px" />
+        <button class="action primary" id="callout-add">Record where I am standing</button>
+        <button class="action" id="callout-refresh">Refresh</button>
+      </div>
+      <div class="result" id="callout-output">—</div>
     </div>
 
     <div class="panel" data-panel="game">

@@ -24,6 +24,8 @@ def build_backend(settings: LLMSettings) -> LLMBackend:
             base_url=settings.ollama_url,
             model=settings.ollama_model,
             timeout=settings.request_timeout,
+            api_key=settings.ollama_api_key,
+            verify_tls=settings.ollama_verify_tls,
         )
     if settings.backend == "mock":
         return MockBackend()

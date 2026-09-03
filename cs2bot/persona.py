@@ -7,6 +7,7 @@ from .humanize import game_iq_directive, literacy_directive
 from .llm.base import ChatTurn
 from .models import ChatChannel, ChatMessage, LifeState, LocalPlayer
 from .novelty import avoid_note
+from .snitch import is_request, prompt_note
 
 PRESETS: dict[str, PersonaSettings] = {
     "Cheeky Teammate": PersonaSettings(
@@ -182,6 +183,8 @@ def build_system_prompt(
     lines = [persona.description.strip()]
     if persona.style_notes.strip():
         lines.append(persona.style_notes.strip())
+    if persona.extra_instructions.strip():
+        lines.append(persona.extra_instructions.strip())
     if config.dead_alive.use_dead_persona and local_state is LifeState.DEAD and persona.dead_notes.strip():
         lines.append(persona.dead_notes.strip())
     lines.append(literacy_directive(config.behavior.literacy))
@@ -205,6 +208,14 @@ def build_system_prompt(
     note = _address_note(incoming, own_name)
     if note:
         lines.append(note)
+    snitch = prompt_note(
+        config.snitch,
+        player,
+        config.callouts,
+        asked=is_request(incoming.text, config.snitch.request_phrases),
+    )
+    if snitch:
+        lines.append(snitch)
     if config.behavior.avoid_repeats:
         avoid = avoid_note(recent_replies or [])
         if avoid:

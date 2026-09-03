@@ -10,6 +10,7 @@ const BINDINGS = {
   "persona-description": ["persona.description", "text"],
   "persona-style": ["persona.style_notes", "text"],
   "persona-dead": ["persona.dead_notes", "text"],
+  "persona-extra": ["persona.extra_instructions", "text"],
   "persona-banned": ["persona.banned_words", "list"],
   "persona-maxchars": ["persona.max_reply_chars", "int"],
 
@@ -47,6 +48,8 @@ const BINDINGS = {
   request_timeout: ["llm.request_timeout", "float"],
   "ollama-url": ["llm.ollama_url", "text"],
   "ollama-model": ["llm.ollama_model", "text"],
+  "ollama-key": ["llm.ollama_api_key", "text"],
+  "ollama-verify": ["llm.ollama_verify_tls", "bool"],
 
   "da-adapt": ["dead_alive.adapt_replies", "bool"],
   "da-track": ["dead_alive.track_players", "bool"],
@@ -58,6 +61,21 @@ const BINDINGS = {
   "da-global": ["dead_alive.dead_chat_is_global", "bool"],
   "da-persona": ["dead_alive.use_dead_persona", "bool"],
   "da-assume": ["dead_alive.assume_alive_without_gsi", "bool"],
+
+  "snitch-enabled": ["snitch.enabled", "bool"],
+  "snitch-asked": ["snitch.answer_when_asked", "bool"],
+  "snitch-phrases": ["snitch.request_phrases", "list"],
+  "snitch-interval": ["snitch.announce_interval", "float"],
+  "snitch-channel": ["snitch.channel", "text"],
+  "snitch-death": ["snitch.announce_on_death", "bool"],
+  "snitch-position": ["snitch.reveal_position", "bool"],
+  "snitch-health": ["snitch.reveal_health", "bool"],
+  "snitch-weapon": ["snitch.reveal_weapon", "bool"],
+  "snitch-bomb": ["snitch.reveal_bomb", "bool"],
+
+  "reveal-enabled": ["reveal.enabled", "bool"],
+  "reveal-message": ["reveal.message", "text"],
+  "reveal-channel": ["reveal.channel", "text"],
 
   "log-path": ["game.console_log_path", "text"],
   "cfg-dir": ["game.cfg_dir", "text"],
@@ -238,6 +256,18 @@ function pushEvent(event) {
       `reply ${data.delivered ? "" : "failed"}`,
       `${data.latency_ms}ms · ${escapeHtml(data.reason)}`,
     );
+  } else if (event.kind === "reveal") {
+    line(
+      `<span class="who">reveal →</span> ${escapeHtml(data.text)}`,
+      `reply ${data.delivered ? "" : "failed"}`,
+      escapeHtml(data.reason),
+    );
+  } else if (event.kind === "snitch") {
+    line(
+      `<span class="who">snitch →</span> ${escapeHtml(data.text)}`,
+      `reply ${data.delivered ? "" : "failed"}`,
+      escapeHtml(data.reason),
+    );
   } else if (event.kind === "skipped") {
     line(`skipped ${escapeHtml(data.message.sender)}`, "skipped", escapeHtml(data.reason));
   } else if (event.kind === "repeat") {
@@ -336,15 +366,23 @@ function bindActions() {
   });
 
   $("persona-save").addEventListener("click", async () => {
-    const name = prompt("Save persona as:", config.persona.name);
+    const name = ($("persona-save-name").value || config.persona.name).trim();
     if (!name) return;
-    await fetch("/api/personas", {
+    await saveConfig();
+    const response = await fetch("/api/personas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, persona: config.persona }),
     });
+    if (!response.ok) {
+      $("persona-note").textContent = "could not save";
+      return;
+    }
     config.saved_personas[name] = structuredClone(config.persona);
+    $("persona-save-name").value = "";
     renderSavedPersonas();
+    $("persona-saved").value = name;
+    $("persona-note").textContent = `saved "${name}"`;
   });
 
   $("persona-load").addEventListener("click", () => {
@@ -362,6 +400,24 @@ function bindActions() {
     delete config.saved_personas[name];
     renderSavedPersonas();
   });
+
+  $("callout-add").addEventListener("click", async () => {
+    const name = $("callout-name").value.trim();
+    if (!name) return;
+    const response = await fetch("/api/callouts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) {
+      $("callout-output").textContent = (await response.json()).detail;
+      return;
+    }
+    $("callout-name").value = "";
+    renderCallouts();
+  });
+
+  $("callout-refresh").addEventListener("click", renderCallouts);
 
   $("install-gsi").addEventListener("click", async () => {
     await saveConfig();
@@ -408,6 +464,20 @@ function bindActions() {
       ? `reply: ${body.reply}${aimed}`
       : `no reply — ${body.reason}${aimed}`;
   });
+}
+
+async function renderCallouts() {
+  const body = await (await fetch("/api/callouts")).json();
+  const head = body.map
+    ? `${body.map}${body.callout ? ` - you are at ${body.callout}` : ""}`
+    : "no map yet (is GSI connected?)";
+  const where = body.position
+    ? `position ${body.position.x.toFixed(0)}, ${body.position.y.toFixed(0)}, ${body.position.z.toFixed(0)}`
+    : "CS2 is not reporting a position";
+  const recorded = body.callouts.length
+    ? body.callouts.map((c) => `  ${c.name} (${c.x.toFixed(0)}, ${c.y.toFixed(0)}, ${c.z.toFixed(0)})`)
+    : ["  nothing recorded for this map yet"];
+  $("callout-output").textContent = [head, where, "recorded:"].concat(recorded).join("\n");
 }
 
 async function init() {

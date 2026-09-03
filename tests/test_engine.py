@@ -15,7 +15,7 @@ def build_engine(**overrides) -> Engine:
     for path, value in overrides.items():
         section, field = path.split(".")
         setattr(getattr(config, section), field, value)
-    engine = Engine(config)
+    engine = Engine(config, seed=7)
     engine._sender = DryRunSender()
     return engine
 
