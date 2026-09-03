@@ -1,7 +1,7 @@
 name: Release
 
-# Tag a version (`git tag v0.1.0 && git push --tags`) and this attaches a ready-to-run
-# `CS2 Chatbot.exe` to the GitHub release, so users download one file and double-click it.
+# Tag a version (`git tag v0.1.0 && git push --tags`) and this attaches `CS2 Chatbot Setup.exe`
+# to the GitHub release, so users download one file, run it, and get a Start Menu shortcut.
 on:
   push:
     tags: ["v*"]
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  windows-exe:
+  windows-installer:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,11 +20,22 @@ jobs:
           python-version: "3.12"
       - run: pip install . pyinstaller
       - run: python scripts/build_exe.py
+      - name: Build the installer
+        shell: pwsh
+        # Inno Setup ships on the windows runner image.
+        run: |
+          $version = "0.0.0"
+          if ("${{ github.ref_type }}" -eq "tag") { $version = "${{ github.ref_name }}" -replace '^v', '' }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" installer\cs2-chatbot.iss
       - uses: actions/upload-artifact@v4
         with:
           name: cs2-chatbot-windows
-          path: dist/CS2 Chatbot.exe
+          path: |
+            dist/CS2 Chatbot Setup.exe
+            dist/CS2 Chatbot.exe
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: dist/CS2 Chatbot.exe
+          files: |
+            dist/CS2 Chatbot Setup.exe
+            dist/CS2 Chatbot.exe

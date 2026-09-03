@@ -11,13 +11,17 @@ No account, no API key, no subscription. Nothing you type leaves your computer.
 ## Just want to use it?
 
 **[Download the latest release](https://github.com/Oopsiez/cs2-llama-chatbot/releases/latest)** →
-grab `CS2 Chatbot.exe` → double-click it. Your browser opens the control panel and that is the whole
-installation. There is nothing to install and nothing to type.
+grab **`CS2 Chatbot Setup.exe`** → run it → click **Install**. You get a Start Menu and desktop
+shortcut; open it and your browser lands on the control panel. No Python, no admin password, no
+commands. Uninstall it like any other program from Add/Remove Programs.
 
-Prefer to keep the source? Download this repository as a ZIP (green **Code** button →
-*Download ZIP*), unzip it, and double-click **`Start CS2 Chatbot.bat`**. The first run sets itself up
-and takes a few minutes; every run after that starts in seconds. If Python is missing it opens the
-download page and tells you exactly which box to tick.
+Windows will warn that the publisher is unknown (the installer is not code-signed) - click *More
+info* → *Run anyway*.
+
+Prefer not to install anything? The same release also has a standalone **`CS2 Chatbot.exe`** you can
+double-click from anywhere. Or download this repository as a ZIP (green **Code** button →
+*Download ZIP*), unzip it, and double-click **`Start CS2 Chatbot.bat`**, which sets Python up for you
+on first run.
 
 ### Then, three things inside CS2
 
@@ -107,6 +111,7 @@ pip install -e ".[dev]"        # add [llama] for llama.cpp, [windows] to type in
 cs2bot                         # panel on http://127.0.0.1:8420
 pytest -q && ruff check . && mypy cs2bot
 python scripts/build_exe.py    # one-file executable (run this on Windows)
+iscc /DAppVersion=0.1.0 installer\cs2-chatbot.iss   # then wrap it in the installer
 ```
 
 Settings live in `config.json` in the per-user config directory (override with `CS2BOT_CONFIG`).

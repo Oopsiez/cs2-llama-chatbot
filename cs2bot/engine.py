@@ -40,7 +40,9 @@ class Engine:
         self.deaths = DeathBoard()
         self.echo = EchoGuard()
         self.history: list[ChatMessage] = []
-        self.last_reply_at = 0.0
+        # Monotonic clocks start at boot, so a plain 0.0 would read as "just replied" on a
+        # freshly started machine and hold the first reply back for a whole cooldown.
+        self.last_reply_at = float("-inf")
         self.last_spoke_at = 0.0
         self.last_announce_at = time.monotonic()
         self._last_seen_state = LifeState.UNKNOWN

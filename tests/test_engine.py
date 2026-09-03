@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from cs2bot.config import AppConfig
@@ -81,6 +83,16 @@ async def test_cooldown_blocks_second_reply():
     engine.config.behavior.cooldown_seconds = 60
     assert await engine.handle_message(chat()) is not None
     assert await engine.handle_message(chat(text="again")) is None
+
+
+@pytest.mark.asyncio
+async def test_the_first_reply_is_not_held_back_on_a_freshly_booted_machine():
+    # The cooldown is measured against a monotonic clock that starts at boot, so a machine
+    # that came up seconds ago must not look like the bot has just spoken.
+    engine = build_engine()
+    engine.config.behavior.cooldown_seconds = 60
+    assert engine.last_reply_at < time.monotonic() - 86400
+    assert await engine.handle_message(chat()) is not None
 
 
 @pytest.mark.asyncio
