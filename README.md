@@ -102,6 +102,17 @@ CS2BOT_CONFIG=/tmp/cs2bot.json cs2bot              # point the log path at /tmp/
 
 The *Test* tab also parses pasted log lines and generates one-off replies with no game involved.
 
+## It is not seeing any chat
+
+Open the *Test* tab and press **Refresh log**. It shows the path, whether the file is growing, and
+every line the bot has read, with the ones it understood as chat marked.
+
+- Nothing at all, or the file is missing: CS2 is not writing that file - check `-condebug` is in
+  the launch options, restart the game, and make sure the path on the *Game* tab is the
+  `console.log` next to your CS2 install.
+- Lines appear but none are marked as chat: that is a parsing gap - open an issue with a couple of
+  those lines.
+
 ---
 
 ## For developers
@@ -111,7 +122,7 @@ pip install -e ".[dev]"        # add [llama] for llama.cpp
 cs2bot                         # panel on http://127.0.0.1:8420
 pytest -q && ruff check . && mypy cs2bot
 python scripts/build_exe.py    # one-file executable (run this on Windows)
-iscc /DAppVersion=1.1.0 installer\cs2-chatbot.iss   # then wrap it in the installer
+iscc /DAppVersion=1.2.0 installer\cs2-chatbot.iss   # then wrap it in the installer
 ```
 
 Settings live in `config.json` in the per-user config directory (override with `CS2BOT_CONFIG`).

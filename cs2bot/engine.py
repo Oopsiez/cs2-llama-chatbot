@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+from collections import deque
 from dataclasses import replace
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from . import __version__
@@ -31,6 +34,9 @@ POLL_INTERVAL = 0.25
 THINK_SECONDS = 0.8
 # How long after the bot speaks a bare "you" still counts as a reply to it.
 REPLY_WINDOW_SECONDS = 25.0
+# Raw console lines kept for the panel's log view, so "it sees nothing" can be told apart from
+# "it sees the lines and does not recognise them as chat".
+RAW_LINE_MEMORY = 200
 
 
 class Engine:
@@ -51,6 +57,8 @@ class Engine:
         self.detected_name: str = ""
         self._detected_from: str = "console log"
         self.recent_replies: list[str] = []
+        self.recent_lines: deque[dict[str, Any]] = deque(maxlen=RAW_LINE_MEMORY)
+        self.lines_seen = 0
         self.last_generation_repeated = False
         self.last_error: str = ""
         self.llm_status: str = "not checked"
@@ -208,6 +216,8 @@ class Engine:
             self._tailer = LogTailer(path)
         for line in self._tailer.read_lines():
             message = parse_chat_line(line, self.own_name, self.config.game.name_aliases)
+            self.lines_seen += 1
+            self.recent_lines.append({"line": line, "chat": message is not None})
             if message is None:
                 self._note_identity(line)
                 continue
@@ -472,6 +482,27 @@ class Engine:
 
     # ---- introspection ----------------------------------------------------------
 
+    @property
+    def log_attached(self) -> bool:
+        return self._tailer is not None and self._tailer.is_open
+
+    def log_file_state(self) -> dict[str, Any]:
+        """Whether the console log is there and growing - the first thing to check when the
+        panel stays empty."""
+        path = self.config.game.console_log_path
+        if not path:
+            return {"log_exists": False, "log_size": 0, "log_modified": ""}
+        try:
+            stat = Path(path).stat()
+        except OSError:
+            return {"log_exists": False, "log_size": 0, "log_modified": ""}
+        modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        return {
+            "log_exists": True,
+            "log_size": stat.st_size,
+            "log_modified": modified.isoformat(timespec="seconds"),
+        }
+
     def status(self) -> dict[str, Any]:
         player = self.game_state.player
         return {
@@ -482,7 +513,9 @@ class Engine:
             "llm_status": self.llm_status,
             "sender": self.sender.describe(),
             "log_path": self.config.game.console_log_path,
-            "log_attached": bool(self._tailer and self._tailer.is_open),
+            "log_attached": self.log_attached,
+            "lines_seen": self.lines_seen,
+            **self.log_file_state(),
             "own_name": self.own_name,
             "name_source": self.name_source,
             "local_state": self.game_state.local_state(

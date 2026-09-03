@@ -27,6 +27,11 @@ _SPEC_PREFIX = re.compile(r"^\*SPEC\*\s*")
 _TEAM_TAG = re.compile(r"^\((?P<team>Counter-Terrorist|Terrorist|Spectator|CT|T|SPEC)\)\s*", re.IGNORECASE)
 _NAME_TEXT = re.compile(r"^(?P<name>.+?)\s*:\s(?P<text>.*)$")
 
+# CS2 wraps the name and the text of a chat line in bidi marks. Ordinary console output never
+# carries them, so on all-chat - which the console prints with no `[ALL]` tag at all - they are
+# the only thing that separates `player: gg` from `Loading map: de_dust2`.
+_BIDI_MARKS = "\u200e\u200f\u202a\u202b\u202c\u2066\u2067\u2068\u2069"
+
 _TEAM_BY_NAME = {
     "ct": Team.CT,
     "counter-terrorist": Team.CT,
@@ -61,6 +66,7 @@ def parse_chat_line(
 ) -> ChatMessage | None:
     """Parse a single console line. Returns None when the line is not player chat."""
     raw = line.rstrip("\r\n")
+    saw_marker = any(mark in raw for mark in _BIDI_MARKS)
     body = _clean(TIMESTAMP.sub("", _clean(raw)))
     if not body:
         return None
@@ -77,10 +83,9 @@ def parse_chat_line(
             is_self=is_same_player(sender, own_name, aliases),
         )
 
-    channel = ChatChannel.UNKNOWN
+    channel = ChatChannel.ALL if saw_marker else ChatChannel.UNKNOWN
     state = LifeState.UNKNOWN
     team = Team.UNKNOWN
-    saw_marker = False
 
     tag = _CHANNEL_TAG.match(body)
     if tag:
