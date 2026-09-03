@@ -5,7 +5,7 @@
 ; here needs Python on the target machine - the interpreter is inside the packaged exe.
 ;
 ; Build (on Windows, after scripts/build_exe.py has produced dist\CS2 Chatbot.exe):
-;   iscc /DAppVersion=0.1.0 installer\cs2-chatbot.iss
+;   iscc /DAppVersion=1.0.0 installer\cs2-chatbot.iss
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"

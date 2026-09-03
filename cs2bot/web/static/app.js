@@ -313,6 +313,7 @@ function renderStatus(status) {
     status.own_name ? "good" : "warn",
   );
   $("pill-name").title = `name source: ${status.name_source}`;
+  $("version").textContent = status.version ? `v${status.version}` : "";
   const toggle = $("toggle");
   toggle.dataset.on = String(status.enabled);
   toggle.textContent = status.enabled ? "Stop bot" : "Start bot";
