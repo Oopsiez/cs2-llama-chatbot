@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 from pathlib import Path
 from typing import Any
 
@@ -13,17 +14,21 @@ from fastapi.staticfiles import StaticFiles
 
 from ..callouts import DEFAULT_RADIUS, Callout
 from ..config import AppConfig, PersonaSettings, config_path, load_config, save_config
+from ..elevate import relaunch_as_admin
 from ..engine import Engine
 from ..gamestate import install_gsi_cfg
 from ..identity import detect_name_from_line
 from ..llm import BACKENDS
 from ..models import LifeState
+from ..output import keyboard
 from ..parser import parse_chat_line
 from ..persona import PRESETS, build_system_prompt
 from ..rules import should_reply
 from ..snitch import where
 
 STATIC_DIR = Path(__file__).parent / "static"
+# Long enough for the browser to receive the answer before the process goes away.
+RESTART_GRACE_SECONDS = 1.0
 
 
 def create_app(engine: Engine | None = None) -> FastAPI:
@@ -194,6 +199,21 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "own_name": engine.own_name,
             "name_source": engine.name_source,
         }
+
+    @app.post("/api/output/test")
+    async def output_test() -> dict[str, Any]:
+        """Prove the whole delivery chain: keypress, keybind, cfg, console log."""
+        return await engine.self_test()
+
+    @app.post("/api/restart-as-admin")
+    async def restart_as_admin() -> dict[str, Any]:
+        """Start the panel again elevated, which is what an elevated CS2 will accept input from."""
+        if keyboard.is_elevated():
+            return {"started": False, "detail": "the bot already runs as administrator"}
+        started, detail = relaunch_as_admin()
+        if started:
+            asyncio.get_running_loop().call_later(RESTART_GRACE_SECONDS, os._exit, 0)
+        return {"started": started, "detail": detail}
 
     @app.post("/api/simulate")
     async def simulate(payload: dict[str, Any]) -> dict[str, Any]:

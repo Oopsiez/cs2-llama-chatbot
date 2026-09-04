@@ -117,6 +117,18 @@ every line the bot has read, with the ones it understood as chat marked.
 - Lines appear but none are marked as chat: that is a parsing gap - open an issue with a couple of
   those lines.
 
+## It writes a reply but nothing is said in game
+
+Focus CS2, then press **Test typing into CS2** on the *Game* tab. It makes the game echo a word and
+watches the console log for it, so the three failures look different:
+
+- *the keypress did not leave Windows*: input is being refused. Usually CS2 runs as administrator
+  and the bot does not - **Restart as administrator** next to the test fixes that.
+- *CS2 did not run it*: the keypress landed but the key is not bound. In the game console run
+  `bind "p" "exec message.cfg"` (or whichever key the panel is set to).
+- *the game ran it*: delivery works, so a missing reply is the bot deciding not to speak - the
+  activity feed says which rule stopped it.
+
 ---
 
 ## For developers
@@ -126,7 +138,7 @@ pip install -e ".[dev]"        # add [llama] for llama.cpp
 cs2bot                         # panel on http://127.0.0.1:8420
 pytest -q && ruff check . && mypy cs2bot
 python scripts/build_exe.py    # one-file executable (run this on Windows)
-iscc /DAppVersion=1.3.0 installer\cs2-chatbot.iss   # then wrap it in the installer
+iscc /DAppVersion=1.3.1 installer\cs2-chatbot.iss   # then wrap it in the installer
 ```
 
 Settings live in `config.json` in the per-user config directory (override with `CS2BOT_CONFIG`).

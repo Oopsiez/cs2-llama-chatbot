@@ -43,6 +43,14 @@ def test_name_detect_asks_the_game(client):
     assert client.get("/api/status").json()["own_name"] == "skelly"
 
 
+def test_the_output_self_test_says_the_keypress_never_left(client):
+    body = client.post("/api/output/test").json()
+
+    assert body["pressed"] is False  # dry run never touches Windows
+    assert "did not leave Windows" in body["advice"]
+    assert client.engine._sender.commands == ["echo cs2bot_keypress_ok"]
+
+
 def test_log_endpoint_reports_a_missing_console_log(client):
     body = client.get("/api/log").json()
     assert body["log_exists"] is False

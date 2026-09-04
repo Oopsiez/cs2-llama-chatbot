@@ -16,6 +16,10 @@ class ChatSender(abc.ABC):
         """Make the game run a console command. Return `(ran, detail)`."""
         return False, f"{self.name} cannot run console commands"
 
+    def diagnose(self) -> dict[str, object]:
+        """Whatever the platform can say about why typing into the game might fail."""
+        return {}
+
     def describe(self) -> str:
         return self.name
 
