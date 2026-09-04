@@ -26,6 +26,9 @@ class GameSettings(BaseModel):
     own_name: str = ""  # blank -> detect from GSI and the console log
     name_aliases: list[str] = Field(default_factory=list)
     auto_detect_name: bool = True
+    # How often to ask CS2 what the `name` cvar is, so a new account or a rename is picked up
+    # without GSI. 0 turns the question off.
+    name_probe_seconds: float = 120.0
     chat_char_limit: int = 221
     chat_send_delay: float = 0.6
     require_focus: bool = True

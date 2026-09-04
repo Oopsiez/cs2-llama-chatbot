@@ -55,6 +55,23 @@ class WindowsCfgSender(ChatSender):
     def _press_key(self) -> None:
         keyboard.press(self.bind_key)
 
+    async def _execute(self, command: str, pause: float) -> tuple[bool, str]:
+        """Put one console command in the cfg and make CS2 run it."""
+        if self.require_focus and foreground_window_title() != CS2_WINDOW_TITLE:
+            return False, "CS2 is not the focused window"
+        try:
+            self.cfg_path.write_text(command, encoding="utf-8")
+        except OSError as exc:
+            return False, f"cannot write {self.cfg_path}: {exc}"
+        try:
+            await asyncio.to_thread(self._press_key)
+        except keyboard.KeyPressError as exc:
+            return False, str(exc)
+        except Exception as exc:  # pragma: no cover - depends on the desktop session
+            return False, f"keypress failed: {exc}"
+        await asyncio.sleep(pause)
+        return True, "ok"
+
     async def send(self, text: str, team_only: bool = False) -> tuple[bool, str]:
         command = "say_team" if team_only else "say"
         chunks = chunk_message(sanitize_for_console(text), self.char_limit)
@@ -67,20 +84,18 @@ class WindowsCfgSender(ChatSender):
             return False, f"cannot write {self.cfg_path}: {exc}"
 
         for chunk in chunks:
-            if self.require_focus and foreground_window_title() != CS2_WINDOW_TITLE:
-                return False, "CS2 is not the focused window"
-            try:
-                self.cfg_path.write_text(f'{command} "{chunk}"', encoding="utf-8")
-            except OSError as exc:
-                return False, f"cannot write {self.cfg_path}: {exc}"
             if self.typing_delay_per_char:
                 await asyncio.sleep(self.typing_delay_per_char * len(chunk))
-            try:
-                await asyncio.to_thread(self._press_key)
-            except keyboard.KeyPressError as exc:
-                return False, str(exc)
-            except Exception as exc:  # pragma: no cover - depends on the desktop session
-                return False, f"keypress failed: {exc}"
-            await asyncio.sleep(self.send_delay)
+            ran, detail = await self._execute(f'{command} "{chunk}"', self.send_delay)
+            if not ran:
+                return False, detail
 
         return True, f"sent {len(chunks)} chunk(s) via {command}"
+
+    async def run_command(self, command: str) -> tuple[bool, str]:
+        try:
+            self.cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return False, f"cannot write {self.cfg_path}: {exc}"
+        ran, detail = await self._execute(sanitize_for_console(command), self.send_delay)
+        return (True, f"ran '{command}' in the game") if ran else (False, detail)

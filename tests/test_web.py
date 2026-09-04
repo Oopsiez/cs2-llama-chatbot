@@ -34,6 +34,15 @@ def test_toggle_enabled(client):
     assert client.engine.config.enabled is True
 
 
+def test_name_detect_asks_the_game(client):
+    body = client.post("/api/name/detect").json()
+    assert body["asked"] is False  # dry run cannot type into a game
+    assert client.engine._sender.commands == ["name"]
+
+    client.engine._note_identity('"name" = "skelly"')
+    assert client.get("/api/status").json()["own_name"] == "skelly"
+
+
 def test_log_endpoint_reports_a_missing_console_log(client):
     body = client.get("/api/log").json()
     assert body["log_exists"] is False

@@ -135,6 +135,45 @@ def test_own_name_falls_back_from_panel_to_gsi_to_log():
     assert engine.own_name == "manual" and engine.name_source == "set in panel"
 
 
+@pytest.mark.asyncio
+async def test_asking_the_game_runs_the_name_command():
+    engine = build_engine()
+    await engine.ask_game_for_name()
+    assert engine._sender.commands == ["name"]
+    engine._note_identity('"name" = "skelly" ( def. "unnamed" )')
+    assert engine.own_name == "skelly" and engine.name_source == "asked the game"
+
+
+@pytest.mark.asyncio
+async def test_the_name_question_repeats_on_its_own_timer():
+    engine = build_engine(**{"game.name_probe_seconds": 120.0})
+    await engine._maybe_ask_for_name()
+    await engine._maybe_ask_for_name()
+    assert engine._sender.commands == ["name"]
+
+    engine._probed_at -= 121
+    await engine._maybe_ask_for_name()
+    assert engine._sender.commands == ["name", "name"]
+
+
+@pytest.mark.asyncio
+async def test_the_game_is_not_asked_when_the_name_is_set_by_hand():
+    engine = build_engine(**{"game.own_name": "noodle"})
+    await engine._maybe_ask_for_name()
+    engine.config.game.own_name = ""
+    engine.config.game.name_probe_seconds = 0
+    await engine._maybe_ask_for_name()
+    assert engine._sender.commands == []
+
+
+@pytest.mark.asyncio
+async def test_a_rename_replaces_the_detected_name():
+    engine = build_engine()
+    engine._note_identity('"name" = "skelly"')
+    engine._note_identity("skelly changed name to noodle")
+    assert engine.own_name == "noodle"
+
+
 def test_auto_detect_can_be_turned_off():
     engine = build_engine(**{"game.auto_detect_name": False})
     engine._note_identity('"name" = "skelly"')

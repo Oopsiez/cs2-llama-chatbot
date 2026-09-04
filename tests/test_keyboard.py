@@ -32,6 +32,19 @@ def test_a_press_is_a_key_down_followed_by_a_key_up():
 
 
 @pytest.mark.asyncio
+async def test_a_console_command_is_run_through_the_same_cfg(tmp_path, monkeypatch):
+    pressed: list[str] = []
+    monkeypatch.setattr(keyboard, "press", pressed.append)
+    sender = WindowsCfgSender(cfg_dir=str(tmp_path), require_focus=False, send_delay=0)
+
+    ran, detail = await sender.run_command("name")
+
+    assert ran and "name" in detail
+    assert pressed == ["p"]
+    assert (tmp_path / "message.cfg").read_text() == "name"
+
+
+@pytest.mark.asyncio
 async def test_the_panel_is_told_why_the_keypress_did_not_land(tmp_path, monkeypatch):
     sender = WindowsCfgSender(cfg_dir=str(tmp_path), require_focus=False, send_delay=0)
 
