@@ -14,6 +14,8 @@ import sys
 # would take the tests and the type check with it.
 WORD = ctypes.c_uint16
 DWORD = ctypes.c_uint32
+LONG = ctypes.c_int32
+ULONG_PTR = ctypes.c_uint64 if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_uint32
 
 KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
@@ -67,12 +69,29 @@ class _KeyboardInput(ctypes.Structure):
         ("wScan", WORD),
         ("dwFlags", DWORD),
         ("time", DWORD),
-        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+        ("dwExtraInfo", ULONG_PTR),
+    ]
+
+
+class _MouseInput(ctypes.Structure):
+    """Never sent, but it is the largest arm of the union and so sets `INPUT`'s size.
+
+    `SendInput` rejects the whole call with ERROR_INVALID_PARAMETER unless the size it is handed
+    matches the real `INPUT`, which is 40 bytes on x64 - a keyboard-only union would be 32.
+    """
+
+    _fields_ = [
+        ("dx", LONG),
+        ("dy", LONG),
+        ("mouseData", DWORD),
+        ("dwFlags", DWORD),
+        ("time", DWORD),
+        ("dwExtraInfo", ULONG_PTR),
     ]
 
 
 class _InputUnion(ctypes.Union):
-    _fields_ = [("ki", _KeyboardInput)]
+    _fields_ = [("mi", _MouseInput), ("ki", _KeyboardInput)]
 
 
 class _Input(ctypes.Structure):
@@ -84,7 +103,7 @@ def _event(code: int, key_up: bool) -> _Input:
     if code > 0xFF:  # extended keys travel as `0xE0` plus the low byte
         flags |= KEYEVENTF_EXTENDEDKEY
         code &= 0xFF
-    keyboard = _KeyboardInput(0, code, flags, 0, ctypes.pointer(ctypes.c_ulong(0)))
+    keyboard = _KeyboardInput(0, code, flags, 0, 0)
     return _Input(INPUT_KEYBOARD, _InputUnion(ki=keyboard))
 
 

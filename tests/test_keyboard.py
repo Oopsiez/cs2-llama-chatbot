@@ -33,6 +33,12 @@ def test_a_press_is_a_key_down_followed_by_a_key_up():
     assert up.union.ki.dwFlags & keyboard.KEYEVENTF_KEYUP
 
 
+def test_the_input_struct_is_the_size_windows_insists_on():
+    """A keyboard-only union is 32 bytes and SendInput answers every call with error 87."""
+    expected = 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28
+    assert ctypes.sizeof(keyboard._Input) == expected
+
+
 def test_the_refusal_names_elevation_only_when_that_is_the_difference(monkeypatch):
     monkeypatch.setattr(keyboard, "is_elevated", lambda: False)
     assert "administrator" in keyboard._refusal(keyboard.ERROR_ACCESS_DENIED)
