@@ -138,7 +138,7 @@ pip install -e ".[dev]"        # add [llama] for llama.cpp
 cs2bot                         # panel on http://127.0.0.1:8420
 pytest -q && ruff check . && mypy cs2bot
 python scripts/build_exe.py    # one-file executable (run this on Windows)
-iscc /DAppVersion=1.3.1 installer\cs2-chatbot.iss   # then wrap it in the installer
+iscc /DAppVersion=1.3.2 installer\cs2-chatbot.iss   # then wrap it in the installer
 ```
 
 Settings live in `config.json` in the per-user config directory (override with `CS2BOT_CONFIG`).

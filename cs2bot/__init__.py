@@ -2,4 +2,4 @@
 
 # Keep in step with `version` in pyproject.toml and the tag the release workflow builds from;
 # tests/test_version.py fails if they drift.
-__version__ = "1.3.1"
+__version__ = "1.3.2"
