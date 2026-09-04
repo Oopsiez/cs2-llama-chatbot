@@ -184,6 +184,17 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             )
         return {"results": results, "own_name": engine.own_name, "name_source": engine.name_source}
 
+    @app.post("/api/name/detect")
+    async def detect_own_name() -> dict[str, Any]:
+        """Ask CS2 what the player is called right now, for a new account or a rename."""
+        ran, detail = await engine.ask_game_for_name()
+        return {
+            "asked": ran,
+            "detail": detail,
+            "own_name": engine.own_name,
+            "name_source": engine.name_source,
+        }
+
     @app.post("/api/simulate")
     async def simulate(payload: dict[str, Any]) -> dict[str, Any]:
         """Generate a reply for a made-up message without touching the game."""

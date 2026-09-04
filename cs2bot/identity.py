@@ -22,12 +22,18 @@ from dataclasses import dataclass
 # `MM/DD HH:MM:SS  ` and `MM/DD/YYYY - HH:MM:SS: ` timestamp prefixes (`con_timestamp 1`).
 TIMESTAMP = re.compile(r"^\d{2}/\d{2}(?:/\d{2,4})?\s*(?:-\s*)?\d{2}:\d{2}:\d{2}\s*:?\s+")
 
-# `"name" = "Oopsiez" ( def. "unnamed" )` - printed whenever the cvar is echoed or set.
-_CVAR_ECHO = re.compile(r'^"name"\s*=\s*"(?P<name>.*?)"')
+# What the console prints when the `name` cvar is echoed. Source wrote
+# `"name" = "Oopsiez" ( def. "unnamed" )`; CS2 also prints it bare, and the console echoes the
+# command back with a `] ` prompt.
+_CVAR_ECHO = re.compile(
+    r'^\]?\s*"?name"?\s*=\s*(?:"(?P<quoted>.*?)"|(?P<bare>[^"(]+?))'
+    r'\s*(?:\(\s*def\.|$)',
+    re.IGNORECASE,
+)
 # `setinfo name "Oopsiez"` / `name "Oopsiez"` typed into the console.
 _NAME_COMMAND = re.compile(r'^(?:setinfo\s+)?name\s+"(?P<name>.+?)"\s*$', re.IGNORECASE)
 # `Oopsiez changed name to skelly` (source-style rename notice).
-_RENAME = re.compile(r"^(?P<old>.+?) changed (?:their )?name to (?P<new>.+?)\.?$")
+_RENAME = re.compile(r"^(?:Player\s+)?(?P<old>.+?) changed (?:their )?name to (?P<new>.+?)\.?$")
 
 _SECOND_PERSON = re.compile(r"\b(you|u|ur|your|youre|yours|yourself)\b", re.IGNORECASE)
 _WORD = re.compile(r"[a-z0-9]+")
@@ -98,11 +104,13 @@ def detect_name_from_line(line: str, known: str = "") -> str | None:
     body = TIMESTAMP.sub("", line.strip()).strip()
     if not body:
         return None
-    for pattern in (_CVAR_ECHO, _NAME_COMMAND):
-        match = pattern.match(body)
-        if match:
-            name = match.group("name").strip()
-            return name or None
+    echo = _CVAR_ECHO.match(body)
+    if echo:
+        name = (echo.group("quoted") or echo.group("bare") or "").strip()
+        return name or None
+    command = _NAME_COMMAND.match(body)
+    if command:
+        return command.group("name").strip() or None
     rename = _RENAME.match(body)
     if rename and known and normalize_handle(rename.group("old")) == normalize_handle(known):
         return rename.group("new").strip() or None

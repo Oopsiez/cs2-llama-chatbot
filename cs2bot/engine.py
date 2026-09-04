@@ -37,6 +37,8 @@ REPLY_WINDOW_SECONDS = 25.0
 # Raw console lines kept for the panel's log view, so "it sees nothing" can be told apart from
 # "it sees the lines and does not recognise them as chat".
 RAW_LINE_MEMORY = 200
+# A name seen this soon after asking the game for it came from the answer, not from play.
+PROBE_ANSWER_SECONDS = 5.0
 
 
 class Engine:
@@ -56,6 +58,8 @@ class Engine:
         self._revealed = False
         self.detected_name: str = ""
         self._detected_from: str = "console log"
+        self.last_name_probe: str = ""
+        self._probed_at = float("-inf")
         self.recent_replies: list[str] = []
         self.recent_lines: deque[dict[str, Any]] = deque(maxlen=RAW_LINE_MEMORY)
         self.lines_seen = 0
@@ -101,7 +105,29 @@ class Engine:
         found = detect_name_from_line(line, self.own_name)
         if not found or found == self.detected_name:
             return
-        self._learn_name(found, "console log")
+        asked = time.monotonic() - self._probed_at < PROBE_ANSWER_SECONDS
+        self._learn_name(found, "asked the game" if asked else "console log")
+
+    async def ask_game_for_name(self) -> tuple[bool, str]:
+        """Make CS2 print its `name` cvar, which the log reader then picks the name out of.
+
+        This is what keeps the bot right when the user switches account or renames: the game is
+        the only thing that always knows, and GSI is often not installed.
+        """
+        self._probed_at = time.monotonic()
+        ran, detail = await self.sender.run_command("name")
+        self.last_name_probe = detail
+        return ran, detail
+
+    async def _maybe_ask_for_name(self) -> None:
+        every = self.config.game.name_probe_seconds
+        if every <= 0 or not self.config.game.auto_detect_name:
+            return
+        if self.config.game.own_name.strip():
+            return
+        if time.monotonic() - self._probed_at < every:
+            return
+        await self.ask_game_for_name()
 
     def _learn_name(self, name: str, source: str) -> None:
         if not name or name == self.detected_name:
@@ -222,6 +248,7 @@ class Engine:
                 self._note_identity(line)
                 continue
             await self.handle_message(message)
+        await self._maybe_ask_for_name()
         await self.maybe_announce()
         await self.maybe_reveal()
 
@@ -518,6 +545,7 @@ class Engine:
             **self.log_file_state(),
             "own_name": self.own_name,
             "name_source": self.name_source,
+            "name_probe": self.last_name_probe,
             "local_state": self.game_state.local_state(
                 self.config.dead_alive.assume_alive_without_gsi
             ).value,

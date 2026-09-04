@@ -32,6 +32,13 @@ def test_detect_name_from_cvar_echo_and_command():
     assert detect_name_from_line("[ALL] someone: hey") is None
 
 
+def test_detect_name_from_the_bare_cs2_echo():
+    assert detect_name_from_line('name = "Oopsiez"') == "Oopsiez"
+    assert detect_name_from_line("] name = Oopsiez") == "Oopsiez"
+    assert detect_name_from_line("Loading map: de_dust2") is None
+    assert detect_name_from_line("someone: my name = whatever") is None
+
+
 def test_detect_rename_only_when_the_old_name_is_ours():
     assert detect_name_from_line("Oopsiez changed name to skelly", known="Oopsiez") == "skelly"
     assert detect_name_from_line("someone changed name to skelly", known="Oopsiez") is None

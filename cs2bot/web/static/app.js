@@ -430,6 +430,18 @@ function bindActions() {
     $("gsi-note").textContent = response.ok ? `written to ${body.path} — restart CS2` : body.detail;
   });
 
+  $("name-detect").addEventListener("click", async () => {
+    await saveConfig();
+    $("name-note").textContent = "asking CS2…";
+    const body = await (await fetch("/api/name/detect", { method: "POST" })).json();
+    // The name arrives a moment later, in the console line CS2 prints in answer.
+    await new Promise((done) => setTimeout(done, 1500));
+    const status = await (await fetch("/api/status")).json();
+    $("name-note").textContent = body.asked
+      ? `you are ${status.own_name || "still unknown"} (${status.name_source})`
+      : body.detail;
+  });
+
   $("log-refresh").addEventListener("click", renderLog);
 
   $("parse-run").addEventListener("click", async () => {

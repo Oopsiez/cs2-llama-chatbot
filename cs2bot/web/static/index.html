@@ -313,7 +313,8 @@
       </label>
       <div class="row">
         <label>Your in-game name
-          <span class="hint">Leave blank to detect it from GSI and the console log.</span>
+          <span class="hint">Leave blank and the bot asks CS2 who you are, so switching account
+            or renaming just works.</span>
           <input type="text" id="own-name" placeholder="auto-detect" />
         </label>
         <label>Bind key <span class="hint">bind &lt;key&gt; "exec message.cfg"</span><input type="text" id="bind-key" /></label>
@@ -323,6 +324,10 @@
         <input type="text" id="name-aliases" />
       </label>
       <label class="check"><input type="checkbox" id="auto-detect-name" /><span>Detect my name automatically</span></label>
+      <div class="actions">
+        <button class="action" id="name-detect">Ask CS2 my name now</button>
+        <span class="note" id="name-note"></span>
+      </div>
       <div class="row">
         <label>Chat character limit<input type="number" id="char-limit" min="40" max="255" /></label>
         <label>Delay between chunks (s)<input type="number" id="send-delay" step="0.1" min="0" /></label>

@@ -58,6 +58,10 @@ stayed quiet when it did.
   round, and knows whether *you* are alive. All four combinations get a different kind of reply.
 - **Know when you are being talked to.** Your name at the start of a line, `@name`, a nickname, or
   a "you" right after it spoke - all count, and can jump the queue past the cooldown.
+- **Know who you are, on any account.** Leave *Your in-game name* blank and it asks CS2 itself -
+  it runs the `name` command every couple of minutes and reads the answer out of the console - so
+  a different Steam account, or a rename mid-session, is picked up on its own. *Ask CS2 my name
+  now* on the **Game** tab does it immediately.
 - **Snitch on you.** Ask "where are you?" in chat and it answers honestly with your callout, health,
   weapon or the bomb state. It can also drop your position on a timer or when you die. It only ever
   describes **you** - see [Is this a cheat?](#is-this-a-cheat) below.
@@ -122,7 +126,7 @@ pip install -e ".[dev]"        # add [llama] for llama.cpp
 cs2bot                         # panel on http://127.0.0.1:8420
 pytest -q && ruff check . && mypy cs2bot
 python scripts/build_exe.py    # one-file executable (run this on Windows)
-iscc /DAppVersion=1.2.0 installer\cs2-chatbot.iss   # then wrap it in the installer
+iscc /DAppVersion=1.3.0 installer\cs2-chatbot.iss   # then wrap it in the installer
 ```
 
 Settings live in `config.json` in the per-user config directory (override with `CS2BOT_CONFIG`).

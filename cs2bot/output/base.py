@@ -12,6 +12,10 @@ class ChatSender(abc.ABC):
     async def send(self, text: str, team_only: bool = False) -> tuple[bool, str]:
         """Return `(delivered, detail)`."""
 
+    async def run_command(self, command: str) -> tuple[bool, str]:
+        """Make the game run a console command. Return `(ran, detail)`."""
+        return False, f"{self.name} cannot run console commands"
+
     def describe(self) -> str:
         return self.name
 
