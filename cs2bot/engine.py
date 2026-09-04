@@ -39,6 +39,9 @@ REPLY_WINDOW_SECONDS = 25.0
 RAW_LINE_MEMORY = 200
 # A name seen this soon after asking the game for it came from the answer, not from play.
 PROBE_ANSWER_SECONDS = 5.0
+# What the self-test makes CS2 print, and how long it waits for that to reach the console log.
+SELF_TEST_TOKEN = "cs2bot_keypress_ok"
+SELF_TEST_SECONDS = 4.0
 
 
 class Engine:
@@ -118,6 +121,45 @@ class Engine:
         ran, detail = await self.sender.run_command("name")
         self.last_name_probe = detail
         return ran, detail
+
+    async def self_test(self) -> dict[str, Any]:
+        """Press the bound key on a harmless `echo` and see whether CS2 ran it.
+
+        This separates the three ways delivery fails: the keypress never leaves Windows, the key
+        is not bound to `exec message.cfg`, or the console log is not being read.
+        """
+        pressed, detail = await self.sender.run_command(f"echo {SELF_TEST_TOKEN}")
+        confirmed = await self._wait_for_line(SELF_TEST_TOKEN) if pressed else False
+        return {
+            "pressed": pressed,
+            "detail": detail,
+            "confirmed": confirmed,
+            "log_attached": self.log_attached,
+            "sender": self.sender.describe(),
+            "bind_key": self.config.game.bind_key,
+            "advice": self._self_test_advice(pressed, confirmed),
+            **self.sender.diagnose(),
+        }
+
+    def _self_test_advice(self, pressed: bool, confirmed: bool) -> str:
+        if not pressed:
+            return "the keypress did not leave Windows - see the reason above"
+        if confirmed:
+            return "CS2 ran the command, so replies can be delivered"
+        if not self.log_attached:
+            return "the key was pressed but the console log is not being read, so this is unproven"
+        return (
+            f"CS2 did not run it - in the game console, check "
+            f'bind "{self.config.game.bind_key}" "exec {self.config.game.exec_cfg_name}"'
+        )
+
+    async def _wait_for_line(self, needle: str) -> bool:
+        deadline = time.monotonic() + SELF_TEST_SECONDS
+        while time.monotonic() < deadline:
+            if any(needle in entry["line"] for entry in self.recent_lines):
+                return True
+            await asyncio.sleep(POLL_INTERVAL)
+        return False
 
     async def _maybe_ask_for_name(self) -> None:
         every = self.config.game.name_probe_seconds

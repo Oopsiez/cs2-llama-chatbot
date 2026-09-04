@@ -442,6 +442,22 @@ function bindActions() {
       : body.detail;
   });
 
+  $("output-test").addEventListener("click", async () => {
+    await saveConfig();
+    $("output-note").textContent = "pressing the key…";
+    const body = await (await fetch("/api/output/test", { method: "POST" })).json();
+    $("output-note").textContent = body.confirmed ? "the game ran it" : "no answer from the game";
+    $("output-result").textContent = [body.advice, "", body.detail, JSON.stringify(body, null, 2)]
+      .join("\n");
+  });
+
+  $("run-as-admin").addEventListener("click", async () => {
+    $("output-note").textContent = "asking Windows…";
+    const body = await (await fetch("/api/restart-as-admin", { method: "POST" })).json();
+    // On success this panel dies with the process; the new one comes up on the same address.
+    $("output-note").textContent = body.detail;
+  });
+
   $("log-refresh").addEventListener("click", renderLog);
 
   $("parse-run").addEventListener("click", async () => {

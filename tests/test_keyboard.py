@@ -1,3 +1,5 @@
+import ctypes
+
 import pytest
 
 from cs2bot.output import keyboard
@@ -29,6 +31,51 @@ def test_a_press_is_a_key_down_followed_by_a_key_up():
     up = keyboard._event(0x19, key_up=True)
     assert down.union.ki.dwFlags & keyboard.KEYEVENTF_SCANCODE
     assert up.union.ki.dwFlags & keyboard.KEYEVENTF_KEYUP
+
+
+def test_the_refusal_names_elevation_only_when_that_is_the_difference(monkeypatch):
+    monkeypatch.setattr(keyboard, "is_elevated", lambda: False)
+    assert "administrator" in keyboard._refusal(keyboard.ERROR_ACCESS_DENIED)
+
+    monkeypatch.setattr(keyboard, "is_elevated", lambda: True)
+    assert "already" in keyboard._refusal(keyboard.ERROR_ACCESS_DENIED)
+    assert "error 87" in keyboard._refusal(87)
+
+
+class _FakeUser32:
+    """Stands in for Windows, which drops events it does not feel like delivering."""
+
+    def __init__(self, accepts: list[int]) -> None:
+        self.accepts = accepts
+        self.calls = 0
+
+    def SendInput(self, _count, _events, _size) -> int:  # noqa: N802 - the Windows spelling
+        self.calls += 1
+        return self.accepts.pop(0) if self.accepts else 1
+
+
+def _fake_windows(monkeypatch, user32: _FakeUser32) -> None:
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *a, **k: user32, raising=False)
+    # `get_last_error` only exists on Windows, so off it the attribute has to be invented.
+    monkeypatch.setattr(
+        ctypes, "get_last_error", lambda: keyboard.ERROR_ACCESS_DENIED, raising=False
+    )
+
+
+def test_a_swallowed_key_up_is_retried_rather_than_called_a_block(monkeypatch):
+    user32 = _FakeUser32([1, 0, 0, 1])
+    _fake_windows(monkeypatch, user32)
+
+    keyboard.press("p")
+
+    assert user32.calls == 4
+
+
+def test_a_key_that_never_goes_down_is_reported(monkeypatch):
+    _fake_windows(monkeypatch, _FakeUser32([0]))
+
+    with pytest.raises(keyboard.KeyPressError, match="administrator"):
+        keyboard.press("p")
 
 
 @pytest.mark.asyncio

@@ -52,6 +52,15 @@ class WindowsCfgSender(ChatSender):
     def describe(self) -> str:
         return f"writes {self.cfg_path} and presses '{self.bind_key}'"
 
+    def diagnose(self) -> dict[str, object]:
+        return {
+            "focused_window": foreground_window_title(),
+            "cs2_focused": foreground_window_title() == CS2_WINDOW_TITLE,
+            "cfg_path": str(self.cfg_path),
+            "cfg_dir_exists": self.cfg_path.parent.is_dir(),
+            **keyboard.diagnosis(),
+        }
+
     def _press_key(self) -> None:
         keyboard.press(self.bind_key)
 

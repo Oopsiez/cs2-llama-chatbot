@@ -8,6 +8,7 @@ and hands them to `SendInput` with `KEYEVENTF_SCANCODE`.
 from __future__ import annotations
 
 import ctypes
+import sys
 
 # Spelled out rather than taken from `ctypes.wintypes`, which refuses to import off Windows and
 # would take the tests and the type check with it.
@@ -87,17 +88,89 @@ def _event(code: int, key_up: bool) -> _Input:
     return _Input(INPUT_KEYBOARD, _InputUnion(ki=keyboard))
 
 
+ERROR_ACCESS_DENIED = 5
+
+
+RELEASE_ATTEMPTS = 3
+
+
 def press(key: str) -> None:
-    """Tap `key` in the focused window. Raises `KeyPressError` if Windows drops the input."""
+    """Tap `key` in the focused window. Raises `KeyPressError` if Windows drops the input.
+
+    Down and up go in one at a time: overlays and anti-cheat filters routinely swallow one of
+    the two, and a batch of two only reports how many got through, not which.
+    """
     code = scan_code(key)
     try:
-        send_input = ctypes.windll.user32.SendInput  # type: ignore[attr-defined]
+        # `use_last_error` is what makes the refusal readable rather than a bare count of 0.
+        user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
     except AttributeError as exc:  # pragma: no cover - only reachable off Windows
         raise KeyPressError("sending keystrokes only works on Windows") from exc
 
-    events = (_Input * 2)(_event(code, key_up=False), _event(code, key_up=True))
-    sent = send_input(2, ctypes.byref(events), ctypes.sizeof(_Input))
-    if sent != 2:
-        raise KeyPressError(
-            "Windows blocked the keystroke - if CS2 runs as administrator, the bot has to as well"
+    def send(key_up: bool) -> int:
+        event = _event(code, key_up=key_up)
+        return int(user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_Input)))
+
+    if not send(key_up=False):
+        raise KeyPressError(_refusal(int(ctypes.get_last_error())))  # type: ignore[attr-defined]
+    for _ in range(RELEASE_ATTEMPTS):
+        if send(key_up=True):
+            return
+    raise KeyPressError(f"'{key}' went down but Windows would not let it back up")
+
+
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+
+def is_elevated() -> bool:
+    """Whether the bot itself runs as administrator."""
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())  # type: ignore[attr-defined]
+    except (AttributeError, OSError):  # pragma: no cover - only reachable off Windows
+        return False
+
+
+def foreground_is_out_of_reach() -> bool | None:
+    """Whether the focused window belongs to a process this one may not touch.
+
+    That is what makes Windows drop the keystroke: an elevated game ignores input from a
+    non-elevated sender. None means the question could not be answered.
+    """
+    try:
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    except AttributeError:  # pragma: no cover - only reachable off Windows
+        return None
+    pid = DWORD(0)
+    user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+    if not pid.value:
+        return None
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    if not handle:
+        return kernel32.GetLastError() == ERROR_ACCESS_DENIED
+    kernel32.CloseHandle(handle)
+    return False
+
+
+def _refusal(error_code: int) -> str:
+    """Explain a dropped keystroke, which Windows only ever reports as a count and an error code."""
+    if error_code != ERROR_ACCESS_DENIED:
+        return f"Windows dropped the keystroke (error {error_code})"
+    if is_elevated():
+        return (
+            "Windows blocked the keystroke (access denied) even though the bot is already "
+            "administrator - something else is filtering input, e.g. an anti-cheat or overlay"
         )
+    return (
+        "Windows blocked the keystroke because CS2 runs as administrator and the bot does not - "
+        "use 'Restart as administrator' on the Game tab"
+    )
+
+
+def diagnosis() -> dict[str, object]:
+    """What Windows will and will not let this process do, for the panel's self-test."""
+    return {
+        "windows": sys.platform == "win32",
+        "bot_is_administrator": is_elevated(),
+        "focused_window_out_of_reach": foreground_is_out_of_reach(),
+    }

@@ -345,6 +345,16 @@
         <span class="hint">Also used by "humanized typing speed" on the Brain tab.</span>
         <input type="number" id="typing-speed" min="0" max="1" step="0.01" />
       </label>
+      <label>Check the bot can type into the game
+        <span class="hint">Focus CS2, then press this: it makes CS2 echo a word and checks the
+          console log for it, so a blocked keypress and a missing keybind look different.</span>
+      </label>
+      <div class="actions">
+        <button class="action" id="output-test">Test typing into CS2</button>
+        <button class="action" id="run-as-admin">Restart as administrator</button>
+        <span class="note" id="output-note"></span>
+      </div>
+      <div class="result" id="output-result">—</div>
       <div class="divider"></div>
       <div class="row">
         <label>GSI port<input type="number" id="gsi-port" min="1" max="65535" /></label>
