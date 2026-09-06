@@ -14,9 +14,35 @@ def test_every_active_duty_map_has_both_sides():
             assert all(c.map_name == map_name for c in calls)
 
 
-def test_calls_fit_in_a_chat_line():
+def test_every_line_of_every_call_fits_in_a_chat_line():
     for strategy in playbook.PLAYBOOK:
-        assert len(playbook.call_text(strategy)) <= 221
+        assert strategy.steps, f"{strategy.name} has no steps"
+        for line in playbook.call_lines(strategy):
+            assert len(line) <= 221, line
+
+
+def test_a_call_is_said_over_several_lines():
+    strategy = playbook.pick("de_inferno", Team.T, site="b", buy=playbook.FULL)
+    assert strategy is not None
+    lines = playbook.call_lines(strategy)
+    assert len(lines) > 1
+    assert lines[0].startswith("Inferno T:")
+    assert lines[1:] == list(strategy.steps)
+
+
+def test_max_lines_folds_the_tail_in_rather_than_dropping_it():
+    strategy = playbook.pick("de_mirage", Team.T, site="a", buy=playbook.FULL)
+    assert strategy is not None and len(strategy.steps) == 3
+
+    lines = playbook.call_lines(strategy, max_lines=3)
+    assert len(lines) == 3
+    assert strategy.steps[-1] in lines[-1]  # nothing tactical is lost
+
+
+def test_no_line_limit_keeps_every_step():
+    strategy = playbook.pick("de_nuke", Team.T, site="a", buy=playbook.FULL)
+    assert strategy is not None
+    assert len(playbook.call_lines(strategy, max_lines=0)) == len(strategy.steps) + 1
 
 
 @pytest.mark.parametrize(

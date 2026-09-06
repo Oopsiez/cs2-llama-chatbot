@@ -82,6 +82,16 @@ how the round is actually played at a high level. The model never invents tactic
 call and, at most, allowed to say it in its own voice, so the utility and the site it names are the
 ones written down.
 
+A real strat does not fit in CS2's ~220 character chat line, so it is said the way a human IGL says
+it - one line at a time, utility first, then the movement, then what happens after the plant:
+
+```
+Mirage T: A execute
+util: smoke jungle, CT and stairs - one flash over palace on the count
+go: 3 ramp, 2 palace, both sides cross on the same flash and trade the entry
+then: plant default, one holds jungle, one CT, one back in palace for the retake
+```
+
 The **Strats** tab in the panel controls it:
 
 | Setting | What it does |
@@ -90,6 +100,7 @@ The **Strats** tab in the panel controls it:
 | *Call in* | Team chat, all chat, or wherever it was asked. |
 | *Call every round* | Off by default. On, it calls one strat in freezetime, once per round, without being asked. |
 | *Only near round start* | Ignores strat requests once the round is underway. |
+| *Chat lines per strat* | How many lines it is allowed to spend. Anything that does not fit is folded into the last line rather than dropped. |
 | *Ask phrases* | The words it listens for. `strat`, `strats`, `what's the plan`, `call it`, `what do we do` by default. |
 
 In chat:

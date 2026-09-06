@@ -103,5 +103,6 @@ def test_the_strategy_prompt_hands_the_model_the_call_verbatim():
     assert system.role == "system"
     assert "change nothing tactical" in system.content
     assert "Mirage" in system.content and "T" in system.content
-    assert strategy.call in user.content
+    assert all(step in user.content for step in strategy.steps)
+    assert f"{len(strategy.steps)} lines in total" in system.content
     assert "Gavin" in user.content

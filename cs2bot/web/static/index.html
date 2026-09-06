@@ -269,7 +269,12 @@
       </div>
       <div class="row">
         <label class="check"><input type="checkbox" id="strat-in-character" /><span>Say it in the persona's voice
-          <small>Off sends the playbook line as written.</small></span></label>
+          <small>Off sends the playbook lines as written.</small></span></label>
+        <label>Chat lines per strat
+          <input type="number" id="strat-max-lines" min="1" max="8" step="1" />
+        </label>
+      </div>
+      <div class="row">
         <label>Side to call for without GSI
           <select id="strat-side">
             <option value="T">T</option>

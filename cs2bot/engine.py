@@ -499,16 +499,22 @@ class Engine:
             return None
 
         started = time.perf_counter()
-        text = await self._strategy_text(strategy, asked_by.sender if asked_by else "")
+        lines = await self._strategy_lines(strategy, asked_by.sender if asked_by else "")
         self.recent_strats.append(strategy.name)
         del self.recent_strats[:-STRATEGY_MEMORY]
-        self._remember_reply(text)
-        self.echo.remember(text)
+        text = "\n".join(lines)
+        for line in lines:
+            self._remember_reply(line)
+            self.echo.remember(line)
 
         asked_in = asked_by.channel if asked_by else ChatChannel.TEAM
-        delivered, detail = await self.sender.send(
-            text, team_only=commands.answer_in_team_chat(settings, asked_in)
-        )
+        team_only = commands.answer_in_team_chat(settings, asked_in)
+        # A whole strat does not fit in one chat line, so it goes out a step at a time.
+        delivered, detail = True, ""
+        for line in lines:
+            delivered, detail = await self.sender.send(line, team_only=team_only)
+            if not delivered:
+                break
         self.last_spoke_at = time.time()
         self.last_reply_at = time.monotonic()
         self.bus.publish(
@@ -536,14 +542,15 @@ class Engine:
     def _fallback_side(self) -> Team:
         return Team.CT if self.config.strategy.fallback_side.upper() == "CT" else Team.T
 
-    async def _strategy_text(self, strategy: playbook.Strategy, asked_by: str) -> str:
+    async def _strategy_lines(self, strategy: playbook.Strategy, asked_by: str) -> list[str]:
         """The call as it goes into chat - in the persona's voice, or plain if that fails.
 
-        The playbook line is the fallback rather than an error, because a strat nobody can read
+        The playbook lines are the fallback rather than an error, because a strat nobody can read
         is worth more than no strat at all when the model is down.
         """
-        plain = playbook.call_text(strategy)
-        if not self.config.strategy.in_character:
+        settings = self.config.strategy
+        plain = playbook.call_lines(strategy, settings.max_lines)
+        if not settings.in_character:
             return plain
         try:
             raw = await self.backend.generate(
@@ -553,15 +560,20 @@ class Engine:
         except LLMError as exc:
             self.last_error = str(exc)
             return plain
-        return (
+        spoken = [
             humanize(
-                raw,
+                line,
                 literacy=self.config.behavior.literacy,
                 max_chars=self.config.persona.max_reply_chars,
                 seed=self._random.randrange(2**32),
             )
-            or plain
-        )
+            for line in raw.splitlines()
+            if line.strip()
+        ]
+        spoken = [line for line in spoken if line]
+        if not spoken:
+            return plain
+        return spoken[: settings.max_lines] if settings.max_lines > 0 else spoken
 
     # ---- snitching ---------------------------------------------------------------
 

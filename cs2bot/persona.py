@@ -267,10 +267,12 @@ def build_strategy_turns(
     if persona.style_notes.strip():
         lines.append(persona.style_notes.strip())
     lines.append(literacy_directive(config.behavior.literacy))
+    steps = strategy.steps or (strategy.call,)
     lines.append(
-        "You are calling the strategy for this round. Relay the call below as your own words in "
-        "one chat line. Keep every callout, site and piece of utility exactly as given, change "
-        "nothing tactical, and add no advice of your own."
+        "You are calling the strategy for this round. Relay the call below as your own words, "
+        f"one chat line per numbered step, {len(steps)} lines in total, in the same order. Keep "
+        "every callout, site, number and piece of utility exactly as given, change nothing "
+        "tactical, and add no advice of your own."
     )
     where_bits = [
         f"Map: {map_label(player.map_name) or player.map_name or 'unknown'}",
@@ -280,19 +282,20 @@ def build_strategy_turns(
         where_bits.append(f"Round {player.round_number}")
     lines.append("; ".join(where_bits))
     lines.append(
-        "Reply with the chat message only: no quotes, no name prefix, no narration, "
-        f"and at most {persona.max_reply_chars} characters."
+        "Reply with the chat lines only, separated by newlines: no numbering, no quotes, no name "
+        f"prefix, no narration, and at most {persona.max_reply_chars} characters per line."
     )
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
     ask = f"{asked_by} asked for the strat. " if asked_by else ""
+    numbered = "\n".join(f"{i}. {step}" for i, step in enumerate(steps, start=1))
     return [
         ChatTurn(role="system", content="\n".join(lines)),
         ChatTurn(
             role="user",
             content=(
-                f"{ask}The call is \"{strategy.name}\": {strategy.call}"
-                + (f" (why: {strategy.detail})" if strategy.detail else "")
+                f"{ask}The call is \"{strategy.name}\":\n{numbered}"
+                + (f"\n(why: {strategy.detail})" if strategy.detail else "")
             ),
         ),
     ]
