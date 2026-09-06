@@ -148,6 +148,17 @@ def test_custom_prompt_reaches_the_model(client):
     assert "you only speak in questions" in prompt
 
 
+def test_strategy_settings_are_saved(client):
+    config = client.get("/api/config").json()["config"]
+    assert config["strategy"]["listen_channel"] == "both"
+
+    config["strategy"]["listen_channel"] = "team"
+    config["strategy"]["call_every_round"] = True
+    assert client.put("/api/config", json=config).status_code == 200
+    assert client.engine.config.strategy.listen_channel == "team"
+    assert client.engine.config.strategy.call_every_round is True
+
+
 def test_recording_a_callout_needs_gsi(client):
     assert client.post("/api/callouts", json={"name": "banana"}).status_code == 422
 

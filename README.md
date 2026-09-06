@@ -65,12 +65,43 @@ stayed quiet when it did.
 - **Snitch on you.** Ask "where are you?" in chat and it answers honestly with your callout, health,
   weapon or the bomb state. It can also drop your position on a timer or when you die. It only ever
   describes **you** - see [Is this a cheat?](#is-this-a-cheat) below.
+- **Call an actual strat.** Type `strat?` (or `!strat b`) in chat and it answers with a real call
+  for the map and side you are on - see [Calling strats](#calling-strats).
 - **Never repeat itself.** A reply too close to a recent one is thrown away and regenerated; if
   every attempt is a rerun, it stays quiet instead.
 - **Answer at human speed.** A delay slider, or a checkbox that makes it read the message and then
   take as long as actually typing the reply would.
 - **Own up at the end.** When the final scoreboard appears it admits it was a bot and links the
   project. One line, once per match; editable, and switch-off-able, on the Snitch tab.
+
+## Calling strats
+
+Ask for a plan in chat and the bot answers with a genuine call - an execute, a default or a CT
+setup - chosen for the map you are on and the side you are playing, off a fixed playbook built from
+how the round is actually played at a high level. The model never invents tactics: it is handed the
+call and, at most, allowed to say it in its own voice, so the utility and the site it names are the
+ones written down.
+
+The **Strats** tab in the panel controls it:
+
+| Setting | What it does |
+| --- | --- |
+| *Take orders from* | All chat, team chat, or both. Separate from where it chats normally, so it can banter in all chat but only take orders from your team. |
+| *Call in* | Team chat, all chat, or wherever it was asked. |
+| *Call every round* | Off by default. On, it calls one strat in freezetime, once per round, without being asked. |
+| *Only near round start* | Ignores strat requests once the round is underway. |
+| *Ask phrases* | The words it listens for. `strat`, `strats`, `what's the plan`, `call it`, `what do we do` by default. |
+
+In chat:
+
+- `strat?`, `strats`, `what's the plan`, `call it` - give me a call.
+- `!strat a`, `!strat b`, `!strat mid` - a call for that site, if the map has one.
+- `!quiet` - shut up for two minutes. `!talk` - come back.
+
+The map and side come from Game State Integration, so install the GSI config (**Game** tab) or it
+falls back to the side you picked in the panel and to map-agnostic calls. Covered maps are the
+current Premier and FACEIT active duty pool: **Mirage, Inferno, Dust 2, Anubis, Ancient, Nuke,
+Cache**. Anything else - workshop maps, deathmatch servers - gets calls that hold on any map.
 
 ## Teaching it callouts
 

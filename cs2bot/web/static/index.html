@@ -35,6 +35,7 @@
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
       <button class="tab" role="tab" data-tab="model">Model</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
+      <button class="tab" role="tab" data-tab="strats">Strats</button>
       <button class="tab" role="tab" data-tab="snitch">Snitch</button>
       <button class="tab" role="tab" data-tab="game">Game</button>
       <button class="tab" role="tab" data-tab="test">Test</button>
@@ -228,6 +229,60 @@
       <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead</span></label>
       <label class="check"><input type="checkbox" id="da-warmup" /><span>Treat warmup as one shared chat</span></label>
       <label class="check"><input type="checkbox" id="da-global" /><span>Server has global dead chat (deathmatch / sv_deadtalk)</span></label>
+    </div>
+
+    <div class="panel" data-panel="strats">
+      <p class="note">
+        Real calls for the Premier / FACEIT pool - Mirage, Inferno, Dust 2, Anubis, Ancient, Nuke
+        and Cache - picked for the map and side Game State Integration reports. The tactics come
+        from the playbook, not from the model: the model only says them in the bot's voice.
+      </p>
+      <label class="check"><input type="checkbox" id="strat-enabled" /><span>Call strats
+        <small>Answers "strat?" with a call for the map and side you are on.</small></span></label>
+      <label class="check"><input type="checkbox" id="strat-asked" /><span>Answer when somebody asks for a strat</span></label>
+      <div class="row">
+        <label>Take orders from
+          <select id="strat-listen">
+            <option value="team">team chat only</option>
+            <option value="all">all chat only</option>
+            <option value="both">both</option>
+          </select>
+        </label>
+        <label>Call it in
+          <select id="strat-reply">
+            <option value="team">team chat</option>
+            <option value="all">all chat</option>
+            <option value="same">whichever chat asked</option>
+          </select>
+        </label>
+      </div>
+      <label>Ask phrases (comma separated) <span class="hint">also works as !strat, and !strat b picks the site</span>
+        <input type="text" id="strat-phrases" />
+      </label>
+      <label class="check"><input type="checkbox" id="strat-every-round" /><span>Call a strat every round without being asked
+        <small>One line in freezetime. Needs GSI for the round phase.</small></span></label>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="strat-round-start" /><span>Only answer at the start of a round</span></label>
+        <label>Round start lasts (seconds)
+          <input type="number" id="strat-round-seconds" min="0" step="5" />
+        </label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="strat-in-character" /><span>Say it in the persona's voice
+          <small>Off sends the playbook line as written.</small></span></label>
+        <label>Side to call for without GSI
+          <select id="strat-side">
+            <option value="T">T</option>
+            <option value="CT">CT</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="strat-obey" /><span>Obey !quiet and !talk</span></label>
+        <label>!quiet lasts (seconds)
+          <input type="number" id="strat-quiet" min="0" step="10" />
+        </label>
+      </div>
     </div>
 
     <div class="panel" data-panel="snitch">

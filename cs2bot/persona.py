@@ -7,6 +7,7 @@ from .humanize import game_iq_directive, literacy_directive
 from .llm.base import ChatTurn
 from .models import ChatChannel, ChatMessage, LifeState, LocalPlayer
 from .novelty import avoid_note
+from .playbook import Strategy, map_label
 from .snitch import is_request, prompt_note
 
 PRESETS: dict[str, PersonaSettings] = {
@@ -245,6 +246,55 @@ def build_reveal_turns(config: AppConfig) -> list[ChatTurn]:
     return [
         ChatTurn(role="system", content="\n".join(lines)),
         ChatTurn(role="user", content=config.reveal.instructions.strip()),
+    ]
+
+
+def build_strategy_turns(
+    config: AppConfig,
+    player: LocalPlayer,
+    strategy: Strategy,
+    asked_by: str = "",
+) -> list[ChatTurn]:
+    """Have the model say a real call in the persona's voice - and only that call.
+
+    The tactics come from the playbook, never from the model: a 8B model asked for a Nuke strat
+    will happily invent Dust 2 callouts. So the call is handed over verbatim and the model's only
+    job is to sound like itself while relaying it, keeping every callout and every piece of
+    utility exactly as written.
+    """
+    persona = config.persona
+    lines = [persona.description.strip()]
+    if persona.style_notes.strip():
+        lines.append(persona.style_notes.strip())
+    lines.append(literacy_directive(config.behavior.literacy))
+    lines.append(
+        "You are calling the strategy for this round. Relay the call below as your own words in "
+        "one chat line. Keep every callout, site and piece of utility exactly as given, change "
+        "nothing tactical, and add no advice of your own."
+    )
+    where_bits = [
+        f"Map: {map_label(player.map_name) or player.map_name or 'unknown'}",
+        f"Side: {strategy.side.value}",
+    ]
+    if player.round_number:
+        where_bits.append(f"Round {player.round_number}")
+    lines.append("; ".join(where_bits))
+    lines.append(
+        "Reply with the chat message only: no quotes, no name prefix, no narration, "
+        f"and at most {persona.max_reply_chars} characters."
+    )
+    if persona.banned_words:
+        lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
+    ask = f"{asked_by} asked for the strat. " if asked_by else ""
+    return [
+        ChatTurn(role="system", content="\n".join(lines)),
+        ChatTurn(
+            role="user",
+            content=(
+                f"{ask}The call is \"{strategy.name}\": {strategy.call}"
+                + (f" (why: {strategy.detail})" if strategy.detail else "")
+            ),
+        ),
     ]
 
 
