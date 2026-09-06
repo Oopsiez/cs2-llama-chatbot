@@ -153,6 +153,42 @@ class SnitchSettings(BaseModel):
     reveal_bomb: bool = True
 
 
+class StrategySettings(BaseModel):
+    """Calling actual strats, and taking orders about them from chat.
+
+    The map and side come from Game State Integration; the calls themselves come from
+    `playbook.py`, so the model only ever rephrases a real strategy instead of inventing one.
+    `listen_channel` is deliberately separate from `behavior.reply_channels`: plenty of people
+    want the bot chatting in all chat but only taking orders from their own team.
+    """
+
+    enabled: bool = True
+    listen_channel: str = "both"  # all | team | both - where commands are obeyed
+    reply_channel: str = "team"  # team | all | same (whichever channel asked)
+    answer_when_asked: bool = True
+    request_phrases: list[str] = Field(
+        default_factory=lambda: [
+            "strat",
+            "strats",
+            "whats the plan",
+            "what's the plan",
+            "call it",
+            "what do we do",
+        ]
+    )
+    # Announce a call on its own at the start of every round, without being asked.
+    call_every_round: bool = False
+    # Only answer near the start of a round, when a call is still worth something.
+    round_start_only: bool = False
+    round_start_seconds: float = 25.0  # how long after freezetime a round still counts as starting
+    in_character: bool = True  # let the model say it in the persona's voice
+    max_lines: int = 4  # a whole strat is said over several chat lines; 0 means no limit
+    # Side to call for when GSI has not told us which one we are on.
+    fallback_side: str = "T"
+    obey_commands: bool = True  # !quiet / !talk / !strat a
+    quiet_seconds: float = 120.0  # how long `!quiet` shuts the bot up for
+
+
 PROJECT_URL = "https://github.com/Oopsiez/cs2-llama-chatbot"
 
 
@@ -204,6 +240,7 @@ class AppConfig(BaseModel):
     behavior: BehaviorSettings = Field(default_factory=BehaviorSettings)
     dead_alive: DeadAliveSettings = Field(default_factory=DeadAliveSettings)
     snitch: SnitchSettings = Field(default_factory=SnitchSettings)
+    strategy: StrategySettings = Field(default_factory=StrategySettings)
     reveal: RevealSettings = Field(default_factory=RevealSettings)
     callouts: CalloutBook = Field(default_factory=CalloutBook)
     gsi: GSISettings = Field(default_factory=GSISettings)

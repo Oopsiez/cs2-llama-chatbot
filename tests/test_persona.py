@@ -1,6 +1,15 @@
+import random
+
+from cs2bot import playbook
 from cs2bot.config import AppConfig
-from cs2bot.models import ChatChannel, ChatMessage, LifeState, LocalPlayer
-from cs2bot.persona import PRESETS, build_system_prompt, build_turns, state_note
+from cs2bot.models import ChatChannel, ChatMessage, LifeState, LocalPlayer, Team
+from cs2bot.persona import (
+    PRESETS,
+    build_strategy_turns,
+    build_system_prompt,
+    build_turns,
+    state_note,
+)
 
 
 def message(**kwargs) -> ChatMessage:
@@ -77,3 +86,23 @@ def test_turns_carry_the_recent_replies_into_the_system_turn():
     )
     assert turns[0].role == "system" and "nice shot" in turns[0].content
     assert turns[-1].content == "enemy: ez"
+
+
+def test_the_strategy_prompt_hands_the_model_the_call_verbatim():
+    config = AppConfig()
+    strategy = playbook.pick("de_mirage", Team.T, rng=random.Random(0))
+    assert strategy is not None
+
+    turns = build_strategy_turns(
+        config,
+        LocalPlayer(map_name="de_mirage", team=Team.T),
+        strategy,
+        asked_by="Gavin",
+    )
+    system, user = turns[0], turns[-1]
+    assert system.role == "system"
+    assert "change nothing tactical" in system.content
+    assert "Mirage" in system.content and "T" in system.content
+    assert all(step in user.content for step in strategy.steps)
+    assert f"{len(strategy.steps)} lines in total" in system.content
+    assert "Gavin" in user.content

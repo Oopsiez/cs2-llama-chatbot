@@ -62,6 +62,20 @@ const BINDINGS = {
   "da-persona": ["dead_alive.use_dead_persona", "bool"],
   "da-assume": ["dead_alive.assume_alive_without_gsi", "bool"],
 
+  "strat-enabled": ["strategy.enabled", "bool"],
+  "strat-asked": ["strategy.answer_when_asked", "bool"],
+  "strat-listen": ["strategy.listen_channel", "text"],
+  "strat-reply": ["strategy.reply_channel", "text"],
+  "strat-phrases": ["strategy.request_phrases", "list"],
+  "strat-every-round": ["strategy.call_every_round", "bool"],
+  "strat-round-start": ["strategy.round_start_only", "bool"],
+  "strat-round-seconds": ["strategy.round_start_seconds", "float"],
+  "strat-in-character": ["strategy.in_character", "bool"],
+  "strat-max-lines": ["strategy.max_lines", "int"],
+  "strat-side": ["strategy.fallback_side", "text"],
+  "strat-obey": ["strategy.obey_commands", "bool"],
+  "strat-quiet": ["strategy.quiet_seconds", "float"],
+
   "snitch-enabled": ["snitch.enabled", "bool"],
   "snitch-asked": ["snitch.answer_when_asked", "bool"],
   "snitch-phrases": ["snitch.request_phrases", "list"],
@@ -264,6 +278,22 @@ function pushEvent(event) {
       `<span class="who">reveal →</span> ${escapeHtml(data.text)}`,
       `reply ${data.delivered ? "" : "failed"}`,
       escapeHtml(data.reason),
+    );
+  } else if (event.kind === "strategy") {
+    line(
+      `<span class="who">strat →</span> ${escapeHtml(data.text)}`,
+      `reply ${data.delivered ? "" : "failed"}`,
+      escapeHtml(
+        [data.map, data.side, data.strategy].filter(Boolean).join(" ") + ` · ${data.reason}`,
+      ),
+    );
+  } else if (event.kind === "command") {
+    line(
+      data.kind === "quiet"
+        ? `${escapeHtml(data.by)} told the bot to be quiet`
+        : `${escapeHtml(data.by)} told the bot to talk again`,
+      "gamestate",
+      data.kind === "quiet" ? escapeHtml(`for ${data.for}s`) : "",
     );
   } else if (event.kind === "snitch") {
     line(

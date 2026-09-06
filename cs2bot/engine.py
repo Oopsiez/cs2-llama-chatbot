@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import __version__
+from . import __version__, commands, playbook
 from .config import AppConfig, load_config, save_config
 from .echo import EchoGuard
 from .events import EventBus
@@ -21,11 +21,11 @@ from .identity import addressed_to, detect_name_from_line
 from .liveness import DeathBoard
 from .llm import LLMBackend, LLMError, SamplingParams, build_backend
 from .logtail import LogTailer
-from .models import BotReply, ChatChannel, ChatMessage, LifeState
+from .models import BotReply, ChatChannel, ChatMessage, LifeState, Team
 from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
-from .persona import build_reveal_turns, build_turns
+from .persona import build_reveal_turns, build_strategy_turns, build_turns
 from .rules import should_reply
 from .snitch import announcement, is_request, where
 
@@ -42,6 +42,8 @@ PROBE_ANSWER_SECONDS = 5.0
 # What the self-test makes CS2 print, and how long it waits for that to reach the console log.
 SELF_TEST_TOKEN = "cs2bot_keypress_ok"
 SELF_TEST_SECONDS = 4.0
+# How many calls back the bot remembers, so "strat?" twice in a row does not get the same answer.
+STRATEGY_MEMORY = 4
 
 
 class Engine:
@@ -64,6 +66,11 @@ class Engine:
         self.last_name_probe: str = ""
         self._probed_at = float("-inf")
         self.recent_replies: list[str] = []
+        self.recent_strats: list[str] = []
+        self._quiet_until = float("-inf")
+        self._round_started_at = float("-inf")
+        self._round_marker: tuple[str, int] = ("", 0)
+        self._called_for: tuple[str, int] | None = None
         self.recent_lines: deque[dict[str, Any]] = deque(maxlen=RAW_LINE_MEMORY)
         self.lines_seen = 0
         self.last_generation_repeated = False
@@ -291,6 +298,7 @@ class Engine:
                 continue
             await self.handle_message(message)
         await self._maybe_ask_for_name()
+        await self.maybe_call_strategy()
         await self.maybe_announce()
         await self.maybe_reveal()
 
@@ -303,6 +311,16 @@ class Engine:
         self.bus.publish("chat", message.model_dump(mode="json"))
 
         if not self.config.enabled:
+            return None
+
+        taken, called = await self._handle_command(message)
+        if taken:
+            return called
+        if self.quiet:
+            self.bus.publish(
+                "skipped",
+                {"message": message.model_dump(mode="json"), "reason": "told to be quiet"},
+            )
             return None
 
         local_state = self.game_state.local_state(self.config.dead_alive.assume_alive_without_gsi)
@@ -380,6 +398,182 @@ class Engine:
         self.history.append(own_message)
         self.bus.publish("reply", reply.model_dump(mode="json"))
         return reply
+
+    # ---- strategies and orders ----------------------------------------------------
+
+    @property
+    def quiet(self) -> bool:
+        """Whether somebody told the bot to shut up and the timer has not run out."""
+        return time.monotonic() < self._quiet_until
+
+    @property
+    def in_round_start(self) -> bool:
+        """Whether a call is still worth making - freezetime, or just after it.
+
+        Without GSI there is no round phase at all, in which case every moment counts as the
+        start of a round rather than none of them.
+        """
+        player = self.game_state.player
+        if player.is_stale or not player.round_phase:
+            return True
+        if player.round_phase == "freezetime":
+            return True
+        return time.monotonic() - self._round_started_at <= self.config.strategy.round_start_seconds
+
+    def _track_round(self) -> None:
+        marker = (self.game_state.player.round_phase, self.game_state.player.round_number)
+        if marker == self._round_marker:
+            return
+        if marker[0] == "freezetime" or marker[1] != self._round_marker[1]:
+            self._round_started_at = time.monotonic()
+        self._round_marker = marker
+
+    async def _handle_command(self, message: ChatMessage) -> tuple[bool, BotReply | None]:
+        """Take an order out of chat. Returns whether the line was an order at all."""
+        settings = self.config.strategy
+        if message.is_self or not settings.enabled:
+            return False, None
+        if message.sender in self.config.behavior.ignore_players:
+            return False, None
+        command = commands.parse(message.text, settings)
+        if command is None:
+            return False, None
+        if not commands.listens_to(settings, message.channel):
+            self.bus.publish(
+                "skipped",
+                {
+                    "message": message.model_dump(mode="json"),
+                    "reason": f"orders are only taken from {settings.listen_channel} chat",
+                },
+            )
+            return True, None
+
+        if command.kind == commands.QUIET:
+            self._quiet_until = time.monotonic() + settings.quiet_seconds
+            self.bus.publish(
+                "command", {"kind": "quiet", "by": message.sender, "for": settings.quiet_seconds}
+            )
+            return True, None
+        if command.kind == commands.TALK:
+            self._quiet_until = float("-inf")
+            self.bus.publish("command", {"kind": "talk", "by": message.sender})
+            return True, None
+
+        if settings.round_start_only and not self.in_round_start:
+            self.bus.publish(
+                "skipped",
+                {
+                    "message": message.model_dump(mode="json"),
+                    "reason": "strats are only called at the start of a round",
+                },
+            )
+            return True, None
+        return True, await self.call_strategy(asked_by=message, site=command.site)
+
+    async def maybe_call_strategy(self) -> None:
+        """Call the round's strat unprompted, once, if that was asked for in the settings."""
+        self._track_round()
+        settings = self.config.strategy
+        if not (self.config.enabled and settings.enabled and settings.call_every_round):
+            return
+        if self.quiet or self.game_state.player.is_warmup:
+            return
+        if self.game_state.player.round_phase != "freezetime":
+            return
+        if self._called_for == self._round_marker:
+            return
+        self._called_for = self._round_marker
+        await self.call_strategy()
+
+    async def call_strategy(
+        self, asked_by: ChatMessage | None = None, site: str = ""
+    ) -> BotReply | None:
+        """Pick a real call for the map and side we are on, say it, and send it."""
+        settings = self.config.strategy
+        player = self.game_state.player
+        side = player.team if player.team in (Team.T, Team.CT) else self._fallback_side()
+        strategy = playbook.pick(
+            player.map_name, side, site=site, avoid=self.recent_strats, rng=self._random
+        )
+        if strategy is None:
+            return None
+
+        started = time.perf_counter()
+        lines = await self._strategy_lines(strategy, asked_by.sender if asked_by else "")
+        self.recent_strats.append(strategy.name)
+        del self.recent_strats[:-STRATEGY_MEMORY]
+        text = "\n".join(lines)
+        for line in lines:
+            self._remember_reply(line)
+            self.echo.remember(line)
+
+        asked_in = asked_by.channel if asked_by else ChatChannel.TEAM
+        team_only = commands.answer_in_team_chat(settings, asked_in)
+        # A whole strat does not fit in one chat line, so it goes out a step at a time.
+        delivered, detail = True, ""
+        for line in lines:
+            delivered, detail = await self.sender.send(line, team_only=team_only)
+            if not delivered:
+                break
+        self.last_spoke_at = time.time()
+        self.last_reply_at = time.monotonic()
+        self.bus.publish(
+            "strategy",
+            {
+                "text": text,
+                "strategy": strategy.name,
+                "map": playbook.map_label(player.map_name) or player.map_name,
+                "side": strategy.side.value,
+                "asked_by": asked_by.sender if asked_by else "",
+                "delivered": delivered,
+                "reason": detail,
+            },
+        )
+        if asked_by is None:
+            return None
+        return BotReply(
+            in_reply_to=asked_by,
+            text=text,
+            delivered=delivered,
+            reason=detail,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )
+
+    def _fallback_side(self) -> Team:
+        return Team.CT if self.config.strategy.fallback_side.upper() == "CT" else Team.T
+
+    async def _strategy_lines(self, strategy: playbook.Strategy, asked_by: str) -> list[str]:
+        """The call as it goes into chat - in the persona's voice, or plain if that fails.
+
+        The playbook lines are the fallback rather than an error, because a strat nobody can read
+        is worth more than no strat at all when the model is down.
+        """
+        settings = self.config.strategy
+        plain = playbook.call_lines(strategy, settings.max_lines)
+        if not settings.in_character:
+            return plain
+        try:
+            raw = await self.backend.generate(
+                build_strategy_turns(self.config, self.game_state.player, strategy, asked_by),
+                self._sampling_params(),
+            )
+        except LLMError as exc:
+            self.last_error = str(exc)
+            return plain
+        spoken = [
+            humanize(
+                line,
+                literacy=self.config.behavior.literacy,
+                max_chars=self.config.persona.max_reply_chars,
+                seed=self._random.randrange(2**32),
+            )
+            for line in raw.splitlines()
+            if line.strip()
+        ]
+        spoken = [line for line in spoken if line]
+        if not spoken:
+            return plain
+        return spoken[: settings.max_lines] if settings.max_lines > 0 else spoken
 
     # ---- snitching ---------------------------------------------------------------
 
