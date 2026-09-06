@@ -120,6 +120,49 @@ def render_gsi_cfg(endpoint: str, auth_token: str = "") -> str:
     )
 
 
+def gsi_endpoint(port: int) -> str:
+    """Where CS2 posts state. Always loopback: CS2 posts from the same machine, and a panel
+    bound to 0.0.0.0 so a phone can reach it must not put 0.0.0.0 in the game's config."""
+    return f"http://127.0.0.1:{port}/api/gsi"
+
+
+def inspect_gsi_cfg(cfg_dir: str | Path, endpoint: str, auth_token: str = "") -> list[str]:
+    """Everything wrong with the GSI configs on disk, in the order worth fixing.
+
+    An empty list means CS2 has been told to post to us; it says nothing about whether it has.
+    """
+    problems: list[str] = []
+    if not str(cfg_dir).strip():
+        return ["the CS2 cfg directory is not set on the Game tab"]
+
+    directory = Path(cfg_dir)
+    if not directory.is_dir():
+        return [f"{directory} does not exist - point the cfg directory at .../game/csgo/cfg"]
+    if directory.name != "cfg" or directory.parent.name != "csgo":
+        problems.append(
+            f"{directory} is not .../game/csgo/cfg - CS2 only reads GSI configs from that folder"
+        )
+
+    ours = directory / GSI_CFG_NAME
+    if not ours.is_file():
+        others = sorted(p.name for p in directory.glob("gamestate_integration_*.cfg"))
+        problems.append(
+            f"{GSI_CFG_NAME} is not installed"
+            + (f" (found {', '.join(others)} instead)" if others else "")
+        )
+        return problems
+
+    text = ours.read_text(encoding="utf-8", errors="replace")
+    if endpoint not in text:
+        problems.append(
+            f"{ours.name} does not point at {endpoint} - the panel's port changed since it was "
+            "installed, so reinstall it"
+        )
+    if auth_token and f'"{auth_token}"' not in text:
+        problems.append(f"{ours.name} carries a different auth token - reinstall it")
+    return problems
+
+
 def install_gsi_cfg(cfg_dir: str | Path, endpoint: str, auth_token: str = "") -> Path:
     directory = Path(cfg_dir)
     directory.mkdir(parents=True, exist_ok=True)

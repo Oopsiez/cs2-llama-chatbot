@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,7 @@ from ..callouts import DEFAULT_RADIUS, Callout
 from ..config import AppConfig, PersonaSettings, config_path, load_config, save_config
 from ..elevate import relaunch_as_admin
 from ..engine import Engine
-from ..gamestate import install_gsi_cfg
+from ..gamestate import gsi_endpoint, inspect_gsi_cfg, install_gsi_cfg
 from ..identity import detect_name_from_line
 from ..llm import BACKENDS
 from ..models import LifeState
@@ -146,7 +147,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         if player.position is None:
             raise HTTPException(
                 status_code=422,
-                detail="CS2 has not reported a position; install the GSI config and join a map",
+                detail=(
+                    "CS2 has not reported a position. Official matches only send it while you "
+                    "are spectating, so record callouts from a spectator slot, a private server "
+                    "or after you die - or press Check GSI if it never arrives at all."
+                ),
             )
         book = engine.config.callouts.model_copy(deep=True)
         book.record(
@@ -253,12 +258,48 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         engine.bus.publish("gamestate", player.model_dump(mode="json"))
         return JSONResponse({"ok": True})
 
+    @app.get("/api/gsi/status")
+    async def gsi_status() -> dict[str, Any]:
+        """Why GSI is not connected: the config on disk, and whether CS2 has ever posted."""
+        config = engine.config
+        endpoint = gsi_endpoint(config.web.port)
+        problems = inspect_gsi_cfg(config.game.cfg_dir, endpoint, config.gsi.auth_token)
+        player = engine.game_state.player
+        posted = player.updated_at > 0
+        if not problems and not posted:
+            problems.append(
+                "the config is installed but CS2 has never posted - restart CS2, since it only "
+                "reads GSI configs at startup"
+            )
+        elif not problems and player.is_stale:
+            problems.append(
+                f"CS2 last posted {int(time.time() - player.updated_at)}s ago - it is closed, or "
+                "the panel was restarted on a different port"
+            )
+        return {
+            "connected": not player.is_stale,
+            "endpoint": endpoint,
+            "problems": problems,
+            "seconds_since_post": round(time.time() - player.updated_at, 1) if posted else None,
+            "map": player.map_name,
+            "mode": player.mode,
+            "team": player.team.value,
+            "round_phase": player.round_phase,
+            "round_number": player.round_number,
+            "has_position": player.position is not None,
+            "note": (
+                "In Premier and other official matches CS2 reports your map, side, round phase "
+                "and health, which is everything strats and dead chat need. Position is only "
+                "sent while spectating, so callouts fill in once you die."
+            ),
+        }
+
     @app.post("/api/gsi/install")
     async def gsi_install() -> dict[str, str]:
         cfg_dir = engine.config.game.cfg_dir
         if not cfg_dir:
             raise HTTPException(status_code=422, detail="set the CS2 cfg directory first")
-        endpoint = f"http://{engine.config.web.host}:{engine.config.web.port}/api/gsi"
+        endpoint = gsi_endpoint(engine.config.web.port)
         try:
             path = install_gsi_cfg(cfg_dir, endpoint, engine.config.gsi.auth_token)
         except OSError as exc:

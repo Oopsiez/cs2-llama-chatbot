@@ -220,10 +220,9 @@ class RevealSettings(BaseModel):
 
 
 class GSISettings(BaseModel):
-    host: str = "127.0.0.1"
-    port: int = 3000
+    """CS2 posts to the panel's own port, so there is nothing to configure but the token."""
+
     auth_token: str = ""
-    enabled: bool = True
 
 
 class WebSettings(BaseModel):

@@ -105,7 +105,6 @@ const BINDINGS = {
   "output-backend": ["game.output_backend", "text"],
   "require-focus": ["game.require_focus", "bool"],
 
-  "gsi-port": ["gsi.port", "int"],
   "gsi-token": ["gsi.auth_token", "text"],
 };
 
@@ -458,6 +457,25 @@ function bindActions() {
     const response = await fetch("/api/gsi/install", { method: "POST" });
     const body = await response.json();
     $("gsi-note").textContent = response.ok ? `written to ${body.path} — restart CS2` : body.detail;
+  });
+
+  $("gsi-check").addEventListener("click", async () => {
+    const body = await (await fetch("/api/gsi/status")).json();
+    const lines = [
+      body.connected
+        ? `connected — CS2 posted ${body.seconds_since_post}s ago`
+        : "not connected",
+      `endpoint: ${body.endpoint}`,
+      ...body.problems.map((problem) => `• ${problem}`),
+    ];
+    if (body.connected) {
+      lines.push(
+        `map: ${body.map || "—"} (${body.mode || "—"}) · side: ${body.team} · round ${body.round_number} ${body.round_phase}`,
+        `position: ${body.has_position ? "reported" : "not reported"}`,
+      );
+    }
+    lines.push(body.note);
+    $("gsi-result").textContent = lines.join("\n");
   });
 
   $("name-detect").addEventListener("click", async () => {

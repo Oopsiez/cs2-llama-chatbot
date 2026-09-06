@@ -30,7 +30,9 @@ on first run.
 2. **Bind a key.** Open the developer console in CS2 and paste: `bind p "exec message.cfg"`
    (any key works - just set the same one in the panel).
 3. **Press *Install GSI config*** on the panel's Game tab, then restart CS2. That is what lets the
-   bot know whether you are alive, what round it is, and where you are standing.
+   bot know whether you are alive, what round it is, and where you are standing. CS2 only reads
+   that config when it starts, so the restart is not optional. **Check GSI** on the same tab says
+   what is wrong if the header still reads *gsi: waiting*.
 
 Press **Start bot** and play. The panel shows every message it sees, every reply, and the reason it
 stayed quiet when it did.
@@ -110,7 +112,11 @@ In chat:
 - `!quiet` - shut up for two minutes. `!talk` - come back.
 
 The map and side come from Game State Integration, so install the GSI config (**Game** tab) or it
-falls back to the side you picked in the panel and to map-agnostic calls. Covered maps are the
+falls back to the side you picked in the panel and to map-agnostic calls. GSI is Valve's own API
+and works in Premier and other official matches: it reports your map, side, round phase and health,
+which is everything the strats and the dead-chat rules need. The one thing official matches hold
+back is your position - CS2 only sends that while you are spectating - so callouts fill in after
+you die rather than while you are alive. Covered maps are the
 current Premier and FACEIT active duty pool: **Mirage, Inferno, Dust 2, Anubis, Ancient, Nuke,
 Cache**. Anything else - workshop maps, deathmatch servers - gets calls that hold on any map.
 
