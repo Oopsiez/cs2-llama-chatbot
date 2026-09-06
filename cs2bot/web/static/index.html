@@ -416,14 +416,18 @@
       </div>
       <div class="result" id="output-result">—</div>
       <div class="divider"></div>
-      <div class="row">
-        <label>GSI port<input type="number" id="gsi-port" min="1" max="65535" /></label>
-        <label>GSI auth token (optional)<input type="text" id="gsi-token" /></label>
-      </div>
+      <label>Game State Integration
+        <span class="hint">CS2 posts your map, side, round phase and health to the panel. It works
+          in Premier and other official matches, but CS2 only reads the config at startup, so
+          restart the game after installing it.</span>
+      </label>
+      <label>GSI auth token (optional)<input type="text" id="gsi-token" /></label>
       <div class="actions">
         <button class="action" id="install-gsi">Install GSI config into CS2</button>
+        <button class="action" id="gsi-check">Check GSI</button>
         <span class="note" id="gsi-note"></span>
       </div>
+      <div class="result" id="gsi-result">—</div>
     </div>
 
     <div class="panel" data-panel="test">

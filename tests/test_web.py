@@ -120,6 +120,46 @@ def test_gsi_token_is_enforced(client):
     assert client.post("/api/gsi", json={"auth": {"token": "secret"}}).status_code == 200
 
 
+def test_gsi_status_reports_what_is_missing(client, tmp_path):
+    body = client.get("/api/gsi/status").json()
+    assert body["connected"] is False
+    assert body["endpoint"] == f"http://127.0.0.1:{client.engine.config.web.port}/api/gsi"
+    assert body["problems"]  # nothing is set up yet
+
+    cfg_dir = tmp_path / "csgo" / "cfg"
+    client.engine.config.game.cfg_dir = str(cfg_dir)
+    assert client.post("/api/gsi/install").status_code == 200
+    assert client.get("/api/gsi/status").json()["problems"] == [
+        "the config is installed but CS2 has never posted - restart CS2, since it only reads "
+        "GSI configs at startup"
+    ]
+
+    client.post(
+        "/api/gsi",
+        json={
+            "provider": {"steamid": "1"},
+            "player": {"steamid": "1", "name": "me", "team": "T", "state": {"health": 100}},
+            "map": {"name": "de_nuke", "phase": "live", "mode": "premier", "round": 3},
+            "round": {"phase": "freezetime"},
+        },
+    )
+    body = client.get("/api/gsi/status").json()
+    assert body["connected"] is True and not body["problems"]
+    assert (body["map"], body["mode"], body["team"]) == ("de_nuke", "premier", "T")
+    assert body["round_phase"] == "freezetime"
+    assert body["has_position"] is False  # official matches only send it while spectating
+
+
+def test_gsi_status_notices_a_config_left_on_an_old_port(client, tmp_path):
+    cfg_dir = tmp_path / "csgo" / "cfg"
+    client.engine.config.game.cfg_dir = str(cfg_dir)
+    client.post("/api/gsi/install")
+
+    client.engine.config.web.port = client.engine.config.web.port + 1
+    problems = client.get("/api/gsi/status").json()["problems"]
+    assert problems and "reinstall" in problems[0]
+
+
 def test_persona_save_and_delete(client):
     persona = client.get("/api/personas").json()["current"]
     persona["name"] = "Test Guy"
