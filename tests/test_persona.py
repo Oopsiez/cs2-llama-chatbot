@@ -98,10 +98,12 @@ def test_the_strategy_prompt_hands_the_model_the_call_verbatim():
         LocalPlayer(map_name="de_mirage", team=Team.T),
         strategy,
         asked_by="Gavin",
+        names=["kenny"],
     )
     system, user = turns[0], turns[-1]
     assert system.role == "system"
-    assert "change nothing tactical" in system.content
+    assert "Change nothing tactical" in system.content
+    assert "kenny " in user.content  # the first job goes out with a teammate's name on it
     assert "Mirage" in system.content and "T" in system.content
     assert all(step in user.content for step in strategy.steps)
     assert f"{len(strategy.steps)} lines in total" in system.content

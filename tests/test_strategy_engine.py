@@ -31,11 +31,11 @@ def chat(text: str, channel: ChatChannel = ChatChannel.TEAM) -> ChatMessage:
     )
 
 
-def playbook_lines(map_name: str, side: Team) -> set[str]:
+def playbook_lines(map_name: str, side: Team, names: list[str] | None = None) -> set[str]:
     return {
         line
         for s in playbook.strategies_for(map_name, side)
-        for line in playbook.call_lines(s)
+        for line in playbook.call_lines(s, names=names or [])
     }
 
 
@@ -44,7 +44,8 @@ async def test_answers_a_strat_request_with_a_real_call():
     engine = build_engine()
     reply = await engine.handle_message(chat("strat?"))
     assert reply is not None and reply.delivered
-    assert set(reply.text.split("\n")) <= playbook_lines("de_mirage", Team.T)
+    # Gavin asked in team chat, so he is a known teammate and gets the first job by name.
+    assert set(reply.text.split("\n")) <= playbook_lines("de_mirage", Team.T, ["Gavin"])
 
 
 @pytest.mark.asyncio
@@ -85,7 +86,36 @@ async def test_the_call_matches_the_side_we_are_on():
     engine = build_engine(team=Team.CT)
     reply = await engine.handle_message(chat("!strat"))
     assert reply is not None
-    assert set(reply.text.split("\n")) <= playbook_lines("de_mirage", Team.CT)
+    assert set(reply.text.split("\n")) <= playbook_lines("de_mirage", Team.CT, ["Gavin"])
+
+
+@pytest.mark.asyncio
+async def test_the_jobs_go_to_the_teammates_who_have_talked_in_team_chat():
+    engine = build_engine()
+    await engine.handle_message(chat("nice one"))  # Gavin
+    await engine.handle_message(
+        ChatMessage(raw="raw", sender="kenny", text="gg", channel=ChatChannel.TEAM)
+    )
+    # An enemy in all chat is not a teammate and must never be given a job.
+    await engine.handle_message(
+        ChatMessage(raw="raw", sender="Rat", text="ez", channel=ChatChannel.ALL)
+    )
+    reply = await engine.handle_message(chat("strat?"))
+    assert reply is not None
+
+    jobs = reply.text.split("\n")[1:]
+    # Newest voice first, so whoever asked for the strat is the one given the first job.
+    assert jobs[0].startswith("Gavin ") and jobs[1].startswith("kenny ")
+    assert jobs[2].startswith("P3 ")
+    assert "Rat" not in reply.text
+
+
+@pytest.mark.asyncio
+async def test_names_can_be_turned_off():
+    engine = build_engine(**{"strategy.name_players": False})
+    reply = await engine.handle_message(chat("strat?"))
+    assert reply is not None
+    assert reply.text.split("\n")[1].startswith("P1 ")
 
 
 @pytest.mark.asyncio

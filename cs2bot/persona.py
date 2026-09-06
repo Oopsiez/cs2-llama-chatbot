@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from .config import AppConfig, PersonaSettings
 from .humanize import game_iq_directive, literacy_directive
 from .llm.base import ChatTurn
 from .models import ChatChannel, ChatMessage, LifeState, LocalPlayer
 from .novelty import avoid_note
-from .playbook import Strategy, map_label
+from .playbook import Strategy, assign, map_label
 from .snitch import is_request, prompt_note
 
 PRESETS: dict[str, PersonaSettings] = {
@@ -254,6 +256,7 @@ def build_strategy_turns(
     player: LocalPlayer,
     strategy: Strategy,
     asked_by: str = "",
+    names: Sequence[str] = (),
 ) -> list[ChatTurn]:
     """Have the model say a real call in the persona's voice - and only that call.
 
@@ -267,12 +270,13 @@ def build_strategy_turns(
     if persona.style_notes.strip():
         lines.append(persona.style_notes.strip())
     lines.append(literacy_directive(config.behavior.literacy))
-    steps = strategy.steps or (strategy.call,)
+    steps = assign(strategy, names) or [strategy.call]
     lines.append(
         "You are calling the strategy for this round. Relay the call below as your own words, "
-        f"one chat line per numbered step, {len(steps)} lines in total, in the same order. Keep "
-        "every callout, site, number and piece of utility exactly as given, change nothing "
-        "tactical, and add no advice of your own."
+        f"one chat line per numbered step, {len(steps)} lines in total, in the same order. Each "
+        "step is one player's job: keep the name or slot it starts with, and keep every callout, "
+        "position, piece of utility and post-plant duty exactly as given. Change nothing "
+        "tactical and add no advice of your own."
     )
     where_bits = [
         f"Map: {map_label(player.map_name) or player.map_name or 'unknown'}",

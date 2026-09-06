@@ -272,7 +272,12 @@
           <small>Off sends the playbook lines as written.</small></span></label>
         <label>Chat lines per strat
           <input type="number" id="strat-max-lines" min="1" max="8" step="1" />
+          <span class="hint">A call is a header plus one line per player, so six says all of it.</span>
         </label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="strat-name-players" /><span>Give the jobs to teammates by name
+          <small>Names come from whoever talks in team chat; the rest are called P2, P3.</small></span></label>
       </div>
       <div class="row">
         <label>Side to call for without GSI

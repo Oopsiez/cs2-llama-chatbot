@@ -17,22 +17,39 @@ def test_every_active_duty_map_has_both_sides():
 def test_every_line_of_every_call_fits_in_a_chat_line():
     for strategy in playbook.PLAYBOOK:
         assert strategy.steps, f"{strategy.name} has no steps"
-        for line in playbook.call_lines(strategy):
+        for line in playbook.call_lines(strategy, names=["a_long_enough_name"] * 5):
             assert len(line) <= 221, line
+
+
+def test_every_call_gives_all_five_players_a_position_and_a_job():
+    for strategy in playbook.PLAYBOOK:
+        assert len(strategy.jobs) == 5, strategy.name
+        for job in strategy.jobs:
+            assert job.spot and job.task, f"{strategy.name}: {job}"
+
+
+def test_the_jobs_go_to_the_teammates_we_know_and_slots_for_the_rest():
+    strategy = playbook.pick("de_mirage", Team.T, site="a", buy=playbook.FULL)
+    assert strategy is not None
+    lines = playbook.assign(strategy, ["Gavin", "kenny"])
+    assert lines[0].startswith("Gavin ramp:")
+    assert lines[1].startswith("kenny ramp:")
+    assert lines[2].startswith("P3 palace:")
+    assert lines[4].startswith("P5 connector:")
 
 
 def test_a_call_is_said_over_several_lines():
     strategy = playbook.pick("de_inferno", Team.T, site="b", buy=playbook.FULL)
     assert strategy is not None
     lines = playbook.call_lines(strategy)
-    assert len(lines) > 1
+    assert len(lines) == 6  # a header and one player per line
     assert lines[0].startswith("Inferno T:")
-    assert lines[1:] == list(strategy.steps)
+    assert lines[1:] == [f"P{i} {step}" for i, step in enumerate(strategy.steps, start=1)]
 
 
 def test_max_lines_folds_the_tail_in_rather_than_dropping_it():
     strategy = playbook.pick("de_mirage", Team.T, site="a", buy=playbook.FULL)
-    assert strategy is not None and len(strategy.steps) == 3
+    assert strategy is not None
 
     lines = playbook.call_lines(strategy, max_lines=3)
     assert len(lines) == 3

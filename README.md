@@ -84,15 +84,22 @@ how the round is actually played at a high level. The model never invents tactic
 call and, at most, allowed to say it in its own voice, so the utility and the site it names are the
 ones written down.
 
-A real strat does not fit in CS2's ~220 character chat line, so it is said the way a human IGL says
-it - one line at a time, utility first, then the movement, then what happens after the plant:
+Every call is five jobs, one per player: where you start, what you throw, who you entry or trade,
+who plants and what you hold after it. Nobody is told to "smoke something" - the line has a name on
+it. A strat does not fit in CS2's ~220 character chat line, so it goes out one player per line:
 
 ```
 Mirage T: A execute
-util: smoke jungle, CT and stairs - one flash over palace on the count
-go: 3 ramp, 2 palace, both sides cross on the same flash and trade the entry
-then: plant default, one holds jungle, one CT, one back in palace for the retake
+Gavin ramp: smoke jungle, entry ramp on the palace flash, take ticket
+kenny ramp: trade the ramp entry, molly stairs, then clear triple and sandwich
+P3 palace: smoke CT and stairs, flash over palace on the count
+P4 palace: entry from palace behind the flash, plant default at ticket
+P5 connector: hold connector against the mid rotate, fall back to jungle post-plant
 ```
+
+The names come from your team chat - anyone who has talked there this map is a teammate, newest
+voice first - and everyone else is `P3`, `P4`, `P5`. All chat is ignored for this on purpose:
+putting an enemy's name on a job is worse than a slot number.
 
 The **Strats** tab in the panel controls it:
 
@@ -102,7 +109,8 @@ The **Strats** tab in the panel controls it:
 | *Call in* | Team chat, all chat, or wherever it was asked. |
 | *Call every round* | Off by default. On, it calls one strat in freezetime, once per round, without being asked. |
 | *Only near round start* | Ignores strat requests once the round is underway. |
-| *Chat lines per strat* | How many lines it is allowed to spend. Anything that does not fit is folded into the last line rather than dropped. |
+| *Chat lines per strat* | How many lines it is allowed to spend. Six - a header plus five players - says all of it; anything that does not fit is folded into the last line rather than dropped. |
+| *Give the jobs to teammates by name* | On by default. Off, everyone is `P1`-`P5`. |
 | *Ask phrases* | The words it listens for. `strat`, `strats`, `what's the plan`, `call it`, `what do we do` by default. |
 
 In chat:

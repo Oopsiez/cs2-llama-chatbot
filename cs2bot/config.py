@@ -182,7 +182,9 @@ class StrategySettings(BaseModel):
     round_start_only: bool = False
     round_start_seconds: float = 25.0  # how long after freezetime a round still counts as starting
     in_character: bool = True  # let the model say it in the persona's voice
-    max_lines: int = 4  # a whole strat is said over several chat lines; 0 means no limit
+    # A strat is one chat line per player plus a header, so six lines says the whole call.
+    max_lines: int = 6  # 0 means no limit
+    name_players: bool = True  # put teammates' names on the jobs, learned from team chat
     # Side to call for when GSI has not told us which one we are on.
     fallback_side: str = "T"
     obey_commands: bool = True  # !quiet / !talk / !strat a
