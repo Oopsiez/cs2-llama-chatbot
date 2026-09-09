@@ -26,6 +26,7 @@ from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
 from .persona import build_reveal_turns, build_strategy_turns, build_turns
+from .roster import Roster
 from .rules import should_reply
 from .snitch import announcement, is_request, where
 
@@ -52,6 +53,7 @@ class Engine:
         self.bus = EventBus()
         self.game_state = GameStateStore()
         self.deaths = DeathBoard()
+        self.roster = Roster()
         self.echo = EchoGuard()
         self.history: list[ChatMessage] = []
         # Monotonic clocks start at boot, so a plain 0.0 would read as "just replied" on a
@@ -499,7 +501,8 @@ class Engine:
             return None
 
         started = time.perf_counter()
-        lines = await self._strategy_lines(strategy, asked_by.sender if asked_by else "")
+        names = self.roster.names(exclude=self.own_name) if settings.name_players else []
+        lines = await self._strategy_lines(strategy, asked_by.sender if asked_by else "", names)
         self.recent_strats.append(strategy.name)
         del self.recent_strats[:-STRATEGY_MEMORY]
         text = "\n".join(lines)
@@ -542,19 +545,23 @@ class Engine:
     def _fallback_side(self) -> Team:
         return Team.CT if self.config.strategy.fallback_side.upper() == "CT" else Team.T
 
-    async def _strategy_lines(self, strategy: playbook.Strategy, asked_by: str) -> list[str]:
+    async def _strategy_lines(
+        self, strategy: playbook.Strategy, asked_by: str, names: list[str]
+    ) -> list[str]:
         """The call as it goes into chat - in the persona's voice, or plain if that fails.
 
         The playbook lines are the fallback rather than an error, because a strat nobody can read
         is worth more than no strat at all when the model is down.
         """
         settings = self.config.strategy
-        plain = playbook.call_lines(strategy, settings.max_lines)
+        plain = playbook.call_lines(strategy, settings.max_lines, names)
         if not settings.in_character:
             return plain
         try:
             raw = await self.backend.generate(
-                build_strategy_turns(self.config, self.game_state.player, strategy, asked_by),
+                build_strategy_turns(
+                    self.config, self.game_state.player, strategy, asked_by, names
+                ),
                 self._sampling_params(),
             )
         except LLMError as exc:
@@ -660,6 +667,7 @@ class Engine:
 
     def track_state(self, message: ChatMessage) -> ChatMessage:
         """Learn the sender's life state from `[DEAD]`, and remember it for the round."""
+        self.roster.observe(message)
         if not self.config.dead_alive.track_players:
             return message
         self.deaths.note_phase(self.game_state.player.round_phase)

@@ -72,6 +72,7 @@ const BINDINGS = {
   "strat-round-seconds": ["strategy.round_start_seconds", "float"],
   "strat-in-character": ["strategy.in_character", "bool"],
   "strat-max-lines": ["strategy.max_lines", "int"],
+  "strat-name-players": ["strategy.name_players", "bool"],
   "strat-side": ["strategy.fallback_side", "text"],
   "strat-obey": ["strategy.obey_commands", "bool"],
   "strat-quiet": ["strategy.quiet_seconds", "float"],
