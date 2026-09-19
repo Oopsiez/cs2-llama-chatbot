@@ -264,3 +264,104 @@ async def test_reply_is_capped_by_persona_limit():
     reply = await engine.handle_message(chat())
     assert reply is not None
     assert len(reply.text) <= 20
+
+
+def build_voice_engine(**overrides) -> Engine:
+    engine = build_engine(**overrides)
+    engine.config.voice.enabled = True
+    engine.config.voice.trigger_words = []
+    engine.config.voice.cooldown_seconds = 0
+    return engine
+
+
+@pytest.mark.asyncio
+async def test_a_transcript_is_answered_in_team_chat():
+    engine = build_voice_engine()
+    reply = await engine.handle_voice("they are pushing b, we need help")
+    assert reply is not None and reply.delivered
+    assert engine._sender.sent[-1][1] is True  # team_only
+
+
+@pytest.mark.asyncio
+async def test_voice_answers_team_chat_even_when_the_bot_only_talks_in_all_chat():
+    engine = build_voice_engine(**{"behavior.reply_channels": [ChatChannel.ALL]})
+    reply = await engine.handle_voice("they are pushing b, we need help")
+    assert reply is not None
+    assert engine._sender.sent[-1][1] is True
+
+
+@pytest.mark.asyncio
+async def test_a_grunt_is_not_worth_answering():
+    engine = build_voice_engine(**{"voice.min_words": 3})
+    assert await engine.handle_voice("uh what") is None
+    assert not engine._sender.sent
+
+
+@pytest.mark.asyncio
+async def test_voice_only_answers_when_its_own_trigger_word_is_said():
+    engine = build_voice_engine()
+    engine.config.voice.trigger_words = ["bot"]
+    engine.config.behavior.trigger_words = ["hey"]
+    assert await engine.handle_voice("hey are they pushing b") is None
+    assert await engine.handle_voice("bot are they pushing b") is not None
+
+
+@pytest.mark.asyncio
+async def test_voice_is_paced_on_a_clock_of_its_own():
+    engine = build_voice_engine()
+    engine.config.voice.cooldown_seconds = 60
+    engine.config.behavior.cooldown_seconds = 0
+    assert await engine.handle_voice("they are pushing b right now") is not None
+    assert await engine.handle_voice("they are going a instead") is None
+    # Typed chat is not silenced by the voice cooldown.
+    assert await engine.handle_message(chat()) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_spoken_transcript_never_puts_a_name_on_a_strat_job():
+    engine = build_voice_engine()
+    await engine.handle_voice("they are pushing b, we need help")
+    assert engine.roster.names() == []
+
+
+@pytest.mark.asyncio
+async def test_a_spoken_order_is_answered_in_team_chat_even_when_strats_go_to_all_chat():
+    engine = build_voice_engine()
+    engine.config.strategy.enabled = True
+    engine.config.strategy.reply_channel = "all"
+    engine.config.strategy.round_start_only = False
+    engine.game_state.player.map_name = "de_mirage"
+    reply = await engine.handle_voice("what is the plan here")
+    assert reply is not None
+    assert engine._sender.sent
+    assert all(team_only for _, team_only in engine._sender.sent)
+
+
+@pytest.mark.asyncio
+async def test_spoken_orders_can_be_ignored():
+    engine = build_voice_engine(**{"voice.obey_commands": False})
+    engine.config.strategy.enabled = True
+    engine.config.strategy.round_start_only = False
+    engine.game_state.player.map_name = "de_mirage"
+    engine.config.voice.trigger_words = ["bot"]
+    assert await engine.handle_voice("what is the plan here") is None
+
+
+@pytest.mark.asyncio
+async def test_nothing_listens_until_voice_is_turned_on():
+    engine = build_engine()
+    engine.config.voice.enabled = False
+    await engine.pump_voice()
+    assert engine._voice is None
+    assert engine.voice_status()["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_changing_the_voice_settings_builds_a_fresh_listener():
+    engine = build_voice_engine()
+    listener = engine.voice
+    updated = engine.config.model_copy(deep=True)
+    updated.voice.device = "some other speakers"
+    await engine.apply_config(updated, persist=False)
+    assert engine._voice is None
+    assert engine.voice is not listener

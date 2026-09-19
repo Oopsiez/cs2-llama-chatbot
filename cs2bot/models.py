@@ -17,6 +17,18 @@ class ChatChannel(str, Enum):
     UNKNOWN = "unknown"
 
 
+class MessageSource(str, Enum):
+    """Where a message reached the bot.
+
+    Voice is not a third chat channel - it is a different way of hearing one. It matters because
+    voice comms are team-only and a transcript is a guess, so replies to it are written and
+    routed differently from replies to something somebody typed.
+    """
+
+    CHAT = "chat"
+    VOICE = "voice"
+
+
 class Team(str, Enum):
     T = "T"
     CT = "CT"
@@ -31,18 +43,23 @@ class LifeState(str, Enum):
 
 
 class ChatMessage(BaseModel):
-    """A chat line parsed out of the CS2 console log."""
+    """Something said to the bot: a chat line from the console log, or transcribed speech."""
 
     raw: str
     sender: str
     text: str
     channel: ChatChannel = ChatChannel.UNKNOWN
+    source: MessageSource = MessageSource.CHAT
     sender_state: LifeState = LifeState.UNKNOWN
     sender_team: Team = Team.UNKNOWN
     is_self: bool = False
     addressed_to_me: bool = False
     mention_reason: str = ""
     timestamp: float = Field(default_factory=time.time)
+
+    @property
+    def is_voice(self) -> bool:
+        return self.source is MessageSource.VOICE
 
 
 class LocalPlayer(BaseModel):

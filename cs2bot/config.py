@@ -191,6 +191,30 @@ class StrategySettings(BaseModel):
     quiet_seconds: float = 120.0  # how long `!quiet` shuts the bot up for
 
 
+class VoiceSettings(BaseModel):
+    """Hearing the team talk, and answering them in text.
+
+    The bot listens to what the speakers are playing, so it hears the same voice comms you do
+    without touching the game or your microphone. Replies always go to team chat: voice comms
+    are team-only, and answering the enemy team something they never said would be nonsense.
+
+    `trigger_words` is the guard against a chatty lobby - with it set, only utterances mentioning
+    one of the words get an answer, which is how you stop it replying to every callout.
+    """
+
+    enabled: bool = False
+    device: str = ""  # blank -> the default speakers
+    model: str = "small.en"  # a Whisper model name, downloaded once on first use
+    # Only answer speech containing one of these; empty means answer anything worth answering.
+    trigger_words: list[str] = Field(default_factory=lambda: ["bot"])
+    obey_commands: bool = True  # spoken !quiet / strat calls count as commands
+    cooldown_seconds: float = 8.0  # voice arrives far faster than typing does
+    min_words: int = 2  # ignore one-word transcripts, which are usually noise
+    # How loud speech has to be before it is transcribed at all. Raise it if gunfire is being
+    # sent to the model, lower it if a quiet teammate is being missed.
+    noise_floor: float = 0.006
+
+
 PROJECT_URL = "https://github.com/Oopsiez/cs2-llama-chatbot"
 
 
@@ -242,6 +266,7 @@ class AppConfig(BaseModel):
     dead_alive: DeadAliveSettings = Field(default_factory=DeadAliveSettings)
     snitch: SnitchSettings = Field(default_factory=SnitchSettings)
     strategy: StrategySettings = Field(default_factory=StrategySettings)
+    voice: VoiceSettings = Field(default_factory=VoiceSettings)
     reveal: RevealSettings = Field(default_factory=RevealSettings)
     callouts: CalloutBook = Field(default_factory=CalloutBook)
     gsi: GSISettings = Field(default_factory=GSISettings)

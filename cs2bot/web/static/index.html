@@ -36,6 +36,7 @@
       <button class="tab" role="tab" data-tab="model">Model</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
       <button class="tab" role="tab" data-tab="strats">Strats</button>
+      <button class="tab" role="tab" data-tab="voice">Voice</button>
       <button class="tab" role="tab" data-tab="snitch">Snitch</button>
       <button class="tab" role="tab" data-tab="game">Game</button>
       <button class="tab" role="tab" data-tab="test">Test</button>
@@ -293,6 +294,57 @@
           <input type="number" id="strat-quiet" min="0" step="10" />
         </label>
       </div>
+    </div>
+
+    <div class="panel" data-panel="voice">
+      <p class="note">
+        The bot listens to what your speakers are playing and transcribes it with a local Whisper
+        model, so it hears the same voice comms you do without touching the game or your
+        microphone. It hears <em>all</em> of the game - gunfire included - and the mix carries no
+        names, so transcripts are rougher than chat and nobody is quoted by name.
+        <strong>Answers always go to team chat</strong>, because voice comms are team-only.
+      </p>
+      <div class="result" id="voice-status">—</div>
+      <label class="check"><input type="checkbox" id="voice-enabled" /><span>Listen to voice comms
+        <small>The speech model is downloaded once, the first time it listens.</small></span></label>
+      <div class="row">
+        <label>Listen to
+          <select id="voice-device"></select>
+          <span class="hint">The speakers CS2 plays through.</span>
+        </label>
+        <label>Speech model
+          <select id="voice-model">
+            <option value="tiny.en">tiny.en - fastest, roughest (~75 MB)</option>
+            <option value="base.en">base.en - quick (~150 MB)</option>
+            <option value="small.en">small.en - recommended (~500 MB)</option>
+            <option value="medium.en">medium.en - best, needs a strong CPU (~1.5 GB)</option>
+          </select>
+        </label>
+      </div>
+      <label>Only answer speech containing (comma separated) <span class="hint">empty answers everything it hears - a talkative lobby will spam chat</span>
+        <input type="text" id="voice-triggers" />
+      </label>
+      <div class="row">
+        <label>Wait between answers (seconds)
+          <input type="number" id="voice-cooldown" min="0" step="1" />
+        </label>
+        <label>Ignore speech shorter than (words)
+          <input type="number" id="voice-min-words" min="1" step="1" />
+        </label>
+      </div>
+      <div class="row">
+        <label>Noise gate <span class="hint">raise it if gunfire is being transcribed, lower it if a quiet teammate is missed</span>
+          <input type="number" id="voice-floor" min="0" max="0.2" step="0.001" />
+        </label>
+        <label class="check"><input type="checkbox" id="voice-obey" /><span>Obey spoken orders
+          <small>"strat?" or "bot quiet" said out loud counts the same as typed.</small></span></label>
+      </div>
+      <div class="actions">
+        <input type="text" id="voice-say" placeholder="strat?" style="max-width:260px" />
+        <button class="action primary" id="voice-test">Pretend somebody said this</button>
+        <button class="action" id="voice-restart">Restart listening</button>
+      </div>
+      <div class="result" id="voice-output">—</div>
     </div>
 
     <div class="panel" data-panel="snitch">

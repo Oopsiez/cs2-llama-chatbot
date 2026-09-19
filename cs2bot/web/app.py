@@ -26,6 +26,7 @@ from ..parser import parse_chat_line
 from ..persona import PRESETS, build_system_prompt
 from ..rules import should_reply
 from ..snitch import where
+from ..voice.audio import output_devices
 
 STATIC_DIR = Path(__file__).parent / "static"
 # Long enough for the browser to receive the answer before the process goes away.
@@ -219,6 +220,38 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         if started:
             asyncio.get_running_loop().call_later(RESTART_GRACE_SECONDS, os._exit, 0)
         return {"started": started, "detail": detail}
+
+    @app.get("/api/voice")
+    async def voice_status() -> dict[str, Any]:
+        """Whether the bot can hear voice comms here, and what it last heard."""
+        return {
+            "status": engine.voice_status(),
+            "devices": output_devices(),
+            "settings": engine.config.voice.model_dump(mode="json"),
+        }
+
+    @app.post("/api/voice/restart")
+    async def voice_restart() -> dict[str, Any]:
+        """Try the sound card again after a failure, without touching the settings."""
+        engine.voice.restart()
+        return engine.voice_status()
+
+    @app.post("/api/voice/simulate")
+    async def voice_simulate(payload: dict[str, Any]) -> dict[str, Any]:
+        """Put words in a teammate's mouth: run a transcript through the voice path.
+
+        This is how the reply, and the fact that it goes to team chat, can be checked without a
+        microphone, a match or a working sound card.
+        """
+        heard = str(payload.get("text") or "").strip()
+        if not heard:
+            raise HTTPException(status_code=422, detail="nothing was said")
+        reply = await engine.handle_voice(heard)
+        return {
+            "heard": heard,
+            "replied": reply is not None,
+            "reply": reply.model_dump(mode="json") if reply else None,
+        }
 
     @app.post("/api/simulate")
     async def simulate(payload: dict[str, Any]) -> dict[str, Any]:

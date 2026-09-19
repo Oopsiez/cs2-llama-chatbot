@@ -69,6 +69,8 @@ stayed quiet when it did.
   describes **you** - see [Is this a cheat?](#is-this-a-cheat) below.
 - **Call an actual strat.** Type `strat?` (or `!strat b`) in chat and it answers with a real call
   for the map and side you are on - see [Calling strats](#calling-strats).
+- **Hear the team talk.** Turn on the **Voice** tab and it listens to what your speakers are
+  playing, transcribes it locally and answers in team chat - see [Hearing voice comms](#hearing-voice-comms).
 - **Never repeat itself.** A reply too close to a recent one is thrown away and regenerated; if
   every attempt is a rerun, it stays quiet instead.
 - **Answer at human speed.** A delay slider, or a checkbox that makes it read the message and then
@@ -127,6 +129,30 @@ back is your position - CS2 only sends that while you are spectating - so callou
 you die rather than while you are alive. Covered maps are the
 current Premier and FACEIT active duty pool: **Mirage, Inferno, Dust 2, Anubis, Ancient, Nuke,
 Cache**. Anything else - workshop maps, deathmatch servers - gets calls that hold on any map.
+
+## Hearing voice comms
+
+The **Voice** tab makes the bot listen to your speakers - the same mix you hear - transcribe it
+with a local Whisper model and answer in **team chat**. Nothing is spoken back: there is no
+text-to-speech and no virtual microphone, and your own microphone is never opened.
+
+- **It is off by default.** Tick *Listen to voice comms*, pick your speakers (blank = default),
+  and save.
+- **The speech model downloads once.** `small.en` is about 500 MB and is fetched the first time
+  somebody talks; the tab says whether it is ready, downloading, or failed. Everything else ships
+  inside the Windows installer - no `pip install` required.
+- **It only answers on a trigger word.** A lobby talks far more than it types, so by default it
+  waits to hear "bot". Clear the field to have it answer anything worth answering.
+- **Replies always go to team chat**, whatever the reply-channel settings say, because voice comms
+  are team-only.
+- **It cannot tell who spoke.** A speaker mix carries voices, gunfire and the bomb, with no names
+  attached - so transcripts are rougher than chat, nobody gets credited with a line, and a voice
+  transcript never earns a teammate a job in a strat.
+- **Spoken orders work too.** `strat?`, "what's the plan", "bot shut up" - unticking *Follow spoken
+  orders* turns that off.
+
+The *Say this out loud* box on the tab runs a transcript through the whole path without a
+microphone, which is the quickest way to see what it would answer.
 
 ## Teaching it callouts
 
@@ -190,11 +216,11 @@ watches the console log for it, so the three failures look different:
 ## For developers
 
 ```bash
-pip install -e ".[dev]"        # add [llama] for llama.cpp
+pip install -e ".[dev]"        # add [llama] for llama.cpp, [voice] to hear voice comms
 cs2bot                         # panel on http://127.0.0.1:8420
 pytest -q && ruff check . && mypy cs2bot
 python scripts/build_exe.py    # one-file executable (run this on Windows)
-iscc /DAppVersion=1.3.2 installer\cs2-chatbot.iss   # then wrap it in the installer
+iscc /DAppVersion=1.6.0 installer\cs2-chatbot.iss   # then wrap it in the installer
 ```
 
 Settings live in `config.json` in the per-user config directory (override with `CS2BOT_CONFIG`).
@@ -215,5 +241,6 @@ Settings live in `config.json` in the per-user config directory (override with `
 | `cs2bot/snitch.py` | what the bot is willing to give away about you |
 | `cs2bot/callouts.py` | recorded map positions and nearest-spot lookup |
 | `cs2bot/llm/` | llama.cpp / Ollama / mock backends |
+| `cs2bot/voice/` | speaker loopback capture, speech segmenting, local Whisper |
 | `cs2bot/output/` | delivery: Windows `message.cfg` + keypress, or dry run |
 | `cs2bot/web/` | FastAPI panel and static UI |
