@@ -27,6 +27,10 @@ class Roster:
         self._names.clear()
 
     def observe(self, message: ChatMessage) -> None:
+        # Voice is team-only too, but the speaker mix carries no name, so it proves nothing
+        # about who is on the team and would put a placeholder on a job.
+        if message.is_voice:
+            return
         if message.channel is not ChatChannel.TEAM or message.is_self or not message.sender:
             return
         key = message.sender.casefold()

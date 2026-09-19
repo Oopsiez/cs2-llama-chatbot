@@ -21,7 +21,7 @@ from .identity import addressed_to, detect_name_from_line
 from .liveness import DeathBoard
 from .llm import LLMBackend, LLMError, SamplingParams, build_backend
 from .logtail import LogTailer
-from .models import BotReply, ChatChannel, ChatMessage, LifeState, Team
+from .models import BotReply, ChatChannel, ChatMessage, LifeState, MessageSource, Team
 from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
@@ -29,6 +29,9 @@ from .persona import build_reveal_turns, build_strategy_turns, build_turns
 from .roster import Roster
 from .rules import should_reply
 from .snitch import announcement, is_request, where
+from .voice import VoiceListener, model_is_cached, whisper_missing
+from .voice.audio import SAMPLE_RATE, loopback_missing
+from .voice.segment import Segmenter
 
 POLL_INTERVAL = 0.25
 # Reading the message and deciding what to say, before any typing time.
@@ -45,6 +48,9 @@ SELF_TEST_TOKEN = "cs2bot_keypress_ok"
 SELF_TEST_SECONDS = 4.0
 # How many calls back the bot remembers, so "strat?" twice in a row does not get the same answer.
 STRATEGY_MEMORY = 4
+# Who a transcript is attributed to. Voices cannot be told apart in the speaker mix, so the bot
+# is honest about that instead of guessing a teammate's name.
+VOICE_SPEAKER = "voice"
 
 
 class Engine:
@@ -81,6 +87,8 @@ class Engine:
         self._backend: LLMBackend | None = None
         self._sender: ChatSender | None = None
         self._tailer: LogTailer | None = None
+        self._voice: VoiceListener | None = None
+        self.last_voice_reply_at = float("-inf")
         self._task: asyncio.Task[None] | None = None
         # Every roll the bot makes - reply probability, typos - comes from here, so passing a
         # seed makes a run reproducible.
@@ -244,6 +252,12 @@ class Engine:
             if self._tailer is not None:
                 self._tailer.close()
             self._tailer = None
+        if config.voice != old.voice:
+            # A new device, model or gate means a new listener - and this is also how a failed
+            # one is cleared, since saving the Voice tab is the user saying "try again".
+            if self._voice is not None:
+                self._voice.stop()
+            self._voice = None
         if persist:
             save_config(config)
         self.bus.publish("config", config.model_dump(mode="json"))
@@ -273,6 +287,8 @@ class Engine:
         if self._tailer is not None:
             self._tailer.close()
             self._tailer = None
+        if self._voice is not None:
+            self._voice.stop()
 
     async def _run(self) -> None:
         while True:
@@ -300,9 +316,83 @@ class Engine:
                 continue
             await self.handle_message(message)
         await self._maybe_ask_for_name()
+        await self.pump_voice()
         await self.maybe_call_strategy()
         await self.maybe_announce()
         await self.maybe_reveal()
+
+    # ---- voice comms ------------------------------------------------------------
+
+    @property
+    def voice(self) -> VoiceListener:
+        if self._voice is None:
+            settings = self.config.voice
+            self._voice = VoiceListener(
+                device=settings.device,
+                model_name=settings.model,
+                segmenter=Segmenter(SAMPLE_RATE, floor=settings.noise_floor),
+            )
+        return self._voice
+
+    async def pump_voice(self) -> None:
+        """Start or stop listening as the settings say, and answer anything heard."""
+        if not (self.config.enabled and self.config.voice.enabled):
+            if self._voice is not None:
+                self._voice.stop()
+            return
+        self.voice.start()
+        for utterance in self.voice.drain():
+            await self.handle_voice(utterance.text)
+
+    async def handle_voice(self, text: str) -> BotReply | None:
+        """Treat a transcript as if it had been typed in team chat.
+
+        Everything downstream - persona, strats, orders, novelty - is the same machinery the
+        typed path uses; only the routing is fixed, because voice comms are team-only and an
+        answer in all chat would be talking to the wrong five people.
+        """
+        text = " ".join(text.split())
+        if len(text.split()) < self.config.voice.min_words:
+            return None
+        return await self.handle_message(
+            ChatMessage(
+                raw=text,
+                sender=VOICE_SPEAKER,
+                text=text,
+                channel=ChatChannel.TEAM,
+                source=MessageSource.VOICE,
+                sender_team=self.game_state.player.team,
+            )
+        )
+
+    def voice_status(self) -> dict[str, Any]:
+        """What the Voice tab shows: whether it can listen here, and what it last heard."""
+        settings = self.config.voice
+        missing = loopback_missing() or whisper_missing()
+        status: dict[str, Any] = {
+            "enabled": settings.enabled,
+            "supported": not missing,
+            "unsupported_reason": missing,
+            "running": False,
+            "device": settings.device,
+            "model": settings.model,
+            "model_ready": model_is_cached(settings.model),
+            "downloading": False,
+            "heard": 0,
+            "last_text": "",
+            "last_heard_at": 0.0,
+            "error": "",
+        }
+        if self._voice is not None:
+            status.update(self._voice.status())
+            status["enabled"] = settings.enabled
+        return status
+
+    def _cooldown_for(self, message: ChatMessage) -> tuple[float, float]:
+        """`(seconds, last spoke at)` for whichever pacing clock this message answers to."""
+        if message.is_voice:
+            return self.config.voice.cooldown_seconds, self.last_voice_reply_at
+        return self.config.behavior.cooldown_seconds, self.last_reply_at
 
     # ---- message handling -------------------------------------------------------
 
@@ -342,7 +432,8 @@ class Engine:
         )
 
         now = time.monotonic()
-        if not urgent and now - self.last_reply_at < self.config.behavior.cooldown_seconds:
+        cooldown, last = self._cooldown_for(message)
+        if not urgent and now - last < cooldown:
             self.bus.publish(
                 "skipped",
                 {"message": message.model_dump(mode="json"), "reason": "cooling down"},
@@ -356,6 +447,8 @@ class Engine:
             return None
 
         self.last_reply_at = now
+        if message.is_voice:
+            self.last_voice_reply_at = now
         started = time.perf_counter()
         try:
             text = await self.generate_reply(message, local_state)
@@ -380,7 +473,7 @@ class Engine:
         self.echo.remember(text)
         await self._pause_before_sending(text, elapsed=time.perf_counter() - started)
 
-        delivered, detail = await self.sender.send(text, team_only=message.channel is ChatChannel.TEAM)
+        delivered, detail = await self.sender.send(text, team_only=self._team_only(message))
         reply = BotReply(
             in_reply_to=message,
             text=text,
@@ -400,6 +493,10 @@ class Engine:
         self.history.append(own_message)
         self.bus.publish("reply", reply.model_dump(mode="json"))
         return reply
+
+    def _team_only(self, message: ChatMessage) -> bool:
+        """Where an answer goes. Voice is always team chat, no matter how the bot is configured."""
+        return message.is_voice or message.channel is ChatChannel.TEAM
 
     # ---- strategies and orders ----------------------------------------------------
 
@@ -437,10 +534,14 @@ class Engine:
             return False, None
         if message.sender in self.config.behavior.ignore_players:
             return False, None
+        if message.is_voice and not self.config.voice.obey_commands:
+            return False, None
         command = commands.parse(message.text, settings)
         if command is None:
             return False, None
-        if not commands.listens_to(settings, message.channel):
+        # `listen_channel` picks a chat box to take orders from; a spoken order came from
+        # neither, and everyone on voice is a teammate by definition.
+        if not message.is_voice and not commands.listens_to(settings, message.channel):
             self.bus.publish(
                 "skipped",
                 {
@@ -510,8 +611,11 @@ class Engine:
             self._remember_reply(line)
             self.echo.remember(line)
 
-        asked_in = asked_by.channel if asked_by else ChatChannel.TEAM
-        team_only = commands.answer_in_team_chat(settings, asked_in)
+        if asked_by is not None and asked_by.is_voice:
+            team_only = True
+        else:
+            asked_in = asked_by.channel if asked_by else ChatChannel.TEAM
+            team_only = commands.answer_in_team_chat(settings, asked_in)
         # A whole strat does not fit in one chat line, so it goes out a step at a time.
         delivered, detail = True, ""
         for line in lines:
@@ -797,6 +901,7 @@ class Engine:
             "callout": where(player, self.config.callouts),
             "has_position": player.position is not None,
             "gsi_connected": not player.is_stale,
+            "voice": self.voice_status(),
             "player": player.model_dump(mode="json"),
             "last_error": self.last_error,
         }

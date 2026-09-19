@@ -107,6 +107,15 @@ const BINDINGS = {
   "require-focus": ["game.require_focus", "bool"],
 
   "gsi-token": ["gsi.auth_token", "text"],
+
+  "voice-enabled": ["voice.enabled", "bool"],
+  "voice-device": ["voice.device", "text"],
+  "voice-model": ["voice.model", "text"],
+  "voice-triggers": ["voice.trigger_words", "list"],
+  "voice-obey": ["voice.obey_commands", "bool"],
+  "voice-cooldown": ["voice.cooldown_seconds", "float"],
+  "voice-min-words": ["voice.min_words", "int"],
+  "voice-floor": ["voice.noise_floor", "float"],
 };
 
 const LITERACY_DESCRIPTIONS = [
@@ -229,6 +238,7 @@ function bindTabs() {
       document.querySelectorAll(".panel").forEach((panel) => {
         panel.dataset.active = String(panel.dataset.panel === tab.dataset.tab);
       });
+      if (tab.dataset.tab === "voice") renderVoice();
     });
   });
 }
@@ -261,7 +271,10 @@ function chatClass(message) {
 function pushEvent(event) {
   const data = event.data || {};
   if (event.kind === "chat") {
-    const tag = `[${data.channel}]${data.sender_state === "dead" ? " *DEAD*" : ""}`;
+    const tag =
+      data.source === "voice"
+        ? "[voice]"
+        : `[${data.channel}]${data.sender_state === "dead" ? " *DEAD*" : ""}`;
     line(
       `${escapeHtml(tag)} <span class="who">${escapeHtml(data.sender)}</span>: ${escapeHtml(data.text)}`,
       chatClass(data),
@@ -453,6 +466,30 @@ function bindActions() {
 
   $("callout-refresh").addEventListener("click", renderCallouts);
 
+  $("voice-test").addEventListener("click", async () => {
+    await saveConfig();
+    $("voice-output").textContent = "listening…";
+    const response = await fetch("/api/voice/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: $("voice-say").value }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      $("voice-output").textContent = body.detail;
+      return;
+    }
+    $("voice-output").textContent = body.replied
+      ? `heard "${body.heard}" → team chat: ${body.reply.text}`
+      : `heard "${body.heard}" — said nothing back`;
+  });
+
+  $("voice-restart").addEventListener("click", async () => {
+    await saveConfig();
+    await fetch("/api/voice/restart", { method: "POST" });
+    renderVoice();
+  });
+
   $("install-gsi").addEventListener("click", async () => {
     await saveConfig();
     const response = await fetch("/api/gsi/install", { method: "POST" });
@@ -567,6 +604,30 @@ async function renderLog() {
   $("log-output").textContent = body.lines
     .map(({ line, chat }) => `${chat ? "chat  " : "      "}${line}`)
     .join("\n");
+}
+
+async function renderVoice() {
+  const body = await (await fetch("/api/voice")).json();
+  const select = $("voice-device");
+  select.innerHTML =
+    '<option value="">default speakers</option>' +
+    body.devices
+      .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`)
+      .join("");
+  select.value = config.voice.device;
+  const status = body.status;
+  const lines = [];
+  if (!status.supported) lines.push(`cannot listen here: ${status.unsupported_reason}`);
+  else if (status.error) lines.push(`stopped: ${status.error}`);
+  else if (status.downloading) lines.push(`downloading the ${status.model} speech model…`);
+  else if (status.running) lines.push("listening");
+  else if (status.enabled) lines.push("starting…");
+  else lines.push("not listening");
+  lines.push(
+    `speech model: ${status.model} (${status.model_ready ? "ready" : "downloads on first use"})`,
+    `heard ${status.heard} time${status.heard === 1 ? "" : "s"}${status.last_text ? `, last: "${status.last_text}"` : ""}`,
+  );
+  $("voice-status").textContent = lines.join("\n");
 }
 
 async function renderCallouts() {

@@ -1,7 +1,7 @@
 import pytest
 
 from cs2bot.config import AppConfig
-from cs2bot.models import ChatChannel, ChatMessage, LifeState, LocalPlayer
+from cs2bot.models import ChatChannel, ChatMessage, LifeState, LocalPlayer, MessageSource
 from cs2bot.rules import should_reply
 
 
@@ -102,3 +102,36 @@ def test_ignore_list_and_self(config):
     assert not allowed
     allowed, _ = should_reply(config, message(is_self=True), LifeState.ALIVE, LocalPlayer())
     assert not allowed
+
+
+def voice(**kwargs) -> ChatMessage:
+    base = {
+        "sender": "voice",
+        "channel": ChatChannel.TEAM,
+        "source": MessageSource.VOICE,
+        "sender_state": LifeState.UNKNOWN,
+    }
+    base.update(kwargs)
+    return message(**base)
+
+
+def test_voice_is_heard_even_when_team_chat_is_switched_off(config):
+    config.behavior.reply_channels = [ChatChannel.ALL]
+    config.voice.trigger_words = []
+    spoken = voice(text="are they pushing b")
+    allowed, _ = should_reply(config, spoken, LifeState.ALIVE, LocalPlayer())
+    assert allowed
+
+
+def test_voice_has_a_trigger_list_of_its_own(config):
+    config.behavior.trigger_words = ["hey"]
+    config.voice.trigger_words = ["bot"]
+    player = LocalPlayer()
+    assert not should_reply(config, voice(text="hey they are pushing"), LifeState.ALIVE, player)[0]
+    assert should_reply(config, voice(text="bot they are pushing"), LifeState.ALIVE, player)[0]
+
+
+def test_a_blank_voice_trigger_lets_everything_through(config):
+    config.voice.trigger_words = ["  "]
+    allowed, _ = should_reply(config, voice(text="rotate now"), LifeState.ALIVE, LocalPlayer())
+    assert allowed

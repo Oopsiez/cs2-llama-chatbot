@@ -62,7 +62,9 @@ def should_reply(
     if any(lowered_sender == ignored.casefold() for ignored in config.behavior.ignore_players):
         return False, f"{message.sender} is on the ignore list"
 
-    if message.channel not in config.behavior.reply_channels:
+    # `reply_channels` is about which chat box the bot reads. Voice did not come from one, and
+    # it is answered in team chat whatever that setting says.
+    if not message.is_voice and message.channel not in config.behavior.reply_channels:
         return False, f"{message.channel.value} chat is disabled"
 
     # Being spoken to directly outranks the trigger-word filter.
@@ -73,7 +75,10 @@ def should_reply(
     if config.behavior.only_reply_when_addressed and not message.addressed_to_me:
         return False, "nobody is talking to you"
 
-    triggers = [t for t in config.behavior.trigger_words if t.strip()]
+    # Voice has a trigger list of its own: a lobby talks far more than it types, so the word
+    # that makes the bot answer usually has to be stricter there.
+    configured = config.voice.trigger_words if message.is_voice else config.behavior.trigger_words
+    triggers = [t for t in configured if t.strip()]
     if triggers:
         lowered = message.text.casefold()
         if not any(trigger.casefold() in lowered for trigger in triggers):

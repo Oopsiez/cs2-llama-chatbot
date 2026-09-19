@@ -98,6 +98,15 @@ _CHANNEL_LABEL = {
     ChatChannel.UNKNOWN: "chat",
 }
 
+# Voice reaches the bot as a machine transcript of a teammate shouting over gunfire, and the
+# answer is typed into team chat. Both facts change how the line should be written.
+_VOICE_NOTE = (
+    "This was spoken out loud over voice comms and transcribed automatically, so the wording may "
+    "be garbled and you do not know for certain who said it. Answer what they plainly meant, do "
+    "not quote them back, and never guess at a name. You are typing your answer into team chat "
+    "mid-round, so keep it to one short line."
+)
+
 
 def game_context(
     player: LocalPlayer,
@@ -124,7 +133,12 @@ def game_context(
         LifeState.ALIVE: "alive",
         LifeState.UNKNOWN: "of unknown status",
     }[incoming.sender_state]
-    bits.append(f"{incoming.sender} is {sender_state} and wrote in {_CHANNEL_LABEL[incoming.channel]}")
+    if incoming.is_voice:
+        bits.append(f"a {sender_state} teammate said this over voice comms")
+    else:
+        bits.append(
+            f"{incoming.sender} is {sender_state} and wrote in {_CHANNEL_LABEL[incoming.channel]}"
+        )
     return "; ".join(bits)
 
 
@@ -211,6 +225,8 @@ def build_system_prompt(
     note = _address_note(incoming, own_name)
     if note:
         lines.append(note)
+    if incoming.is_voice:
+        lines.append(_VOICE_NOTE)
     snitch = prompt_note(
         config.snitch,
         player,

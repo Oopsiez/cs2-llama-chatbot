@@ -236,3 +236,25 @@ def test_recording_and_deleting_a_callout(client):
     assert client.delete("/api/callouts/de_dust2/banana").status_code == 200
     assert client.get("/api/callouts").json()["callouts"] == []
     assert client.delete("/api/callouts/de_dust2/banana").status_code == 404
+
+
+def test_voice_tab_says_whether_it_can_listen_here(client):
+    body = client.get("/api/voice").json()
+    assert set(body) == {"status", "devices", "settings"}
+    assert body["settings"]["enabled"] is False
+    assert isinstance(body["status"]["supported"], bool)
+    assert isinstance(body["devices"], list)
+
+
+def test_a_simulated_transcript_is_answered_in_team_chat(client):
+    client.engine.config.enabled = True
+    client.engine.config.behavior.cooldown_seconds = 0
+    client.engine.config.behavior.reply_delay = 0
+    client.engine.config.voice.trigger_words = []
+    body = client.post("/api/voice/simulate", json={"text": "they are pushing b"}).json()
+    assert body["replied"] is True
+    assert client.engine._sender.sent[-1][1] is True  # team_only
+
+
+def test_simulating_silence_is_rejected(client):
+    assert client.post("/api/voice/simulate", json={"text": "  "}).status_code == 422
