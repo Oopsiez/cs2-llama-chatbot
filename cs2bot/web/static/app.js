@@ -76,6 +76,7 @@ const BINDINGS = {
   "strat-side": ["strategy.fallback_side", "text"],
   "strat-obey": ["strategy.obey_commands", "bool"],
   "strat-quiet": ["strategy.quiet_seconds", "float"],
+  "strat-persona-cmd": ["strategy.obey_persona_commands", "bool"],
 
   "snitch-enabled": ["snitch.enabled", "bool"],
   "snitch-asked": ["snitch.answer_when_asked", "bool"],
@@ -301,10 +302,13 @@ function pushEvent(event) {
       ),
     );
   } else if (event.kind === "command") {
+    const orders = {
+      quiet: `${escapeHtml(data.by)} told the bot to be quiet`,
+      talk: `${escapeHtml(data.by)} told the bot to talk again`,
+      persona: `${escapeHtml(data.by)} made the bot ${escapeHtml(data.to || "")}`,
+    };
     line(
-      data.kind === "quiet"
-        ? `${escapeHtml(data.by)} told the bot to be quiet`
-        : `${escapeHtml(data.by)} told the bot to talk again`,
+      orders[data.kind] || escapeHtml(data.kind),
       "gamestate",
       data.kind === "quiet" ? escapeHtml(`for ${data.for}s`) : "",
     );

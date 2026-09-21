@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from .config import AppConfig, PersonaSettings
 from .humanize import game_iq_directive, literacy_directive
@@ -90,6 +90,51 @@ PRESETS: dict[str, PersonaSettings] = {
         dead_notes="Being dead has not changed your tone in the slightest.",
     ),
 }
+
+# Nobody types "Angry and Toxic" in the middle of a round; they type "toxic".
+_NICKNAMES = {
+    "toxic": "Angry and Toxic",
+    "angry": "Angry and Toxic",
+    "mad": "Angry and Toxic",
+    "igl": "Calm IGL",
+    "calm": "Calm IGL",
+    "chill": "Calm IGL",
+    "nice": "Cheeky Teammate",
+    "funny": "Cheeky Teammate",
+    "cheeky": "Cheeky Teammate",
+    "normal": "Cheeky Teammate",
+    "silver": "Silver Enjoyer",
+    "noob": "Silver Enjoyer",
+    "therapist": "Gaming Therapist",
+    "therapy": "Gaming Therapist",
+    "deadpan": "Deadpan Bot",
+    "dry": "Deadpan Bot",
+    "robot": "Deadpan Bot",
+}
+
+
+def persona_choices(saved: Mapping[str, PersonaSettings]) -> dict[str, PersonaSettings]:
+    """Every persona that can be asked for by name: the built-in ones and the saved ones."""
+    return {**PRESETS, **saved}
+
+
+def find_persona(wanted: str, saved: Mapping[str, PersonaSettings]) -> PersonaSettings | None:
+    """The persona somebody asked for in chat, matched the loose way people type names."""
+    asked = wanted.strip().casefold()
+    if not asked:
+        return None
+    available = persona_choices(saved)
+    for name, persona in available.items():
+        if name.casefold() == asked:
+            return persona
+    nickname = _NICKNAMES.get(asked, "")
+    if nickname and nickname in available:
+        return available[nickname]
+    for name, persona in available.items():
+        if asked in name.casefold():
+            return persona
+    return None
+
 
 _CHANNEL_LABEL = {
     ChatChannel.ALL: "all chat",

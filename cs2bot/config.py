@@ -189,6 +189,8 @@ class StrategySettings(BaseModel):
     fallback_side: str = "T"
     obey_commands: bool = True  # !quiet / !talk / !strat a
     quiet_seconds: float = 120.0  # how long `!quiet` shuts the bot up for
+    # Let players swap the bot's personality from chat: `!persona toxic`, `!persona list`.
+    obey_persona_commands: bool = True
 
 
 class VoiceSettings(BaseModel):

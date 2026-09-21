@@ -85,3 +85,40 @@ def test_listen_channel(listen, channel, heard):
 )
 def test_reply_channel(reply, asked_in, team_only):
     assert commands.answer_in_team_chat(settings(reply_channel=reply), asked_in) is team_only
+
+
+@pytest.mark.parametrize(
+    "text,wanted",
+    [
+        ("!persona toxic", "toxic"),
+        ("!persona angry and toxic", "angry and toxic"),
+        ("bot be the coach", "coach"),
+        ("act like a silver", "silver"),
+        ("!personality deadpan", "deadpan"),
+        ("become the therapist", "therapist"),
+    ],
+)
+def test_persona_orders(text, wanted):
+    command = commands.parse(text, settings())
+    assert command is not None and command.kind == commands.PERSONA
+    assert command.persona == wanted
+
+
+@pytest.mark.parametrize("text", ["!persona", "!persona list", "what personas do you have"])
+def test_asking_which_personas_there_are(text):
+    command = commands.parse(text, settings())
+    assert command is not None and command.kind == commands.PERSONA and command.persona == ""
+
+
+def test_persona_orders_can_be_turned_off():
+    assert commands.parse("!persona toxic", settings(obey_persona_commands=False)) is None
+
+
+def test_be_quiet_is_still_a_quiet_order():
+    command = commands.parse("bot be quiet", settings())
+    assert command is not None and command.kind == commands.QUIET
+
+
+def test_only_an_explicit_persona_order_is_worth_a_complaint():
+    assert commands.parse("be careful", settings()).explicit is False
+    assert commands.parse("!persona toxic", settings()).explicit is True
