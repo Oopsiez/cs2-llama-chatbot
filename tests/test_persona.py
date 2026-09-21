@@ -1,7 +1,9 @@
 import random
 
-from cs2bot import playbook
-from cs2bot.config import AppConfig
+import pytest
+
+from cs2bot import persona, playbook
+from cs2bot.config import AppConfig, PersonaSettings
 from cs2bot.models import ChatChannel, ChatMessage, LifeState, LocalPlayer, Team
 from cs2bot.persona import (
     PRESETS,
@@ -108,3 +110,29 @@ def test_the_strategy_prompt_hands_the_model_the_call_verbatim():
     assert all(step in user.content for step in strategy.steps)
     assert f"{len(strategy.steps)} lines in total" in system.content
     assert "Gavin" in user.content
+
+
+@pytest.mark.parametrize(
+    "asked,name",
+    [
+        ("toxic", "Angry and Toxic"),
+        ("Angry and Toxic", "Angry and Toxic"),
+        ("coach", "Coach"),
+        ("therapist", "Gaming Therapist"),
+        ("silver", "Silver Enjoyer"),
+    ],
+)
+def test_finding_a_preset_by_the_name_people_type(asked, name):
+    found = persona.find_persona(asked, {})
+    assert found is not None and found.name == name
+
+
+def test_a_saved_persona_wins_over_a_preset_of_the_same_name():
+    mine = PersonaSettings(name="Coach", description="You are my coach.")
+    found = persona.find_persona("coach", {"Coach": mine})
+    assert found is mine
+
+
+def test_an_unknown_persona_is_not_guessed_at():
+    assert persona.find_persona("astronaut", {}) is None
+    assert persona.find_persona("  ", {}) is None

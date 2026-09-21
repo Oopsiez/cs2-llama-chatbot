@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from cs2bot.config import AppConfig
+from cs2bot.config import AppConfig, PersonaSettings
 from cs2bot.engine import Engine
 from cs2bot.models import ChatChannel, ChatMessage, LifeState
 from cs2bot.output.dry_run import DryRunSender
@@ -396,3 +396,80 @@ async def test_changing_the_voice_settings_builds_a_fresh_listener():
     await engine.apply_config(updated, persist=False)
     assert engine._voice is None
     assert engine.voice is not listener
+
+
+@pytest.mark.asyncio
+async def test_a_player_can_pick_the_personality_from_chat(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    reply = await engine.handle_message(chat(sender="Gavin", text="!persona toxic"))
+    assert engine.config.persona.name == "Angry and Toxic"
+    assert reply is not None and reply.delivered
+    assert "Angry and Toxic" in engine._sender.sent[-1][0]
+
+
+@pytest.mark.asyncio
+async def test_a_saved_persona_can_be_asked_for_by_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.saved_personas = {
+        "Danish Caster": PersonaSettings(name="Danish Caster", description="You cast the game.")
+    }
+    await engine.handle_message(chat(sender="Gavin", text="!persona danish"))
+    assert engine.config.persona.name == "Danish Caster"
+
+
+@pytest.mark.asyncio
+async def test_asking_for_the_personalities_lists_them_without_changing_anything(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    before = engine.config.persona.name
+    await engine.handle_message(chat(sender="Gavin", text="!persona"))
+    said = " ".join(line for line, _ in engine._sender.sent)
+    assert "Coach" in said and "Angry and Toxic" in said
+    assert all(len(line) <= engine.config.game.chat_char_limit for line, _ in engine._sender.sent)
+    assert engine.config.persona.name == before
+
+
+@pytest.mark.asyncio
+async def test_a_persona_nobody_has_is_answered_only_when_it_was_an_order(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    await engine.handle_message(chat(sender="Gavin", text="!persona astronaut"))
+    assert "no persona called astronaut" in " ".join(line for line, _ in engine._sender.sent)
+    # "be careful" is a teammate talking, so it gets an ordinary reply instead of a complaint.
+    engine._sender.sent.clear()
+    reply = await engine.handle_message(chat(sender="Gavin", text="be careful"))
+    assert reply is not None
+    assert "no persona" not in engine._sender.sent[-1][0]
+
+
+@pytest.mark.asyncio
+async def test_persona_orders_are_only_taken_from_the_chosen_chat(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine(**{"strategy.listen_channel": "team"})
+    before = engine.config.persona.name
+    await engine.handle_message(chat(sender="enemy", text="!persona toxic"))
+    assert engine.config.persona.name == before
+    assert not engine._sender.sent
+
+
+@pytest.mark.asyncio
+async def test_persona_orders_can_be_switched_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine(**{"strategy.obey_persona_commands": False})
+    before = engine.config.persona.name
+    await engine.handle_message(chat(sender="Gavin", text="!persona toxic"))
+    assert engine.config.persona.name == before
+
+
+@pytest.mark.asyncio
+async def test_a_spoken_persona_order_is_answered_in_team_chat(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_voice_engine()
+    engine.config.strategy.reply_channel = "all"
+    await engine.handle_voice("bot switch to the coach persona")
+    assert engine.config.persona.name == "Coach"
+    assert engine._sender.sent[-1][1] is True

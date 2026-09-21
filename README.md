@@ -113,6 +113,7 @@ The **Strats** tab in the panel controls it:
 | *Only near round start* | Ignores strat requests once the round is underway. |
 | *Chat lines per strat* | How many lines it is allowed to spend. Six - a header plus five players - says all of it; anything that does not fit is folded into the last line rather than dropped. |
 | *Give the jobs to teammates by name* | On by default. Off, everyone is `P1`-`P5`. |
+| *Let players pick the personality in chat* | On by default. Lets anyone in the chat it listens to swap the persona with `!persona <name>`. |
 | *Ask phrases* | The words it listens for. `strat`, `strats`, `what's the plan`, `call it`, `what do we do` by default. |
 
 In chat:
@@ -120,6 +121,11 @@ In chat:
 - `strat?`, `strats`, `what's the plan`, `call it` - give me a call.
 - `!strat a`, `!strat b`, `!strat mid` - a call for that site, if the map has one.
 - `!quiet` - shut up for two minutes. `!talk` - come back.
+- `!persona toxic`, `!persona coach`, `bot be the therapist` - change its personality on the spot.
+  `!persona` on its own lists what it can be. Presets and anything you saved on the **Persona**
+  tab count, and nicknames (`toxic`, `igl`, `silver`, `deadpan`) find the obvious one. Orders come
+  from the same chat as the strat orders, and *Let players pick the personality in chat* on the
+  **Strats** tab turns it off.
 
 The map and side come from Game State Integration, so install the GSI config (**Game** tab) or it
 falls back to the side you picked in the panel and to map-agnostic calls. GSI is Valve's own API

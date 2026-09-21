@@ -25,7 +25,7 @@ from .models import BotReply, ChatChannel, ChatMessage, LifeState, MessageSource
 from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
-from .persona import build_reveal_turns, build_strategy_turns, build_turns
+from .persona import build_reveal_turns, build_strategy_turns, build_turns, find_persona, persona_choices
 from .roster import Roster
 from .rules import should_reply
 from .snitch import announcement, is_request, where
@@ -51,6 +51,22 @@ STRATEGY_MEMORY = 4
 # Who a transcript is attributed to. Voices cannot be told apart in the speaker mix, so the bot
 # is honest about that instead of guessing a teammate's name.
 VOICE_SPEAKER = "voice"
+
+
+def _wrap(text: str, limit: int) -> list[str]:
+    """A plain answer cut into chat-sized lines on word boundaries."""
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        if len(candidate) > limit and current:
+            lines.append(current)
+            current = word[:limit]
+        else:
+            current = candidate[:limit]
+    if current:
+        lines.append(current)
+    return lines
 
 
 class Engine:
@@ -564,6 +580,8 @@ class Engine:
             self._quiet_until = float("-inf")
             self.bus.publish("command", {"kind": "talk", "by": message.sender})
             return True, None
+        if command.kind == commands.PERSONA:
+            return await self._change_persona(command, message)
 
         if settings.round_start_only and not self.in_round_start:
             self.bus.publish(
@@ -575,6 +593,49 @@ class Engine:
             )
             return True, None
         return True, await self.call_strategy(asked_by=message, site=command.site)
+
+    async def _change_persona(
+        self, command: commands.Command, message: ChatMessage
+    ) -> tuple[bool, BotReply | None]:
+        """Wear the personality a player asked for, or tell them which ones there are."""
+        available = persona_choices(self.config.saved_personas)
+        if not command.persona:
+            return True, await self._say_command_answer(
+                f"personas: {', '.join(available)} - say !persona <name>", message
+            )
+        wanted = find_persona(command.persona, self.config.saved_personas)
+        if wanted is None:
+            # "be careful" is a teammate talking, not a persona nobody has; only an explicit
+            # `!persona x` is worth a "never heard of it".
+            if not command.explicit:
+                return False, None
+            return True, await self._say_command_answer(
+                f"no persona called {command.persona} - try: {', '.join(available)}", message
+            )
+        await self.apply_config(self.config.model_copy(update={"persona": wanted}))
+        self.bus.publish("command", {"kind": "persona", "by": message.sender, "to": wanted.name})
+        return True, await self._say_command_answer(f"ok, {wanted.name} it is", message)
+
+    async def _say_command_answer(self, text: str, asked_by: ChatMessage) -> BotReply:
+        """Answer an order in the bot's own words - no model, so it lands even when it is down."""
+        lines = _wrap(text, self.config.game.chat_char_limit)
+        team_only = asked_by.is_voice or commands.answer_in_team_chat(
+            self.config.strategy, asked_by.channel
+        )
+        delivered, detail = True, ""
+        for line in lines:
+            self.echo.remember(line)
+            delivered, detail = await self.sender.send(line, team_only=team_only)
+            if not delivered:
+                break
+        self.last_spoke_at = time.time()
+        if asked_by.is_voice:
+            self.last_voice_reply_at = time.monotonic()
+        else:
+            self.last_reply_at = time.monotonic()
+        return BotReply(
+            in_reply_to=asked_by, text="\n".join(lines), delivered=delivered, reason=detail
+        )
 
     async def maybe_call_strategy(self) -> None:
         """Call the round's strat unprompted, once, if that was asked for in the settings."""
