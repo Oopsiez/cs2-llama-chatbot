@@ -617,8 +617,8 @@ async function renderVoice() {
   select.value = config.voice.device;
   const status = body.status;
   const lines = [];
-  if (!status.supported) lines.push(`cannot listen here: ${status.unsupported_reason}`);
-  else if (status.error) lines.push(`stopped: ${status.error}`);
+  if (status.error) lines.push(`stopped: ${status.error}`);
+  else if (!status.supported) lines.push(`cannot listen here: ${status.unsupported_reason}`);
   else if (status.downloading) lines.push(`downloading the ${status.model} speech model…`);
   else if (status.running) lines.push("listening");
   else if (status.enabled) lines.push("starting…");
