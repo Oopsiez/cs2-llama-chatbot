@@ -38,6 +38,17 @@ class Utterance:
 BlockSource = Callable[[], Iterator[list[float]]]
 
 
+@dataclass
+class _Run:
+    """One spell of listening: the threads started together share these and nothing else."""
+
+    stop: threading.Event = field(default_factory=threading.Event)
+    pending: queue.Queue[Sequence[float]] = field(
+        default_factory=lambda: queue.Queue(maxsize=PENDING_LIMIT)
+    )
+    heard: queue.Queue[Utterance] = field(default_factory=queue.Queue)
+
+
 class VoiceListener:
     """Hears the speakers, transcribes speech, queues the text for the engine."""
 
@@ -55,9 +66,7 @@ class VoiceListener:
         self._transcriber = transcriber
         self._source = source or (lambda: audio.blocks(device))
         self._segmenter = segmenter or Segmenter(audio.SAMPLE_RATE)
-        self._pending: queue.Queue[Sequence[float]] = queue.Queue(maxsize=PENDING_LIMIT)
-        self._heard: queue.Queue[Utterance] = queue.Queue()
-        self._stop = threading.Event()
+        self._run = _Run()
         self._threads: list[threading.Thread] = []
         self.error: str = ""
         self.loading: bool = False
@@ -80,20 +89,24 @@ class VoiceListener:
         """
         if self.running or self.error:
             return
-        self._stop.clear()
         self._segmenter.reset()
+        # A fresh run, with its own stop flag and queues: a worker from a previous run that
+        # is still winding down - Whisper can sit in one transcription for many seconds -
+        # then cannot be woken by this one, nor deliver speech heard before the bot was told
+        # to stop listening.
+        run = self._run = _Run()
         self._threads = [
-            threading.Thread(target=self._listen, name="cs2bot-voice-listen", daemon=True),
-            threading.Thread(target=self._transcribe, name="cs2bot-voice-whisper", daemon=True),
+            threading.Thread(target=self._listen, args=(run,), name="cs2bot-voice-listen", daemon=True),
+            threading.Thread(target=self._transcribe, args=(run,), name="cs2bot-voice-whisper", daemon=True),
         ]
         for thread in self._threads:
             thread.start()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._run.stop.set()
         for thread in self._threads:
             thread.join(timeout=2.0)
-        self._threads = []
+        self._threads = [thread for thread in self._threads if thread.is_alive()]
 
     def restart(self) -> None:
         """Try again after a failure - the sound card may have come back."""
@@ -106,39 +119,42 @@ class VoiceListener:
         out = []
         while True:
             try:
-                out.append(self._heard.get_nowait())
+                out.append(self._run.heard.get_nowait())
             except queue.Empty:
                 return out
 
     # ---- threads ----------------------------------------------------------------
 
-    def _listen(self) -> None:
+    def _listen(self, run: _Run) -> None:
         try:
             for block in self._source():
-                if self._stop.is_set():
+                if run.stop.is_set():
                     break
                 for utterance in self._segmenter.feed(block):
-                    self._offer(utterance)
+                    self._offer(run, utterance)
         except Exception as exc:
             self.error = f"{type(exc).__name__}: {exc}"
             log.warning("voice capture stopped: %s", self.error)
+            # Without capture there is nothing left to transcribe, and a worker polling an
+            # empty queue forever would keep the listener looking alive.
+            run.stop.set()
 
-    def _offer(self, samples: Sequence[float]) -> None:
+    def _offer(self, run: _Run, samples: Sequence[float]) -> None:
         """Queue an utterance, throwing away the stalest one if the model is behind."""
         while True:
             try:
-                self._pending.put_nowait(samples)
+                run.pending.put_nowait(samples)
                 return
             except queue.Full:
                 try:
-                    self._pending.get_nowait()
+                    run.pending.get_nowait()
                 except queue.Empty:  # pragma: no cover - raced with the worker
                     pass
 
-    def _transcribe(self) -> None:
-        while not self._stop.is_set():
+    def _transcribe(self, run: _Run) -> None:
+        while not run.stop.is_set():
             try:
-                samples = self._pending.get(timeout=0.2)
+                samples = run.pending.get(timeout=0.2)
             except queue.Empty:
                 continue
             try:
@@ -148,16 +164,16 @@ class VoiceListener:
                 # stop the whole listener rather than failing on every word spoken all match.
                 self.error = f"{type(exc).__name__}: {exc}"
                 log.warning("transcription failed: %s", self.error)
-                self._stop.set()
+                run.stop.set()
                 return
             finally:
                 self.loading = False
-            if not text:
+            if not text or run.stop.is_set():
                 continue
             self.utterances_heard += 1
             self.last_text = text
             self.last_heard_at = time.time()
-            self._heard.put(
+            run.heard.put(
                 Utterance(text=text, seconds=len(samples) / audio.SAMPLE_RATE)
             )
 
