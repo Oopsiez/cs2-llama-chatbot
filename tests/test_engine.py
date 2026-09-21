@@ -6,6 +6,7 @@ from cs2bot.config import AppConfig
 from cs2bot.engine import Engine
 from cs2bot.models import ChatChannel, ChatMessage, LifeState
 from cs2bot.output.dry_run import DryRunSender
+from cs2bot.voice.listener import Utterance
 
 
 def build_engine(**overrides) -> Engine:
@@ -310,11 +311,41 @@ async def test_voice_only_answers_when_its_own_trigger_word_is_said():
 async def test_voice_is_paced_on_a_clock_of_its_own():
     engine = build_voice_engine()
     engine.config.voice.cooldown_seconds = 60
-    engine.config.behavior.cooldown_seconds = 0
+    engine.config.behavior.cooldown_seconds = 60
     assert await engine.handle_voice("they are pushing b right now") is not None
     assert await engine.handle_voice("they are going a instead") is None
-    # Typed chat is not silenced by the voice cooldown.
+    # Answering the voice does not spend the typed chat's cooldown, or a talkative lobby
+    # would keep the bot out of chat entirely.
     assert await engine.handle_message(chat()) is not None
+    assert await engine.handle_voice("they are going a instead") is None
+
+
+class FakeListener:
+    """A listener that hands over one transcript and never touches a sound card."""
+
+    def __init__(self, text: str) -> None:
+        self.waiting = [Utterance(text=text, seconds=1.0)]
+        self.started = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def stop(self) -> None:
+        self.started = False
+
+    def drain(self) -> list[Utterance]:
+        out, self.waiting = self.waiting, []
+        return out
+
+
+@pytest.mark.asyncio
+async def test_the_bot_listens_even_when_it_cannot_find_console_log():
+    """Speech comes off the speakers, so a missing console.log must not silence it."""
+    engine = build_voice_engine(**{"game.console_log_path": ""})
+    engine._voice = FakeListener("they are pushing b, we need help")
+    await engine._tick()
+    assert engine._voice.started
+    assert engine._sender.sent[-1][1] is True
 
 
 @pytest.mark.asyncio

@@ -302,6 +302,9 @@ class Engine:
             await asyncio.sleep(POLL_INTERVAL)
 
     async def _tick(self) -> None:
+        # Voice arrives on the speakers, not in the log, so it is pumped whether or not
+        # console.log has been found.
+        await self.pump_voice()
         path = self.config.game.console_log_path
         if not path:
             return
@@ -316,7 +319,6 @@ class Engine:
                 continue
             await self.handle_message(message)
         await self._maybe_ask_for_name()
-        await self.pump_voice()
         await self.maybe_call_strategy()
         await self.maybe_announce()
         await self.maybe_reveal()
@@ -446,9 +448,10 @@ class Engine:
             )
             return None
 
-        self.last_reply_at = now
         if message.is_voice:
             self.last_voice_reply_at = now
+        else:
+            self.last_reply_at = now
         started = time.perf_counter()
         try:
             text = await self.generate_reply(message, local_state)

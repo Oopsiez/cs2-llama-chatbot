@@ -1,3 +1,4 @@
+import threading
 import time
 
 from cs2bot.config import AppConfig
@@ -183,10 +184,10 @@ def test_an_empty_transcript_is_not_reported_as_something_heard():
 def test_the_stalest_audio_is_dropped_when_the_model_falls_behind():
     listener = VoiceListener(transcriber=FakeTranscriber(), source=lambda: iter(()))
     for index in range(PENDING_LIMIT + 2):
-        listener._offer([float(index)])
-    assert listener._pending.qsize() == PENDING_LIMIT
+        listener._offer(listener._run, [float(index)])
+    assert listener._run.pending.qsize() == PENDING_LIMIT
     # The oldest two are gone, so what is left starts part-way through.
-    assert listener._pending.get_nowait() == [2.0]
+    assert listener._run.pending.get_nowait() == [2.0]
 
 
 def test_a_failing_model_stops_the_listener_instead_of_failing_on_every_word():
@@ -216,6 +217,52 @@ def test_a_listener_that_failed_stays_stopped_until_it_is_restarted():
         assert listener.error == ""
     finally:
         listener.stop()
+
+
+def test_losing_the_sound_card_shuts_the_whole_listener_down():
+    def source():
+        raise OSError("device disappeared")
+        yield  # pragma: no cover - makes this a generator
+
+    listener = VoiceListener(transcriber=FakeTranscriber(), source=source)
+    listener.start()
+    try:
+        assert wait_for(lambda: bool(listener.error))
+        # The transcription worker must not be left polling an empty queue for ever.
+        assert wait_for(lambda: not listener.running)
+    finally:
+        listener.stop()
+    assert "device disappeared" in listener.error
+
+
+def test_speech_heard_before_being_switched_off_is_not_replayed_afterwards():
+    """Whisper can outlast the two second join, and must not surface into the next run."""
+    release = threading.Event()
+
+    class Slow:
+        def __init__(self) -> None:
+            self.busy = threading.Event()
+
+        def transcribe(self, samples):
+            self.busy.set()
+            release.wait(5.0)
+            return "they are pushing B"
+
+    transcriber = Slow()
+    listener = build_listener([loud(50)] + [quiet(10)] * 3, transcriber)
+    listener.start()
+    try:
+        assert wait_for(lambda: transcriber.busy.is_set())
+        listener.stop()
+        # The old worker is still in the model, so it is still tracked rather than forgotten.
+        assert listener.running
+        threads = list(listener._threads)
+        listener.start()
+        assert listener._threads == threads
+    finally:
+        release.set()
+    assert wait_for(lambda: not listener.running)
+    assert listener.drain() == []
 
 
 def test_the_status_says_what_the_panel_needs_to_show():
