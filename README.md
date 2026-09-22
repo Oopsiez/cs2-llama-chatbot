@@ -42,8 +42,13 @@ stayed quiet when it did.
 | Option | What you need | Notes |
 | ------ | ------------- | ----- |
 | **Mock** | nothing | Canned replies. Good for trying the panel out. |
-| **Ollama** | [Ollama](https://ollama.com) + `ollama pull llama3:8b-instruct-q4_K_M` | Easiest real option. Can run on **another computer** - see below. |
+| **Ollama** | [Ollama](https://ollama.com) + `ollama pull llama3.2:3b-instruct-q4_K_M` | Easiest real option. Can run on **another computer** - see below. |
 | **llama.cpp** | a `.gguf` model file | Fastest, no extra program running. |
+
+The model runs next to CS2 and competes with it for memory, so pick one that fits - the **Model**
+tab has a *What can this machine run?* button that reads your card and says which of the models
+below fit, which spill into system memory, and which only run on the CPU. See
+[Which model, and what it costs](#which-model-and-what-it-costs).
 
 ---
 
@@ -166,6 +171,35 @@ CS2 tells the bot your coordinates, not that you are standing in banana. So you 
 map: stand somewhere, type the name on the **Snitch** tab, and press *Record where I am standing*.
 Anything within about 400 units of that point is then called by that name. Until you record
 something it just says it does not know the callout - health and bomb state still work.
+
+## Which model, and what it costs
+
+Chat replies are one or two sentences, so a small instruct model is not much of a compromise: the
+8B models are funnier, not necessary. These are the ones the panel offers, with the 4-bit quant
+download size, what it takes to keep the whole model on the GPU **beside CS2** (the panel reserves
+2GB for the game), and what it takes to run it on the CPU instead:
+
+| Model | Download | VRAM (with CS2) | RAM (CPU only) |
+| --- | --- | --- | --- |
+| Llama 3.2 1B Instruct | 0.8GB | 1.5GB | 4GB |
+| Qwen2.5 1.5B Instruct | 1.0GB | 2GB | 4GB |
+| Llama 3.2 3B Instruct | 2.0GB | 3.5GB | 8GB |
+| Phi-3.5 Mini Instruct | 2.2GB | 4GB | 8GB |
+| Mistral 7B Instruct | 4.4GB | 6.5GB | 16GB |
+| Llama 3.1 8B Instruct | 4.7GB | 7GB | 16GB |
+
+Limitations worth knowing before you blame the bot:
+
+- **A model that does not fit still runs, badly.** Layers that miss the card spill into system
+  memory; a reply that took 300ms takes several seconds, and the bot misses the conversation.
+- **CPU-only works.** A 1-3B model on a modern CPU answers in a second or two, which is fine for
+  chat and too slow for a strat mid-round. Bump *Reply delay* rather than fighting it.
+- **CS2 wants the card too.** On a 6GB GPU, a 3B model is the ceiling if you do not want the game
+  to stutter; on 8GB you can run the 7-8B models.
+- **Nothing is bundled.** Model weights are gigabytes and are not in the installer - the panel
+  gives you the exact `ollama pull` line, or you point llama.cpp at a `.gguf` you downloaded.
+- **Not enough machine for any of it?** Point the bot at Ollama on another computer (below), or
+  leave it on the mock backend, which needs nothing.
 
 ## Running the model on another computer
 

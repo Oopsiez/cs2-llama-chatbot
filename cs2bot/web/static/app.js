@@ -409,6 +409,8 @@ function bindActions() {
     scheduleSave();
   });
 
+  $("refresh-models").addEventListener("click", renderModels);
+
   $("check-llm").addEventListener("click", async () => {
     $("llm-note").textContent = "checking…";
     await saveConfig();
@@ -646,6 +648,43 @@ async function renderCallouts() {
     ? body.callouts.map((c) => `  ${c.name} (${c.x.toFixed(0)}, ${c.y.toFixed(0)}, ${c.z.toFixed(0)})`)
     : ["  nothing recorded for this map yet"];
   $("callout-output").textContent = [head, where, "recorded:"].concat(recorded).join("\n");
+}
+
+const VERDICT_CLASS = { fits: "fits", tight: "tight", "cpu only": "cpu", "too big": "no", unknown: "no" };
+
+async function renderModels() {
+  $("hardware-note").textContent = "looking…";
+  const body = await (await fetch("/api/models")).json();
+  const hw = body.hardware;
+  const card = hw.vram_gb
+    ? `${hw.gpu || "GPU"}: ${hw.vram_gb}GB, about ${hw.vram_for_model_gb}GB free once CS2 has taken ${hw.cs2_reserve_gb}GB`
+    : "no GPU memory reported - the model would run on the CPU";
+  const ram = hw.ram_gb ? `${hw.ram_gb}GB system RAM` : "system RAM unknown";
+  $("hardware-note").textContent = `${card}\n${ram}`;
+  $("model-picks").innerHTML = body.models
+    .map((model) => {
+      const tag = model.key === body.recommended ? " · best fit here" : "";
+      return `<div class="pick">
+        <div class="top">
+          <span class="name">${escapeHtml(model.label)}${escapeHtml(tag)}</span>
+          <span class="verdict ${VERDICT_CLASS[model.verdict] || "no"}">${escapeHtml(model.verdict)}</span>
+        </div>
+        <div class="why">${escapeHtml(model.why)} — ${escapeHtml(model.note)}</div>
+        <div class="specs">${model.params} · ${model.download_gb}GB download · ${model.vram_gb}GB VRAM or ${model.ram_gb}GB RAM · ${escapeHtml(model.ollama)}</div>
+        <div class="actions"><button class="action" data-use-model="${escapeHtml(model.key)}">Use this one</button></div>
+      </div>`;
+    })
+    .join("");
+  for (const button of $("model-picks").querySelectorAll("[data-use-model]")) {
+    const model = body.models.find((m) => m.key === button.dataset.useModel);
+    button.addEventListener("click", () => {
+      config.llm.backend = "ollama";
+      config.llm.ollama_model = model.ollama;
+      renderConfig();
+      scheduleSave();
+      $("llm-note").textContent = `set to ${model.ollama} - pull it with: ollama pull ${model.ollama}`;
+    });
+  }
 }
 
 async function init() {

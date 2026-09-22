@@ -258,3 +258,11 @@ def test_a_simulated_transcript_is_answered_in_team_chat(client):
 
 def test_simulating_silence_is_rejected(client):
     assert client.post("/api/voice/simulate", json={"text": "  "}).status_code == 422
+
+
+def test_the_panel_says_what_this_machine_can_run(client):
+    body = client.get("/api/models").json()
+    assert body["models"] and body["recommended"]
+    first = body["models"][0]
+    assert {"label", "verdict", "vram_gb", "ram_gb", "ollama"} <= set(first)
+    assert "ram_gb" in body["hardware"]
