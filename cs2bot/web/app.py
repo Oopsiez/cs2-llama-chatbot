@@ -18,8 +18,10 @@ from ..config import AppConfig, PersonaSettings, config_path, load_config, save_
 from ..elevate import relaunch_as_admin
 from ..engine import Engine
 from ..gamestate import gsi_endpoint, inspect_gsi_cfg, install_gsi_cfg
+from ..hardware import CS2_VRAM_RESERVE_GB, probe
 from ..identity import detect_name_from_line
 from ..llm import BACKENDS
+from ..llm.catalog import recommended, survey
 from ..models import LifeState
 from ..output import keyboard
 from ..parser import parse_chat_line
@@ -88,6 +90,21 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         config = engine.config.model_copy(update={"enabled": bool(payload.get("enabled"))})
         await engine.apply_config(config)
         return engine.status()
+
+    @app.get("/api/models")
+    async def list_models() -> dict[str, Any]:
+        hardware = probe()
+        return {
+            "hardware": {
+                "ram_gb": hardware.ram_gb,
+                "vram_gb": hardware.vram_gb,
+                "gpu": hardware.gpu,
+                "vram_for_model_gb": hardware.vram_for_model_gb,
+                "cs2_reserve_gb": CS2_VRAM_RESERVE_GB,
+            },
+            "recommended": recommended(hardware),
+            "models": survey(hardware),
+        }
 
     @app.post("/api/llm/check")
     async def llm_check() -> dict[str, str]:

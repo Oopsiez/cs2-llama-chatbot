@@ -167,6 +167,17 @@
     </div>
 
     <div class="panel" data-panel="model">
+      <p class="note">
+        The model runs on <em>your</em> machine, next to CS2, so it is competing with the game for
+        memory. A 1-3B model answers chat perfectly well and runs on a 4GB card - or on no GPU at
+        all. Bigger is funnier, not necessary.
+      </p>
+      <div class="result" id="hardware-note">—</div>
+      <div class="actions">
+        <button class="action" id="refresh-models">What can this machine run?</button>
+      </div>
+      <div id="model-picks" class="picks"></div>
+      <div class="divider"></div>
       <label>Backend
         <select id="llm-backend">
           <option value="llama_cpp">llama.cpp (local GGUF)</option>

@@ -196,3 +196,15 @@ button.action.primary { background: linear-gradient(180deg, #2a2114, #1b1710); b
 .mono { font-family: var(--mono); font-size: 12px; }
 .result { background: #0e1216; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
 .divider { height: 1px; background: var(--line); }
+
+.picks { display: grid; gap: 8px; }
+.pick { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 4px; }
+.pick .top { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.pick .name { font-weight: 600; }
+.pick .why { color: var(--muted); font-size: 12px; }
+.pick .specs { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.verdict { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.verdict.fits { color: #7fd18a; }
+.verdict.tight { color: var(--accent); }
+.verdict.cpu { color: #8fb8e0; }
+.verdict.no { color: #d98b8b; }
