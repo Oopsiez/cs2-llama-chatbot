@@ -18,6 +18,11 @@ def test_killing_the_bot_itself_is_refused():
     assert not ok and "itself" in detail
 
 
+def test_a_process_that_is_not_on_the_gpu_cannot_be_ended():
+    ok, detail = gpu.kill(1)
+    assert not ok and "not using the GPU" in detail
+
+
 def test_unload_without_a_server_reports_rather_than_raises():
     ok, detail = asyncio.run(gpu.unload_model("http://127.0.0.1:1", "x"))
     assert not ok and "x" in detail

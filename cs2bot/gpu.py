@@ -77,12 +77,15 @@ def gpu_processes() -> list[GpuProcess]:
 
 
 def kill(pid: int) -> tuple[bool, str]:
-    """End a process by id - refused for the game, the bot, and Windows itself."""
-    for process in gpu_processes():
-        if process.pid == pid and process.protected:
-            return False, f"not killing {process.name} - the game or the bot needs it"
+    """End a process by id - only one nvidia-smi lists, and never the game, the bot or Windows."""
     if pid == os.getpid() or pid <= 0:
         return False, "not killing the bot itself"
+    listed = {process.pid: process for process in gpu_processes()}
+    process = listed.get(pid)
+    if process is None:
+        return False, f"process {pid} is not using the GPU - only GPU processes can be ended here"
+    if process.protected:
+        return False, f"not killing {process.name} - the game or the bot needs it"
     try:
         if sys.platform == "win32":
             result = subprocess.run(
