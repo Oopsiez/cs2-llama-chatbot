@@ -473,3 +473,22 @@ async def test_a_spoken_persona_order_is_answered_in_team_chat(tmp_path, monkeyp
     await engine.handle_voice("bot switch to the coach persona")
     assert engine.config.persona.name == "Coach"
     assert engine._sender.sent[-1][1] is True
+
+
+def test_the_mock_backend_is_not_warmed_and_a_reply_is_not_held_back():
+    import asyncio
+
+    from cs2bot.config import AppConfig
+    from cs2bot.engine import Engine
+
+    config = AppConfig()
+    config.llm.backend = "mock"
+    engine = Engine(config)
+
+    async def run():
+        await engine.start()
+        assert not engine.llm_loading
+        assert engine.status()["llm_loading"] is False
+        await engine.stop()
+
+    asyncio.run(run())

@@ -38,6 +38,10 @@ class Roster:
         self._names.insert(0, message.sender)
         del self._names[self._limit :]
 
+    def knows(self, name: str) -> bool:
+        key = name.casefold()
+        return any(known.casefold() == key for known in self._names)
+
     def names(self, exclude: str = "") -> list[str]:
         skip = exclude.casefold()
         return [name for name in self._names if name.casefold() != skip]

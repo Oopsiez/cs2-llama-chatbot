@@ -34,6 +34,7 @@
       <button class="tab" role="tab" data-tab="persona" aria-selected="true">Personality</button>
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
       <button class="tab" role="tab" data-tab="model">Model</button>
+      <button class="tab" role="tab" data-tab="gpu">GPU</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
       <button class="tab" role="tab" data-tab="strats">Strats</button>
       <button class="tab" role="tab" data-tab="voice">Voice</button>
@@ -60,6 +61,10 @@
         <span class="hint">Added to the prompt only while the bot is dead.</span>
         <textarea id="persona-dead" rows="2"></textarea>
       </label>
+      <label class="check">
+        <input type="checkbox" id="persona-game-aware" />
+        <span>Knows it is in a CS2 match (map, round, dead/alive). Untick for a clean slate that just chats.</span>
+      </label>
       <label>Custom prompt
         <span class="hint">Typed mid-match and appended to the prompt word for word. Takes effect
           on the next reply - no restart, no reload.</span>
@@ -80,6 +85,25 @@
         <button class="action" id="persona-load">Load</button>
         <button class="action" id="persona-delete">Delete</button>
         <span class="note" id="persona-note"></span>
+      </div>
+      <h3>Teammates</h3>
+      <p class="note">
+        People who have spoken in team chat or on voice count as teammates. Decide how the bot
+        treats them, separately from how the persona treats everyone else.
+      </p>
+      <label>
+        <span>Towards teammates</span>
+        <select id="teammates-stance">
+          <option value="same">Same as everyone else</option>
+          <option value="nice">Always friendly, whatever the persona</option>
+          <option value="custom">Custom instructions</option>
+        </select>
+      </label>
+      <label>
+        <span>Custom instructions for teammates</span>
+        <textarea id="teammates-custom" rows="2" placeholder="e.g. hype them up after every kill, never blame them for a lost round"></textarea>
+      </label>
+      <div class="actions">
       </div>
     </div>
 
@@ -164,6 +188,22 @@
         <label class="check"><input type="checkbox" id="reply-all" /><span>Reply in all chat</span></label>
         <label class="check"><input type="checkbox" id="reply-team" /><span>Reply in team chat</span></label>
       </div>
+    </div>
+
+    <div class="panel" data-panel="gpu">
+      <p class="note">
+        Everything sitting on the graphics card right now. Ollama keeps a model loaded for a while
+        after it is used, and other assistants that start with Windows can hold gigabytes - unload
+        or end them here before a match so CS2 and the bot's own model get the VRAM.
+      </p>
+      <div class="result" id="gpu-note">—</div>
+      <div class="actions">
+        <button class="action" id="refresh-gpu">Refresh</button>
+      </div>
+      <h3>Models loaded in Ollama</h3>
+      <div id="gpu-models" class="picks"></div>
+      <h3>Processes using the GPU</h3>
+      <div id="gpu-processes" class="picks"></div>
     </div>
 
     <div class="panel" data-panel="model">

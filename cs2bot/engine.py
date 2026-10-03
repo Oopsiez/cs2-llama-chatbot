@@ -106,6 +106,7 @@ class Engine:
         self._voice: VoiceListener | None = None
         self.last_voice_reply_at = float("-inf")
         self._task: asyncio.Task[None] | None = None
+        self._warm_task: asyncio.Task[None] | None = None
         # Every roll the bot makes - reply probability, typos - comes from here, so passing a
         # seed makes a run reproducible.
         self._random = random.Random(seed)
@@ -262,6 +263,7 @@ class Engine:
                 await self._backend.aclose()
             self._backend = None
             self.llm_status = "not checked"
+            self.warm_llm()
         if config.game != old.game or config.behavior != old.behavior:
             self._sender = None
         if config.game.console_log_path != old.game.console_log_path:
@@ -286,20 +288,49 @@ class Engine:
         self.bus.publish("status", self.status())
         return self.llm_status
 
+    @property
+    def llm_loading(self) -> bool:
+        return self._warm_task is not None and not self._warm_task.done()
+
+    def warm_llm(self) -> None:
+        """Load the model now, in the background, so it is not the first reply that pays for it.
+
+        Loading several gigabytes onto the card while CS2 is drawing frames is what froze
+        people's machines - doing it while they are still in the menu is just a slow start.
+        """
+        if self.config.llm.backend == "mock" or not self.config.llm.warm_on_start:
+            return
+        if self._warm_task is not None and not self._warm_task.done():
+            self._warm_task.cancel()
+        self._warm_task = asyncio.create_task(self._warm(), name="cs2bot-warm-llm")
+
+    async def _warm(self) -> None:
+        self.llm_status = "loading the model…"
+        self.bus.publish("status", self.status())
+        try:
+            self.llm_status = await self.backend.warm()
+        except LLMError as exc:
+            self.llm_status = f"error: {exc}"
+        except Exception as exc:  # a bad model file must not take the loop down
+            self.llm_status = f"error: {type(exc).__name__}: {exc}"
+        self.bus.publish("status", self.status())
+
     # ---- lifecycle --------------------------------------------------------------
 
     async def start(self) -> None:
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._run(), name="cs2bot-loop")
+        self.warm_llm()
 
     async def stop(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        for task in (self._task, self._warm_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        self._task = self._warm_task = None
         if self._tailer is not None:
             self._tailer.close()
             self._tailer = None
@@ -461,6 +492,13 @@ class Engine:
             self.bus.publish(
                 "skipped",
                 {"message": message.model_dump(mode="json"), "reason": "reply probability roll failed"},
+            )
+            return None
+
+        if self.llm_loading:
+            self.bus.publish(
+                "skipped",
+                {"message": message.model_dump(mode="json"), "reason": "model still loading"},
             )
             return None
 
@@ -841,6 +879,13 @@ class Engine:
         self.deaths.note_phase(self.game_state.player.round_phase)
         return self.deaths.observe(message)
 
+    def is_teammate(self, message: ChatMessage) -> bool:
+        """Team chat and voice are team-only by construction; all-chat is a teammate only when
+        that name has been seen in team chat this map."""
+        if message.is_voice or message.channel is ChatChannel.TEAM:
+            return True
+        return bool(message.sender) and self.roster.knows(message.sender)
+
     async def generate_reply(self, message: ChatMessage, local_state: LifeState) -> str:
         """Generate a reply, retrying while it echoes something the bot recently said."""
         behavior = self.config.behavior
@@ -852,6 +897,7 @@ class Engine:
             self.history[:-1],
             self.own_name,
             self.recent_replies,
+            is_teammate=self.is_teammate(message),
         )
         attempts = 1 + (behavior.repeat_retries if behavior.avoid_repeats else 0)
         self.last_generation_repeated = False
@@ -950,6 +996,7 @@ class Engine:
             "running": self._task is not None and not self._task.done(),
             "llm_backend": self.config.llm.backend,
             "llm_status": self.llm_status,
+            "llm_loading": self.llm_loading,
             "sender": self.sender.describe(),
             "log_path": self.config.game.console_log_path,
             "log_attached": self.log_attached,

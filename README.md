@@ -201,6 +201,35 @@ Limitations worth knowing before you blame the bot:
 - **Not enough machine for any of it?** Point the bot at Ollama on another computer (below), or
   leave it on the mock backend, which needs nothing.
 
+## The PC froze on the first reply
+
+That is the model being loaded onto the graphics card in the middle of a round, while CS2 already
+holds most of it. Three things now stop it:
+
+- **It loads while you are in the menu.** The model is warmed as soon as the panel starts
+  (`llm.warm_on_start`); the status line says "loading the model…" and chat is skipped until it is
+  ready, instead of the first reply paying the cost mid-fight.
+- **It leaves half the CPU to the game.** Local inference uses half the cores by default and runs
+  at a lower priority on Windows. Set `llm.n_threads` to override.
+- **It will not overfill the card.** With `llm.gpu_auto` on (the default), a GGUF model goes on the
+  GPU only when it fits beside CS2's 2 GB; otherwise it runs on the CPU. Ollama places its own
+  models - pick a smaller one on the Model tab if it is tight.
+
+The **GPU** tab shows what is sitting on the card right now - models Ollama still has loaded (it
+keeps them for a while after use, and other assistants that start with Windows hold theirs) and
+every process using GPU memory (NVIDIA only; needs `nvidia-smi`). Unload a model or end a process
+there before a match. CS2, Steam, the bot itself and Windows system processes are never offered.
+
+## Clean slate and teammates
+
+The **Clean slate** preset is a persona that does not know it is in a game: no map, round, or
+dead/alive context goes into the prompt, it just chats. Untick *Knows it is in a CS2 match* on any
+persona for the same effect.
+
+Everyone who has spoken in team chat or on voice counts as a teammate. Under **Teammates** on the
+Personality tab, pick whether the bot treats them the same as everyone else, is always friendly to
+them even as a toxic persona, or follows your own instructions for them.
+
 ## Running the model on another computer
 
 The model is the only heavy part, so it can live on a different machine - a desktop with a GPU, a

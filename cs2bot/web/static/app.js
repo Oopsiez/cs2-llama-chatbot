@@ -13,6 +13,9 @@ const BINDINGS = {
   "persona-extra": ["persona.extra_instructions", "text"],
   "persona-banned": ["persona.banned_words", "list"],
   "persona-maxchars": ["persona.max_reply_chars", "int"],
+  "persona-game-aware": ["persona.game_aware", "bool"],
+  "teammates-stance": ["teammates.stance", "text"],
+  "teammates-custom": ["teammates.custom", "text"],
 
   iq: ["behavior.intelligence", "int"],
   literacy: ["behavior.literacy", "int"],
@@ -240,6 +243,7 @@ function bindTabs() {
         panel.dataset.active = String(panel.dataset.panel === tab.dataset.tab);
       });
       if (tab.dataset.tab === "voice") renderVoice();
+      if (tab.dataset.tab === "gpu") renderGpu();
     });
   });
 }
@@ -410,6 +414,7 @@ function bindActions() {
   });
 
   $("refresh-models").addEventListener("click", renderModels);
+  $("refresh-gpu").addEventListener("click", renderGpu);
 
   $("check-llm").addEventListener("click", async () => {
     $("llm-note").textContent = "checking…";
@@ -684,6 +689,57 @@ async function renderModels() {
       scheduleSave();
       $("llm-note").textContent = `set to ${model.ollama} - pull it with: ollama pull ${model.ollama}`;
     });
+  }
+}
+
+async function gpuAction(path, body) {
+  const result = await (await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })).json();
+  $("gpu-note").textContent = result.detail;
+  await renderGpu();
+}
+
+async function renderGpu() {
+  const body = await (await fetch("/api/gpu")).json();
+  const card = body.vram_gb ? `${body.gpu}: ${body.vram_gb}GB` : "no GPU memory reported";
+  const used = body.nvidia_smi
+    ? `${(body.used_mb / 1024).toFixed(1)}GB in use by ${body.processes.length} process(es)`
+    : "nvidia-smi not found - per-process use is only readable on NVIDIA cards";
+  $("gpu-note").textContent = `${card}\n${used}`;
+  $("gpu-models").innerHTML = body.models.length
+    ? body.models
+        .map(
+          (m) => `<div class="pick"><div class="top">
+            <span class="name">${escapeHtml(m.name)}</span>
+            <span class="specs">${m.vram_gb}GB on the card of ${m.size_gb}GB</span></div>
+            <div class="actions"><button class="action" data-unload="${escapeHtml(m.name)}">Unload</button></div>
+          </div>`
+        )
+        .join("")
+    : '<div class="note">nothing loaded (or Ollama is not running)</div>';
+  $("gpu-processes").innerHTML = body.processes.length
+    ? body.processes
+        .map(
+          (p) => `<div class="pick"><div class="top">
+            <span class="name">${escapeHtml(p.name)} <span class="specs">pid ${p.pid}</span></span>
+            <span class="specs">${(p.used_mb / 1024).toFixed(1)}GB</span></div>
+            <div class="actions">${
+              p.protected
+                ? '<span class="note">kept - the game or the bot needs it</span>'
+                : `<button class="action" data-kill="${p.pid}">End process</button>`
+            }</div>
+          </div>`
+        )
+        .join("")
+    : '<div class="note">nothing to show</div>';
+  for (const button of $("gpu-models").querySelectorAll("[data-unload]")) {
+    button.addEventListener("click", () => gpuAction("/api/gpu/unload", { model: button.dataset.unload }));
+  }
+  for (const button of $("gpu-processes").querySelectorAll("[data-kill]")) {
+    button.addEventListener("click", () => gpuAction("/api/gpu/kill", { pid: Number(button.dataset.kill) }));
   }
 }
 

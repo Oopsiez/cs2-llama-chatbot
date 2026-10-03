@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from .config import AppConfig, PersonaSettings
+from .config import AppConfig, PersonaSettings, TeammateSettings
 from .humanize import game_iq_directive, literacy_directive
 from .llm.base import ChatTurn
 from .models import ChatChannel, ChatMessage, LifeState, LocalPlayer
@@ -13,6 +13,16 @@ from .playbook import Strategy, assign, map_label
 from .snitch import is_request, prompt_note
 
 PRESETS: dict[str, PersonaSettings] = {
+    "Clean slate": PersonaSettings(
+        name="Clean slate",
+        description=(
+            "You are a person chatting in a group text chat. You have no particular persona: "
+            "talk naturally, in your own voice, about whatever people bring up."
+        ),
+        style_notes="Keep it short, like real chat. No emoji spam. No asterisk roleplay actions.",
+        dead_notes="",
+        game_aware=False,
+    ),
     "Cheeky Teammate": PersonaSettings(
         name="Cheeky Teammate",
         description=(
@@ -93,6 +103,10 @@ PRESETS: dict[str, PersonaSettings] = {
 
 # Nobody types "Angry and Toxic" in the middle of a round; they type "toxic".
 _NICKNAMES = {
+    "clean": "Clean slate",
+    "blank": "Clean slate",
+    "plain": "Clean slate",
+    "default": "Clean slate",
     "toxic": "Angry and Toxic",
     "angry": "Angry and Toxic",
     "mad": "Angry and Toxic",
@@ -222,6 +236,24 @@ def state_note(local_state: LifeState, incoming: ChatMessage) -> str | None:
     return None
 
 
+_NICE_NOTE = (
+    "{who} is on YOUR team. Whatever your persona is like to everyone else, be friendly and "
+    "supportive to your own teammates: no insults, no blame, back them up."
+)
+
+
+def teammate_note(settings: TeammateSettings, incoming: ChatMessage, is_teammate: bool) -> str | None:
+    """How to treat the sender when they are on the bot's own team."""
+    if not is_teammate:
+        return None
+    who = "the person on voice" if incoming.is_voice else incoming.sender
+    if settings.stance == "nice":
+        return _NICE_NOTE.format(who=who)
+    if settings.stance == "custom" and settings.custom.strip():
+        return f"{who} is on YOUR team. {settings.custom.strip()}"
+    return None
+
+
 def _address_note(incoming: ChatMessage, own_name: str) -> str | None:
     if not incoming.addressed_to_me:
         return None
@@ -240,18 +272,26 @@ def build_system_prompt(
     incoming: ChatMessage,
     own_name: str = "",
     recent_replies: list[str] | None = None,
+    is_teammate: bool = False,
 ) -> str:
     persona = config.persona
+    aware = persona.game_aware
     lines = [persona.description.strip()]
     if persona.style_notes.strip():
         lines.append(persona.style_notes.strip())
     if persona.extra_instructions.strip():
         lines.append(persona.extra_instructions.strip())
-    if config.dead_alive.use_dead_persona and local_state is LifeState.DEAD and persona.dead_notes.strip():
+    if (
+        aware
+        and config.dead_alive.use_dead_persona
+        and local_state is LifeState.DEAD
+        and persona.dead_notes.strip()
+    ):
         lines.append(persona.dead_notes.strip())
     lines.append(literacy_directive(config.behavior.literacy))
-    lines.append(game_iq_directive(config.behavior.intelligence))
-    if config.behavior.unprompted_advice:
+    if aware:
+        lines.append(game_iq_directive(config.behavior.intelligence))
+    if aware and config.behavior.unprompted_advice:
         lines.append(
             "Offer a useful pointer even when nobody asked for one, based on what you can see "
             "in the chat and the game context."
@@ -262,21 +302,31 @@ def build_system_prompt(
     )
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
-    lines.append("Live game context - " + game_context(player, local_state, incoming, own_name))
-    if config.dead_alive.adapt_replies:
-        state = state_note(local_state, incoming)
-        if state:
-            lines.append(state)
+    if aware:
+        lines.append("Live game context - " + game_context(player, local_state, incoming, own_name))
+        if config.dead_alive.adapt_replies:
+            state = state_note(local_state, incoming)
+            if state:
+                lines.append(state)
+    elif own_name:
+        lines.append(f"Your name in the chat is {own_name}; {incoming.sender} wrote the message.")
+    team = teammate_note(config.teammates, incoming, is_teammate)
+    if team:
+        lines.append(team)
     note = _address_note(incoming, own_name)
     if note:
         lines.append(note)
-    if incoming.is_voice:
+    if incoming.is_voice and aware:
         lines.append(_VOICE_NOTE)
-    snitch = prompt_note(
-        config.snitch,
-        player,
-        config.callouts,
-        asked=is_request(incoming.text, config.snitch.request_phrases),
+    snitch = (
+        prompt_note(
+            config.snitch,
+            player,
+            config.callouts,
+            asked=is_request(incoming.text, config.snitch.request_phrases),
+        )
+        if aware
+        else None
     )
     if snitch:
         lines.append(snitch)
@@ -374,9 +424,10 @@ def build_turns(
     history: list[ChatMessage],
     own_name: str = "",
     recent_replies: list[str] | None = None,
+    is_teammate: bool = False,
 ) -> list[ChatTurn]:
     system = build_system_prompt(
-        config, player, local_state, incoming, own_name, recent_replies
+        config, player, local_state, incoming, own_name, recent_replies, is_teammate
     )
     turns = [ChatTurn(role="system", content=system)]
     for message in history[-config.behavior.history_turns :]:

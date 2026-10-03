@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .. import gpu
 from ..callouts import DEFAULT_RADIUS, Callout
 from ..config import AppConfig, PersonaSettings, config_path, load_config, save_config
 from ..elevate import relaunch_as_admin
@@ -109,6 +110,24 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.post("/api/llm/check")
     async def llm_check() -> dict[str, str]:
         return {"status": await engine.check_llm()}
+
+    @app.get("/api/gpu")
+    async def gpu_report() -> dict[str, Any]:
+        llm = engine.config.llm
+        return await gpu.report(llm.ollama_url, llm.ollama_api_key, llm.ollama_verify_tls)
+
+    @app.post("/api/gpu/kill")
+    async def gpu_kill(body: dict[str, int]) -> dict[str, Any]:
+        ok, detail = gpu.kill(int(body.get("pid", 0)))
+        return {"ok": ok, "detail": detail}
+
+    @app.post("/api/gpu/unload")
+    async def gpu_unload(body: dict[str, str]) -> dict[str, Any]:
+        llm = engine.config.llm
+        ok, detail = await gpu.unload_model(
+            llm.ollama_url, body.get("model", ""), llm.ollama_api_key, llm.ollama_verify_tls
+        )
+        return {"ok": ok, "detail": detail}
 
     @app.get("/api/personas")
     async def list_personas() -> dict[str, Any]:

@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..config import LLMSettings
+from ..hardware import Hardware, probe
 from .base import ChatTurn, LLMBackend, LLMError, SamplingParams
-from .llamacpp import LlamaCppBackend
+from .llamacpp import LlamaCppBackend, threads_for_the_model
 from .mock import MockBackend
 from .ollama import OllamaBackend
 
 BACKENDS = ("llama_cpp", "ollama", "mock")
+
+
+# Weights plus the KV cache and scratch buffers, roughly, for a 4k context.
+GGUF_OVERHEAD_GB = 1.0
+
+
+def gpu_layers_for(settings: LLMSettings, hardware: Hardware) -> int:
+    """All layers on the card when the file fits beside CS2, none when it does not."""
+    if not settings.gpu_auto:
+        return settings.n_gpu_layers
+    try:
+        size_gb = Path(settings.model_path).stat().st_size / 1024**3
+    except OSError:
+        return settings.n_gpu_layers
+    if not hardware.vram_gb:
+        return 0
+    return -1 if size_gb + GGUF_OVERHEAD_GB <= hardware.vram_for_model_gb else 0
 
 
 def build_backend(settings: LLMSettings) -> LLMBackend:
@@ -16,7 +36,7 @@ def build_backend(settings: LLMSettings) -> LLMBackend:
         return LlamaCppBackend(
             model_path=settings.model_path,
             n_ctx=settings.n_ctx,
-            n_gpu_layers=settings.n_gpu_layers,
+            n_gpu_layers=gpu_layers_for(settings, probe()),
             n_threads=settings.n_threads,
         )
     if settings.backend == "ollama":
@@ -26,6 +46,7 @@ def build_backend(settings: LLMSettings) -> LLMBackend:
             timeout=settings.request_timeout,
             api_key=settings.ollama_api_key,
             verify_tls=settings.ollama_verify_tls,
+            num_thread=settings.n_threads or threads_for_the_model(),
         )
     if settings.backend == "mock":
         return MockBackend()
@@ -42,4 +63,5 @@ __all__ = [
     "OllamaBackend",
     "SamplingParams",
     "build_backend",
+    "gpu_layers_for",
 ]

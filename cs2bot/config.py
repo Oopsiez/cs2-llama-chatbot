@@ -46,9 +46,13 @@ class LLMSettings(BaseModel):
     ollama_api_key: str = ""  # sent as `Authorization: Bearer ...` for proxied servers
     ollama_verify_tls: bool = True  # off for a self-signed certificate on your own proxy
     n_ctx: int = 4096
+    # -1 puts every layer on the GPU, 0 keeps the model on the CPU. `gpu_auto` overrides this:
+    # the whole model goes on the card only when it fits beside CS2, otherwise none of it does.
     n_gpu_layers: int = -1
-    n_threads: int = 0  # 0 -> let the runtime decide
+    gpu_auto: bool = True
+    n_threads: int = 0  # 0 -> half the cores, so the game keeps the other half
     request_timeout: float = 30.0
+    warm_on_start: bool = True  # load the model while you are in the menu, not on the first reply
 
 
 class GenerationSettings(BaseModel):
@@ -76,6 +80,17 @@ class PersonaSettings(BaseModel):
     extra_instructions: str = ""
     banned_words: list[str] = Field(default_factory=list)
     max_reply_chars: int = 160
+    # Off for a persona that should not know it is in a game: no map, round or dead/alive talk.
+    game_aware: bool = True
+
+
+class TeammateSettings(BaseModel):
+    """How the bot treats people on its own team, whatever the persona is like to everyone else."""
+
+    # same: no special treatment; nice: friendly to teammates even as a toxic persona;
+    # custom: use `custom` verbatim.
+    stance: str = "same"
+    custom: str = ""
 
 
 class BehaviorSettings(BaseModel):
@@ -265,6 +280,7 @@ class AppConfig(BaseModel):
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     persona: PersonaSettings = Field(default_factory=PersonaSettings)
     behavior: BehaviorSettings = Field(default_factory=BehaviorSettings)
+    teammates: TeammateSettings = Field(default_factory=TeammateSettings)
     dead_alive: DeadAliveSettings = Field(default_factory=DeadAliveSettings)
     snitch: SnitchSettings = Field(default_factory=SnitchSettings)
     strategy: StrategySettings = Field(default_factory=StrategySettings)

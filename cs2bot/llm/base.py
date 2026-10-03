@@ -37,5 +37,9 @@ class LLMBackend(abc.ABC):
         """Human-readable readiness string; raises LLMError when unusable."""
         return "ok"
 
+    async def warm(self) -> str:
+        """Get the model into memory now, so the first reply does not have to."""
+        return await self.health()
+
     async def aclose(self) -> None:
         return None
