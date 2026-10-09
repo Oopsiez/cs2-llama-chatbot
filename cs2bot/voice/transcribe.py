@@ -98,7 +98,7 @@ class WhisperTranscriber:
         self,
         model: str = "small.en",
         *,
-        device: str = "auto",
+        device: str = "cpu",
         compute_type: str = "int8",
         language: str = "en",
         beam_size: int = 1,
@@ -109,6 +109,7 @@ class WhisperTranscriber:
         self.language = language
         self.beam_size = beam_size
         self._model: _WhisperModel | None = None
+        self.note = ""
 
     @property
     def loaded(self) -> bool:
@@ -120,10 +121,17 @@ class WhisperTranscriber:
             return
         from faster_whisper import WhisperModel
 
-        self._model = cast(
-            _WhisperModel,
-            WhisperModel(self.model_name, device=self.device, compute_type=self.compute_type),
-        )
+        try:
+            model = WhisperModel(self.model_name, device=self.device, compute_type=self.compute_type)
+        except RuntimeError as exc:
+            if self.device == "cpu" or not wants_cuda_runtime(exc):
+                raise
+            # CTranslate2 saw an NVIDIA card and reached for CUDA 12 libraries that are not
+            # shipped: the CPU runs a small model fine, and the GPU is CS2's anyway.
+            self.note = f"speech runs on the CPU ({exc})"
+            self.device = "cpu"
+            model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
+        self._model = cast(_WhisperModel, model)
 
     def transcribe(self, samples: Sequence[float]) -> str:
         import numpy as np
@@ -140,6 +148,12 @@ class WhisperTranscriber:
             condition_on_previous_text=False,
         )
         return clean(" ".join(segment.text for segment in segments))
+
+
+def wants_cuda_runtime(exc: BaseException) -> bool:
+    """Whether a load failure is CTranslate2 missing CUDA DLLs (cublas, cudnn) rather than a bad model."""
+    text = str(exc).casefold()
+    return any(word in text for word in ("cublas", "cudnn", "cuda", "cannot be loaded"))
 
 
 def clean(text: str) -> str:

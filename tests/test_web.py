@@ -266,3 +266,7 @@ def test_the_panel_says_what_this_machine_can_run(client):
     first = body["models"][0]
     assert {"label", "verdict", "vram_gb", "ram_gb", "ollama"} <= set(first)
     assert "ram_gb" in body["hardware"]
+
+
+def test_the_browser_gets_a_favicon_instead_of_a_404(client):
+    assert client.get("/favicon.ico").status_code == 200

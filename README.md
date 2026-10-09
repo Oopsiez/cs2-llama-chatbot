@@ -165,6 +165,11 @@ text-to-speech and no virtual microphone, and your own microphone is never opene
 The *Say this out loud* box on the tab runs a transcript through the whole path without a
 microphone, which is the quickest way to see what it would answer.
 
+Speech recognition runs on the CPU on purpose: the GPU is CS2's and the chat model's, and a
+`small.en` model keeps up in real time on the CPU. If a build ever tries the GPU and Windows says
+`cublas64_12.dll is not found`, the bot falls back to the CPU on its own and says so in the Voice
+status.
+
 ## Teaching it callouts
 
 CS2 tells the bot your coordinates, not that you are standing in banana. So you teach it once per

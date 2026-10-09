@@ -301,3 +301,27 @@ def test_a_message_is_typed_chat_unless_it_says_otherwise():
     )
     assert spoken.is_voice
     assert spoken.model_dump(mode="json")["source"] == "voice"
+
+
+def test_whisper_runs_on_the_cpu_by_default_and_falls_back_when_cuda_dlls_are_missing(monkeypatch):
+    import sys
+    import types
+
+    from cs2bot.voice import transcribe as t
+
+    assert t.WhisperTranscriber("tiny").device == "cpu"
+    assert t.wants_cuda_runtime(RuntimeError("Library cublas64_12.dll is not found or cannot be loaded"))
+    assert not t.wants_cuda_runtime(RuntimeError("no such model"))
+
+    calls = []
+
+    class FakeModel:
+        def __init__(self, name, device, compute_type):
+            calls.append(device)
+            if device != "cpu":
+                raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeModel))
+    whisper = t.WhisperTranscriber("tiny", device="auto")
+    whisper.load()
+    assert calls == ["auto", "cpu"] and whisper.device == "cpu" and "CPU" in whisper.note
