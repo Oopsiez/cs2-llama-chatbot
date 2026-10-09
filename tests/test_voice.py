@@ -117,6 +117,7 @@ def test_a_string_of_whisper_boilerplate_is_silence():
 
 
 def test_segments_whisper_is_unsure_of_are_dropped():
+    pytest.importorskip("numpy")
     class Seg:
         def __init__(self, text, no_speech_prob, avg_logprob):
             self.text, self.no_speech_prob, self.avg_logprob = text, no_speech_prob, avg_logprob
