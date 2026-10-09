@@ -840,6 +840,7 @@ async function renderVoice() {
       .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`)
       .join("");
   out.value = config.voice.speak_device;
+  if (body.devices_error) $("voice-speak-output").textContent = `no output devices listed: ${body.devices_error}`;
   const voices = $("voice-speak-voice");
   const engine = config.voice.speak_engine || "piper";
   $("voice-speak-engine").value = engine;

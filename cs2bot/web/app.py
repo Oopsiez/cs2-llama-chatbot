@@ -30,7 +30,7 @@ from ..persona import PRESETS, build_system_prompt
 from ..rules import should_reply
 from ..snitch import where
 from ..voice import cable, tts
-from ..voice.audio import output_devices
+from ..voice.audio import output_devices_report
 from ..voice.binds import detect_voice_key
 from ..voice.speak import installed_voices, play, render
 
@@ -293,9 +293,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.get("/api/voice")
     async def voice_status() -> dict[str, Any]:
         """Whether the bot can hear voice comms here, and what it last heard."""
+        devices, devices_error = await asyncio.to_thread(output_devices_report)
         return {
             "status": engine.voice_status(),
-            "devices": output_devices(),
+            "devices": devices,
+            "devices_error": devices_error,
             "settings": engine.config.voice.model_dump(mode="json"),
             "voices": await asyncio.to_thread(installed_voices),
         }

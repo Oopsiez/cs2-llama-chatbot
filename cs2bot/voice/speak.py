@@ -18,9 +18,10 @@ import time
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from ..novelty import similarity
-from ..output.keyboard import KeyPressError, hold
+from ..output.keyboard import hold
 from . import kokoro, tts
 from .audio import com_apartment, loopback_missing
 
@@ -145,6 +146,20 @@ def play_targets(device_id: str = "", monitor: bool = False) -> list[str]:
     return [device_id]
 
 
+def find_speaker(sc: Any, target: str) -> Any:
+    """The output device for a saved id or name; a device id changes when the driver is
+    reinstalled, so fall back to the name (CABLE Input ...) before giving up."""
+    try:
+        return sc.get_speaker(target)
+    except Exception:
+        wanted = target.casefold()
+        for speaker in sc.all_speakers():
+            if wanted in str(speaker.name).casefold() or wanted == str(speaker.id).casefold():
+                return speaker
+        names = ", ".join(str(s.name) for s in sc.all_speakers()) or "none"
+        raise RuntimeError(f"output device '{target}' is not there (found: {names})") from None
+
+
 def play(samples: list[float], rate: int, device_id: str = "", monitor: bool = False) -> None:
     """Play samples on an output device; blank means the default speakers.
 
@@ -159,7 +174,7 @@ def play(samples: list[float], rate: int, device_id: str = "", monitor: bool = F
 
     def one(target: str) -> None:
         with com_apartment():
-            speaker = sc.default_speaker() if not target else sc.get_speaker(target)
+            speaker = sc.default_speaker() if not target else find_speaker(sc, target)
             speaker.play(data, samplerate=rate)
 
     targets = play_targets(device_id, monitor)
@@ -223,9 +238,9 @@ class Speaker:
             self.recent.append((text, self.talk_started_at))
             try:
                 await asyncio.to_thread(self._speak, text)
-            except (KeyPressError, RuntimeError, OSError) as exc:
-                self.last_error = str(exc)
-                return False, str(exc)
+            except Exception as exc:  # a device error must show in the panel, not a 500
+                self.last_error = f"{type(exc).__name__}: {exc}"
+                return False, self.last_error
             finally:
                 self.last_spoke_at = time.time()
         self.said += 1

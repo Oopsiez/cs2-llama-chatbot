@@ -53,24 +53,40 @@ def loopback_missing() -> str:
 
 def output_devices() -> list[Device]:
     """The speakers that can be listened to, with the default one marked."""
-    if loopback_missing():
-        return []
+    return output_devices_report()[0]
+
+
+def output_devices_report() -> tuple[list[Device], str]:
+    """`(devices, error)` - the error says why the list is empty when it is, so the panel can
+    show it instead of a blank drop-down."""
+    missing = loopback_missing()
+    if missing:
+        return [], missing
     import soundcard as sc
 
-    try:
-        default = sc.default_speaker()
-    except Exception:  # pragma: no cover - no audio hardware at all
-        return []
-    devices: list[Device] = []
-    for speaker in sc.all_speakers():
-        devices.append(
-            {
-                "id": str(speaker.id),
-                "name": str(speaker.name),
-                "default": default is not None and str(speaker.id) == str(default.id),
-            }
-        )
-    return devices
+    with com_apartment():
+        try:
+            default = sc.default_speaker()
+        except Exception as exc:  # no default output set - the others may still be there
+            default = None
+            note = f"no default output device ({type(exc).__name__}: {exc})"
+        else:
+            note = ""
+        try:
+            speakers = list(sc.all_speakers())
+        except Exception as exc:  # pragma: no cover - needs real hardware to fail
+            return [], f"could not list output devices ({type(exc).__name__}: {exc})"
+    devices: list[Device] = [
+        {
+            "id": str(speaker.id),
+            "name": str(speaker.name),
+            "default": default is not None and str(speaker.id) == str(default.id),
+        }
+        for speaker in speakers
+    ]
+    if not devices:
+        return [], note or "Windows reports no output devices"
+    return devices, note
 
 
 def _microphone(device_id: str) -> _Microphone:
