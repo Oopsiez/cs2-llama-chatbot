@@ -1,6 +1,7 @@
 import sys
 import threading
 import time
+import types
 
 import pytest
 
@@ -711,3 +712,17 @@ def test_cache_check_knows_where_the_big_models_live(tmp_path, monkeypatch):
     blob.mkdir(parents=True)
     (blob / "model.bin").write_bytes(b"0")
     assert transcribe.model_is_cached("distil-large-v3")
+
+
+def test_chatterbox_prompt_keeps_the_tokenizers_end_markers(monkeypatch):
+    from cs2bot.voice import engines
+
+    class Tok:
+        def encode(self, text, add_special_tokens=True):
+            ids = [1, 2, 3]
+            return types.SimpleNamespace(ids=ids + [50256, 50256] if add_special_tokens else ids)
+
+    engine = engines.find("chatterbox")
+    assert engine is not None
+    monkeypatch.setitem(engines._sessions, "chatterbox/tokenizer", Tok())
+    assert engines.text_ids(engine, "push A") == [1, 2, 3, 50256, 50256]

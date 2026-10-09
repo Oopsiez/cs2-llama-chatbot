@@ -274,6 +274,12 @@ def _kitten(engine: Engine, text: str, voice: str, rate: int) -> list[float]:
 START_SPEECH, STOP_SPEECH, SILENCE = 6561, 6562, 4299
 
 
+def text_ids(engine: Engine, text: str) -> list[int]:
+    """Chatterbox's text prompt: the tokenizer's own template, which ends every prompt with two
+    <|endoftext|> markers - without them the model mumbles."""
+    return list(_tokenizer(engine).encode(text).ids)  # type: ignore[attr-defined]
+
+
 def _chatterbox(engine: Engine, text: str) -> list[float]:
     import numpy as np
 
@@ -285,7 +291,7 @@ def _chatterbox(engine: Engine, text: str) -> list[float]:
             "no voice to clone yet - add a clip (upload, URL or last voice heard) on the Speech tab"
         )
     audio = np.asarray(reference, dtype=np.float32)[np.newaxis, :]
-    ids = np.array([_tokenizer(engine).encode(text, add_special_tokens=False).ids], dtype=np.int64)  # type: ignore[attr-defined]
+    ids = np.array([text_ids(engine, text)], dtype=np.int64)
     embed = _session(engine, "embed_tokens_quantized.onnx")
     lm = _session(engine, "language_model_quantized.onnx")
     cond_emb, prompt_token, speaker_emb, speaker_feat = _session(engine, "speech_encoder_quantized.onnx").run(  # type: ignore[attr-defined]
@@ -301,7 +307,7 @@ def _chatterbox(engine: Engine, text: str) -> list[float]:
     attention: Any = np.ones((1, seq_len), dtype=np.int64)
     position: Any = np.arange(seq_len, dtype=np.int64).reshape(1, -1)
     generated = [START_SPEECH]
-    for _ in range(600):
+    for _ in range(1024):
         logits, *present = lm.run(  # type: ignore[attr-defined]
             None,
             {"inputs_embeds": inputs_embeds, "attention_mask": attention, "position_ids": position, **past},
