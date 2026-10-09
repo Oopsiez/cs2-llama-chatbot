@@ -54,6 +54,20 @@
       </label>
       <label class="check"><input type="checkbox" id="voice-enabled" /><span>Listen to voice comms
         <small>Hears the team over voice (through your speakers) and answers in team chat.</small></span></label>
+      <label class="check"><input type="checkbox" id="obey-orders" /><span>Obey orders
+        <small>"strat?", "bot quiet", "bot talk" and persona changes from players count as orders.</small></span></label>
+      <details class="options" id="obey-options"><summary>Options</summary>
+        <div class="row">
+          <label>Take orders from
+            <select id="orders-listen">
+              <option value="team">team chat only</option>
+              <option value="all">all chat only</option>
+              <option value="both">both</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="orders-persona" /><span>Let players change the personality</span></label>
+        </div>
+      </details>
       <label>Preset
         <select id="preset"></select>
       </label>
@@ -448,6 +462,28 @@
     <div class="panel" data-panel="speech">
       <label class="check"><input type="checkbox" id="voice-enabled-speech" /><span>Listen to voice comms
         <small>Hears the team over voice (through your speakers) and answers in team chat.</small></span></label>
+      <label class="check"><input type="checkbox" id="obey-orders-speech" /><span>Obey orders
+        <small>"strat?", "bot quiet", "bot talk" and persona changes from players count as orders.</small></span></label>
+      <details class="options" id="obey-options-speech"><summary>Options</summary>
+        <label>Answer <span class="hint">questions always get an answer, even mid-cooldown</span>
+          <select id="voice-answer">
+            <option value="everything">Everything it hears</option>
+            <option value="questions">Only questions</option>
+            <option value="triggers">Only speech with a trigger word</option>
+          </select>
+        </label>
+        <label>Trigger words (comma separated) <span class="hint">used by the trigger-word mode only</span>
+          <input type="text" id="voice-triggers" />
+        </label>
+        <div class="row">
+          <label>Wait between answers (seconds)
+            <input type="number" id="voice-cooldown" min="0" step="1" />
+          </label>
+          <label>Ignore speech shorter than (words)
+            <input type="number" id="voice-min-words" min="1" step="1" />
+          </label>
+        </div>
+      </details>
       <h3>Listening</h3>
       <details class="help"><summary title="What this does">?</summary><p class="note">
         The bot listens to what your speakers are playing and transcribes it with a local Whisper
@@ -478,30 +514,10 @@
           </select>
         </label>
       </div>
-      <label>Answer <span class="hint">questions always get an answer, even mid-cooldown</span>
-        <select id="voice-answer">
-          <option value="everything">Everything it hears</option>
-          <option value="questions">Only questions</option>
-          <option value="triggers">Only speech with a trigger word</option>
-        </select>
-      </label>
-      <label>Trigger words (comma separated) <span class="hint">used by the trigger-word mode only</span>
-        <input type="text" id="voice-triggers" />
-      </label>
-      <div class="row">
-        <label>Wait between answers (seconds)
-          <input type="number" id="voice-cooldown" min="0" step="1" />
-        </label>
-        <label>Ignore speech shorter than (words)
-          <input type="number" id="voice-min-words" min="1" step="1" />
-        </label>
-      </div>
       <div class="row">
         <label>Noise gate <span class="hint">raise it if gunfire is being transcribed, lower it if a quiet teammate is missed</span>
           <input type="number" id="voice-floor" min="0" max="0.2" step="0.001" />
         </label>
-        <label class="check"><input type="checkbox" id="voice-obey" /><span>Obey spoken orders
-          <small>"strat?" or "bot quiet" said out loud counts the same as typed.</small></span></label>
       </div>
       <h3>Try it</h3>
       <div class="actions">

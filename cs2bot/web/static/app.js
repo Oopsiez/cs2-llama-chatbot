@@ -97,6 +97,10 @@ const BINDINGS = {
   "strat-name-players": ["strategy.name_players", "bool"],
   "strat-side": ["strategy.fallback_side", "text"],
   "strat-obey": ["strategy.obey_commands", "bool"],
+  "obey-orders": ["strategy.obey_commands", "bool"],
+  "obey-orders-speech": ["strategy.obey_commands", "bool"],
+  "orders-listen": ["strategy.listen_channel", "text"],
+  "orders-persona": ["strategy.obey_persona_commands", "bool"],
   "strat-quiet": ["strategy.quiet_seconds", "float"],
   "strat-persona-cmd": ["strategy.obey_persona_commands", "bool"],
 
@@ -153,7 +157,6 @@ const BINDINGS = {
   "voice-model": ["voice.model", "text"],
   "voice-answer": ["voice.answer", "text"],
   "voice-triggers": ["voice.trigger_words", "list"],
-  "voice-obey": ["voice.obey_commands", "bool"],
   "voice-cooldown": ["voice.cooldown_seconds", "float"],
   "voice-min-words": ["voice.min_words", "int"],
   "voice-floor": ["voice.noise_floor", "float"],
@@ -210,6 +213,7 @@ function renderConfig() {
     if (el) writeField(el, kind, getPath(config, path));
   }
   renderPlacement();
+  renderOrderOptions();
   $("speech-persona-block").style.display = config.speech_same_persona ? "none" : "";
   const remote = isRemote(config.llm.ollama_url);
   $("use-server").checked = remote;
@@ -270,6 +274,7 @@ function bindInputs() {
       for (const [other, [otherPath]] of Object.entries(BINDINGS))
         if (other !== id && otherPath === path && $(other)) writeField($(other), kind, readField(el, kind));
       if (["iq", "literacy", "reply-delay", "humanized-typing"].includes(id)) renderDials();
+      if (path === "strategy.obey_commands") renderOrderOptions();
       scheduleSave();
     });
   }
@@ -826,6 +831,11 @@ async function renderLog() {
   $("log-output").textContent = body.lines
     .map(({ line, chat }) => `${chat ? "chat  " : "      "}${line}`)
     .join("\n");
+}
+
+function renderOrderOptions() {
+  for (const id of ["obey-options", "obey-options-speech"])
+    $(id).style.display = config.strategy.obey_commands ? "" : "none";
 }
 
 async function renderVoice() {

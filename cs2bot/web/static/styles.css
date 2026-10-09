@@ -221,6 +221,13 @@ button.action.primary { background: linear-gradient(180deg, #2a2114, #1b1710); b
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .note { color: var(--muted); font-size: 12px; }
 .help { margin: 0; }
+.options { margin: -4px 0 4px; }
+.options > summary { list-style: none; cursor: pointer; display: inline-block; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; user-select: none; }
+.options > summary::-webkit-details-marker { display: none; }
+.options > summary::before { content: "▸ "; }
+.options[open] > summary::before { content: "▾ "; }
+.options > summary:hover, .options[open] > summary { color: var(--text); border-color: var(--muted); }
+.options[open] { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .help > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 600; user-select: none; }
 .help > summary::-webkit-details-marker { display: none; }
 .help > summary:hover, .help[open] > summary { color: var(--text); border-color: var(--muted); }
