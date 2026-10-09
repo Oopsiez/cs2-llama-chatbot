@@ -105,11 +105,22 @@ def cache_dir() -> Path:
     return Path.home() / ".cache" / "huggingface" / "hub"
 
 
+# Where faster-whisper fetches each name from (its own table), so the cache check can find them.
+MODEL_REPOS = {
+    "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
+    "distil-medium.en": "Systran/faster-distil-whisper-medium.en",
+    "distil-small.en": "Systran/faster-distil-whisper-small.en",
+    "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+}
+
+
 def model_is_cached(name: str) -> bool:
     """Whether the model is already on disk, so first use will not stall on a download."""
     if Path(name).is_dir():  # a local model directory
         return True
-    folder = cache_dir() / f"models--Systran--faster-whisper-{name}"
+    repo = MODEL_REPOS.get(name, f"Systran/faster-whisper-{name}")
+    folder = cache_dir() / f"models--{repo.replace('/', '--')}"
     return folder.is_dir() and any(folder.rglob("model.bin"))
 
 

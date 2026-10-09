@@ -700,3 +700,14 @@ def test_leaving_the_bot_out_needs_windows():
     if sys.platform != "win32":
         with pytest.raises(RuntimeError):
             list(process_loopback.blocks_except_me())
+
+
+def test_cache_check_knows_where_the_big_models_live(tmp_path, monkeypatch):
+    from cs2bot.voice import transcribe
+
+    monkeypatch.setattr(transcribe, "cache_dir", lambda: tmp_path)
+    assert not transcribe.model_is_cached("distil-large-v3")
+    blob = tmp_path / "models--Systran--faster-distil-whisper-large-v3" / "snapshots" / "x"
+    blob.mkdir(parents=True)
+    (blob / "model.bin").write_bytes(b"0")
+    assert transcribe.model_is_cached("distil-large-v3")

@@ -297,8 +297,7 @@ class Speaker:
             self.last_error = missing
             return False, missing
         async with self._lock:
-            self.talk_started_at = time.time()
-            self.recent.append((text, self.talk_started_at))
+            self.recent.append((text, time.time()))
             warning = ""
             try:
                 played = await asyncio.to_thread(self._speak, text)
@@ -317,6 +316,9 @@ class Speaker:
 
     def _speak(self, text: str) -> str:
         samples, rate = render(text, self.voice, self.rate, self.engine)
+        # Only playback counts as talking: a slow engine can take seconds to render, and the
+        # listener must not be muted for that.
+        self.talk_started_at = time.time()
         with hold(self.talk_key):
             time.sleep(self.lead_seconds)
             played = play(samples, rate, self.device, self.monitor, self.monitor_device, self.resample)
