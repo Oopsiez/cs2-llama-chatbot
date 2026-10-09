@@ -389,6 +389,7 @@ async def test_spoken_orders_can_be_ignored():
 async def test_nothing_listens_until_voice_is_turned_on():
     engine = build_engine()
     engine.config.voice.enabled = False
+    engine.config.respond_to = "text"
     await engine.pump_voice()
     assert engine._voice is None
     assert engine.voice_status()["enabled"] is False
