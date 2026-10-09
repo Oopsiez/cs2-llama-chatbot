@@ -467,7 +467,8 @@ def test_speech_persona_and_model_are_separate_only_when_asked():
 
     config = AppConfig(llm=LLMSettings(backend="ollama", ollama_model="a", speech_ollama_model="b"))
     engine = Engine(config)
-    assert engine.speech_config is engine.config
+    assert engine.speech_config.persona.name == engine.config.persona.name
+    assert engine.speech_config.persona.max_reply_chars == 0  # spoken lines are not typed, so no cap
     assert engine.speech_backend is not engine.backend
     assert engine.speech_backend.model == "b"  # type: ignore[attr-defined]
 
