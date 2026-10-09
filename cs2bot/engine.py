@@ -446,6 +446,9 @@ class Engine:
             return
         self.voice.start()
         for utterance in self.voice.drain():
+            if self.speaker.heard_itself(utterance.text, utterance.heard_at, utterance.seconds):
+                self.bus.publish("skipped", {"sender": "voice", "reason": "that was the bot's own voice"})
+                continue
             await self.handle_voice(utterance.text)
 
     async def handle_voice(self, text: str) -> BotReply | None:

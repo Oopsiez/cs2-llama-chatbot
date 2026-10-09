@@ -18,6 +18,7 @@ import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..novelty import similarity
 from ..output.keyboard import KeyPressError, hold
 from .audio import com_apartment, loopback_missing
 
@@ -125,7 +126,31 @@ class Speaker:
     last_text: str = ""
     last_error: str = ""
     last_spoke_at: float = 0.0
+    talk_started_at: float = 0.0
+    echo_grace_seconds: float = 2.0  # the mix reaches the capture a little after the clip ends
+    recent: list[tuple[str, float]] = field(default_factory=list)  # (text, said_at)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    @property
+    def talking(self) -> bool:
+        return self.talk_started_at > self.last_spoke_at
+
+    def heard_itself(
+        self, text: str, heard_at: float, seconds: float = 0.0, now: float | None = None
+    ) -> bool:
+        """Whether a transcript is the bot's own voice coming back through the speakers/cable.
+
+        Two tells: the audio overlapped a clip the bot was playing, or the words are what it
+        just said. Either way it is not a teammate, and answering it would be a conversation
+        with itself.
+        """
+        now = time.time() if now is None else now
+        started = heard_at - seconds
+        if self.talk_started_at and started <= (self.last_spoke_at or now) + self.echo_grace_seconds:
+            if heard_at >= self.talk_started_at:
+                return True
+        self.recent = [(said, at) for said, at in self.recent if now - at < 60]
+        return any(similarity(text, said) >= 0.6 for said, _ in self.recent)
 
     async def say(self, text: str) -> tuple[bool, str]:
         """Speak `text` over the team voice channel. `(spoken, detail)`."""
@@ -134,15 +159,18 @@ class Speaker:
             self.last_error = missing
             return False, missing
         async with self._lock:
+            self.talk_started_at = time.time()
+            self.recent.append((text, self.talk_started_at))
             try:
                 await asyncio.to_thread(self._speak, text)
             except (KeyPressError, RuntimeError, OSError) as exc:
                 self.last_error = str(exc)
                 return False, str(exc)
+            finally:
+                self.last_spoke_at = time.time()
         self.said += 1
         self.last_text = text
         self.last_error = ""
-        self.last_spoke_at = time.time()
         return True, "spoken"
 
     def _speak(self, text: str) -> None:

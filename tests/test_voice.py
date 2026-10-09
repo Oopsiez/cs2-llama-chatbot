@@ -372,3 +372,18 @@ def test_cable_install_is_windows_only_and_reports_absence():
     assert not ok and "Windows" in detail
     status = cable.driver_status()
     assert status["installed"] is False and status["input_id"] == ""
+
+
+def test_speaker_recognises_its_own_voice_coming_back():
+    from cs2bot.voice.speak import Speaker
+
+    s = Speaker()
+    assert not s.heard_itself("rotate b now", heard_at=100.0, seconds=1.0, now=100.0)
+    s.talk_started_at, s.last_spoke_at = 100.0, 103.0
+    s.recent = [("rotate B now, they are all on A", 100.0)]
+    # overlapped the clip
+    assert s.heard_itself("something garbled", heard_at=102.0, seconds=1.5, now=102.0)
+    # arrived just after the clip, same words
+    assert s.heard_itself("rotate b now they are all on a", heard_at=106.0, seconds=2.0, now=106.0)
+    # a teammate, well after, different words
+    assert not s.heard_itself("nice one, push with me", heard_at=110.0, seconds=1.0, now=110.0)
