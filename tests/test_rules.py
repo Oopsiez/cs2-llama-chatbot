@@ -160,3 +160,9 @@ def test_voice_answer_modes(config):
     config.voice.answer = "triggers"
     assert voice_filter_reason(config, "rushing A") == "no trigger word matched"
     assert voice_filter_reason(config, "bot rushing A") == ""
+
+
+def test_radio_commands_get_no_answer(config):
+    config.voice.answer = "everything"
+    allowed, reason = should_reply(config, voice(text="Enemy spotted."), LifeState.ALIVE, LocalPlayer())
+    assert not allowed and reason == "radio command, not chat"

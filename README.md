@@ -157,6 +157,9 @@ text-to-speech and no virtual microphone, and your own microphone is never opene
 - **Pick what it answers.** *Everything it hears* (the default), *Only questions*, or *Only
   speech with a trigger word* such as "bot". Questions are answered even during the cooldown;
   everything else follows the reply-chance and wait-between-answers settings.
+- **Radio commands are ignored.** "Enemy spotted", "Need backup", "Affirmative" and the rest of
+  the radio and ping wheels are played through the speakers and printed in the log as `(RADIO)`
+  lines; the bot recognises them (`cs2bot/radio.py`) and does not answer them, typed or heard.
 - **Replies always go to team chat**, whatever the reply-channel settings say, because voice comms
   are team-only.
 - **It cannot tell who spoke.** A speaker mix carries voices, gunfire and the bomb, with no names

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .config import AppConfig
 from .models import ChatMessage, LifeState, LocalPlayer
+from .radio import is_radio
 
 
 def dead_chat_is_global(config: AppConfig, player: LocalPlayer) -> bool:
@@ -102,6 +103,11 @@ def should_reply(
     """`(allowed, reason)` - `reason` explains a refusal, or the trigger when allowed."""
     if message.is_self:
         return False, "own message"
+
+    # Typed chat is only radio when the log tags it so (the parser drops those); a transcript
+    # that is word for word a radio line is the game's voice, not a teammate's.
+    if message.is_voice and is_radio(message.text):
+        return False, "radio command, not chat"
 
     lowered_sender = message.sender.casefold()
     if any(lowered_sender == ignored.casefold() for ignored in config.behavior.ignore_players):
