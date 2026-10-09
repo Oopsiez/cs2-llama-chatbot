@@ -222,7 +222,9 @@ class VoiceSettings(BaseModel):
     enabled: bool = False
     device: str = ""  # blank -> the default speakers
     model: str = "small.en"  # a Whisper model name, downloaded once on first use
-    # Only answer speech containing one of these; empty means answer anything worth answering.
+    # What it answers: "everything" it hears, "questions" only, or "triggers" - speech that
+    # contains one of `trigger_words`. Questions always get an answer in the first two modes.
+    answer: str = "everything"
     trigger_words: list[str] = Field(default_factory=lambda: ["bot"])
     obey_commands: bool = True  # spoken !quiet / strat calls count as commands
     cooldown_seconds: float = 8.0  # voice arrives far faster than typing does

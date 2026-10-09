@@ -125,6 +125,7 @@ def test_voice_is_heard_even_when_team_chat_is_switched_off(config):
 
 def test_voice_has_a_trigger_list_of_its_own(config):
     config.behavior.trigger_words = ["hey"]
+    config.voice.answer = "triggers"
     config.voice.trigger_words = ["bot"]
     player = LocalPlayer()
     assert not should_reply(config, voice(text="hey they are pushing"), LifeState.ALIVE, player)[0]
@@ -135,3 +136,27 @@ def test_a_blank_voice_trigger_lets_everything_through(config):
     config.voice.trigger_words = ["  "]
     allowed, _ = should_reply(config, voice(text="rotate now"), LifeState.ALIVE, LocalPlayer())
     assert allowed
+
+
+def test_is_question():
+    from cs2bot.rules import is_question
+
+    assert is_question("where are they?")
+    assert is_question("bot what do we do here")
+    assert is_question("anyone got a smoke")
+    assert not is_question("they're all B")
+    assert not is_question("")
+
+
+def test_voice_answer_modes(config):
+    from cs2bot.rules import voice_filter_reason
+
+    config.voice.trigger_words = ["bot"]
+    config.voice.answer = "everything"
+    assert voice_filter_reason(config, "rushing A") == ""
+    config.voice.answer = "questions"
+    assert voice_filter_reason(config, "rushing A") == "not a question"
+    assert voice_filter_reason(config, "where are they?") == ""
+    config.voice.answer = "triggers"
+    assert voice_filter_reason(config, "rushing A") == "no trigger word matched"
+    assert voice_filter_reason(config, "bot rushing A") == ""

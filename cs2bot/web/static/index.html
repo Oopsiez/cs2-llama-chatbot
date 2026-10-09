@@ -381,7 +381,14 @@
           </select>
         </label>
       </div>
-      <label>Only answer speech containing (comma separated) <span class="hint">empty answers everything it hears - a talkative lobby will spam chat</span>
+      <label>Answer <span class="hint">questions always get an answer, even mid-cooldown</span>
+        <select id="voice-answer">
+          <option value="everything">Everything it hears</option>
+          <option value="questions">Only questions</option>
+          <option value="triggers">Only speech with a trigger word</option>
+        </select>
+      </label>
+      <label>Trigger words (comma separated) <span class="hint">used by the trigger-word mode only</span>
         <input type="text" id="voice-triggers" />
       </label>
       <div class="row">

@@ -301,6 +301,7 @@ async def test_a_grunt_is_not_worth_answering():
 @pytest.mark.asyncio
 async def test_voice_only_answers_when_its_own_trigger_word_is_said():
     engine = build_voice_engine()
+    engine.config.voice.answer = "triggers"
     engine.config.voice.trigger_words = ["bot"]
     engine.config.behavior.trigger_words = ["hey"]
     assert await engine.handle_voice("hey are they pushing b") is None
@@ -374,6 +375,7 @@ async def test_spoken_orders_can_be_ignored():
     engine.config.strategy.enabled = True
     engine.config.strategy.round_start_only = False
     engine.game_state.player.map_name = "de_mirage"
+    engine.config.voice.answer = "triggers"
     engine.config.voice.trigger_words = ["bot"]
     assert await engine.handle_voice("what is the plan here") is None
 

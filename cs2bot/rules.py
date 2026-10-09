@@ -33,19 +33,64 @@ def visibility_reason(
     if local_state is LifeState.DEAD:
         if not config.dead_alive.reply_when_dead:
             return "bot is dead and replying while dead is disabled"
-        if (
-            message.sender_state is LifeState.ALIVE
-            and not config.dead_alive.reply_to_alive_when_dead
-        ):
+        if message.sender_state is LifeState.ALIVE and not config.dead_alive.reply_to_alive_when_dead:
             return f"{message.sender} is alive and cannot see dead chat"
         return None
 
-    if (
-        message.sender_state is LifeState.DEAD
-        and not config.dead_alive.reply_to_dead_when_alive
-    ):
+    if message.sender_state is LifeState.DEAD and not config.dead_alive.reply_to_dead_when_alive:
         return f"{message.sender} is dead; a living bot should not see that message"
     return None
+
+
+_QUESTION_OPENERS = (
+    "what",
+    "where",
+    "when",
+    "why",
+    "who",
+    "how",
+    "which",
+    "is ",
+    "are ",
+    "do ",
+    "does ",
+    "did ",
+    "can ",
+    "could ",
+    "should ",
+    "will ",
+    "would ",
+    "any ",
+    "anyone",
+    "anybody",
+    "got ",
+)
+
+
+def is_question(text: str) -> bool:
+    """Whether the line asks something - punctuation first, then how it opens."""
+    lowered = " ".join(text.casefold().split())
+    if not lowered:
+        return False
+    if lowered.endswith("?"):
+        return True
+    for marker in ("bot,", "bot ", "hey bot", "yo bot", "ok bot"):
+        if lowered.startswith(marker):
+            lowered = lowered[len(marker) :].strip()
+    return lowered.startswith(_QUESTION_OPENERS)
+
+
+def voice_filter_reason(config: AppConfig, text: str) -> str:
+    """Why a voice line is not answered under the Voice tab's answer mode, or empty."""
+    mode = config.voice.answer
+    if mode == "questions":
+        return "" if is_question(text) else "not a question"
+    if mode == "triggers":
+        triggers = [t for t in config.voice.trigger_words if t.strip()]
+        lowered = text.casefold()
+        if triggers and not any(trigger.casefold() in lowered for trigger in triggers):
+            return "no trigger word matched"
+    return ""
 
 
 def should_reply(
@@ -75,14 +120,16 @@ def should_reply(
     if config.behavior.only_reply_when_addressed and not message.addressed_to_me:
         return False, "nobody is talking to you"
 
-    # Voice has a trigger list of its own: a lobby talks far more than it types, so the word
-    # that makes the bot answer usually has to be stricter there.
-    configured = config.voice.trigger_words if message.is_voice else config.behavior.trigger_words
-    triggers = [t for t in configured if t.strip()]
-    if triggers:
-        lowered = message.text.casefold()
-        if not any(trigger.casefold() in lowered for trigger in triggers):
-            return False, "no trigger word matched"
+    if message.is_voice:
+        refused = voice_filter_reason(config, message.text)
+        if refused:
+            return False, refused
+    else:
+        triggers = [t for t in config.behavior.trigger_words if t.strip()]
+        if triggers:
+            lowered = message.text.casefold()
+            if not any(trigger.casefold() in lowered for trigger in triggers):
+                return False, "no trigger word matched"
 
     reason = visibility_reason(config, message, local_state, player)
     if reason:

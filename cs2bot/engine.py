@@ -27,7 +27,7 @@ from .output import ChatSender, build_sender
 from .parser import parse_chat_line
 from .persona import build_reveal_turns, build_strategy_turns, build_turns, find_persona, persona_choices
 from .roster import Roster
-from .rules import should_reply
+from .rules import is_question, should_reply
 from .snitch import announcement, is_request, where
 from .voice import VoiceListener, model_is_cached, whisper_missing
 from .voice.audio import SAMPLE_RATE, loopback_missing
@@ -476,8 +476,10 @@ class Engine:
             and self.config.snitch.answer_when_asked
             and is_request(message.text, self.config.snitch.request_phrases)
         )
-        urgent = asked_where or (
-            message.addressed_to_me and self.config.behavior.always_reply_when_addressed
+        urgent = (
+            asked_where
+            or (message.addressed_to_me and self.config.behavior.always_reply_when_addressed)
+            or (message.is_voice and is_question(message.text))
         )
 
         now = time.monotonic()

@@ -115,6 +115,7 @@ const BINDINGS = {
   "voice-enabled": ["voice.enabled", "bool"],
   "voice-device": ["voice.device", "text"],
   "voice-model": ["voice.model", "text"],
+  "voice-answer": ["voice.answer", "text"],
   "voice-triggers": ["voice.trigger_words", "list"],
   "voice-obey": ["voice.obey_commands", "bool"],
   "voice-cooldown": ["voice.cooldown_seconds", "float"],

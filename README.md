@@ -152,8 +152,9 @@ text-to-speech and no virtual microphone, and your own microphone is never opene
 - **The speech model downloads once.** `small.en` is about 500 MB and is fetched the first time
   somebody talks; the tab says whether it is ready, downloading, or failed. Everything else ships
   inside the Windows installer - no `pip install` required.
-- **It only answers on a trigger word.** A lobby talks far more than it types, so by default it
-  waits to hear "bot". Clear the field to have it answer anything worth answering.
+- **Pick what it answers.** *Everything it hears* (the default), *Only questions*, or *Only
+  speech with a trigger word* such as "bot". Questions are answered even during the cooldown;
+  everything else follows the reply-chance and wait-between-answers settings.
 - **Replies always go to team chat**, whatever the reply-channel settings say, because voice comms
   are team-only.
 - **It cannot tell who spoke.** A speaker mix carries voices, gunfire and the bomb, with no names
