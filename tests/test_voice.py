@@ -590,3 +590,12 @@ def test_hearing_one_program_switches_to_it_the_moment_it_starts(monkeypatch):
     assert notes[-1] == "hearing cs2.exe only"
     assert next(stream) == [0.0]  # and back to the speakers when its stream ended
     assert notes[-1] == "hearing the whole PC: cs2.exe stopped"
+
+
+def test_kokoro_offers_every_english_voice_in_quality_tiers():
+    from cs2bot.voice import kokoro
+
+    voices = kokoro.status()["voices"]
+    assert len(voices) >= 28
+    assert {v["tier"] for v in voices} == {"best", "better", "good"}
+    assert kokoro.DEFAULT_VOICE == "af_heart"

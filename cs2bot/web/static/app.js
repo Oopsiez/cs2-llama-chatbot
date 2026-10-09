@@ -889,7 +889,7 @@ async function renderVoice() {
   mon.value = config.voice.monitor_device;
   if (body.devices_error) $("voice-speak-output").textContent = `no output devices listed: ${body.devices_error}`;
   const voices = $("voice-speak-voice");
-  const engine = config.voice.speak_engine || "piper";
+  const engine = config.voice.speak_engine || "kokoro";
   $("voice-speak-engine").value = engine;
   const tts = body.status.tts || { voices: [] };
   const kokoro = body.status.kokoro || { voices: [] };
@@ -903,8 +903,17 @@ async function renderVoice() {
       .join("");
   else if (engine === "kokoro") {
     const note = kokoro.ready ? "" : kokoro.downloading ? " (downloading…)" : ` (${kokoro.size_mb} MB download, once)`;
-    options = kokoro.voices
-      .map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`)
+    const tiers = [["best", "Best - most human"], ["better", "Better"], ["good", "Good"]];
+    options = tiers
+      .map(
+        ([tier, title]) =>
+          `<optgroup label="${title}">` +
+          kokoro.voices
+            .filter((v) => v.tier === tier)
+            .map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`)
+            .join("") +
+          "</optgroup>",
+      )
       .join("");
   } else
     options =

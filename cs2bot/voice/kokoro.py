@@ -19,16 +19,36 @@ MODEL_FILE = "kokoro-v1.0.onnx"
 VOICES_FILE = "voices-v1.0.bin"
 SIZE_MB = 340
 
-VOICES: tuple[tuple[str, str], ...] = (
-    ("am_michael", "Michael - US male, natural"),
-    ("am_adam", "Adam - US male, deep"),
-    ("am_fenrir", "Fenrir - US male, rough"),
-    ("af_heart", "Heart - US female, warm"),
-    ("af_bella", "Bella - US female, bright"),
-    ("af_nicole", "Nicole - US female, soft"),
-    ("bm_george", "George - British male"),
-    ("bm_lewis", "Lewis - British male, young"),
-    ("bf_emma", "Emma - British female"),
+# (id, label, tier) - tier follows Kokoro's own VOICES.md grades: A/B- = best, C+/C = better, D = good.
+VOICES: tuple[tuple[str, str, str], ...] = (
+    ("af_heart", "Heart - US female, warm (top grade)", "best"),
+    ("af_bella", "Bella - US female, bright (top grade)", "best"),
+    ("af_nicole", "Nicole - US female, soft, close-mic", "best"),
+    ("bf_emma", "Emma - British female", "best"),
+    ("am_michael", "Michael - US male, natural", "better"),
+    ("am_fenrir", "Fenrir - US male, rough", "better"),
+    ("am_puck", "Puck - US male, lively", "better"),
+    ("af_aoede", "Aoede - US female, clear", "better"),
+    ("af_kore", "Kore - US female, firm", "better"),
+    ("af_sarah", "Sarah - US female, friendly", "better"),
+    ("af_alloy", "Alloy - US female, even", "better"),
+    ("af_nova", "Nova - US female, upbeat", "better"),
+    ("af_sky", "Sky - US female, light", "better"),
+    ("bm_george", "George - British male", "better"),
+    ("bm_fable", "Fable - British male, storyteller", "better"),
+    ("bf_isabella", "Isabella - British female", "better"),
+    ("am_adam", "Adam - US male, deep", "good"),
+    ("am_echo", "Echo - US male, calm", "good"),
+    ("am_eric", "Eric - US male, plain", "good"),
+    ("am_liam", "Liam - US male, young", "good"),
+    ("am_onyx", "Onyx - US male, low", "good"),
+    ("am_santa", "Santa - US male, jolly", "good"),
+    ("af_jessica", "Jessica - US female", "good"),
+    ("af_river", "River - US female, relaxed", "good"),
+    ("bm_lewis", "Lewis - British male, young", "good"),
+    ("bm_daniel", "Daniel - British male", "good"),
+    ("bf_alice", "Alice - British female", "good"),
+    ("bf_lily", "Lily - British female, soft", "good"),
 )
 DEFAULT_VOICE = VOICES[0][0]
 
@@ -85,7 +105,7 @@ def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple
 
     if not is_cached():
         download()
-    known = {v for v, _ in VOICES}
+    known = {v for v, _, _ in VOICES}
     voice = voice_id if voice_id in known else DEFAULT_VOICE
     lang = "en-gb" if voice.startswith("b") else "en-us"
     with _lock:
@@ -106,5 +126,5 @@ def status() -> dict[str, object]:
         "ready": is_cached(),
         "downloading": downloading,
         "size_mb": SIZE_MB,
-        "voices": [{"id": v, "label": label} for v, label in VOICES],
+        "voices": [{"id": v, "label": label, "tier": tier} for v, label, tier in VOICES],
     }
