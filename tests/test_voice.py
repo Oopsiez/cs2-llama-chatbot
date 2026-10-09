@@ -325,3 +325,10 @@ def test_whisper_runs_on_the_cpu_by_default_and_falls_back_when_cuda_dlls_are_mi
     whisper = t.WhisperTranscriber("tiny", device="auto")
     whisper.load()
     assert calls == ["auto", "cpu"] and whisper.device == "cpu" and "CPU" in whisper.note
+
+
+def test_com_apartment_is_a_no_op_off_windows():
+    from cs2bot.voice.audio import com_apartment
+
+    with com_apartment():
+        pass

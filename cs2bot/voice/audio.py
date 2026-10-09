@@ -12,8 +12,10 @@ and looked up by id.
 
 from __future__ import annotations
 
+import ctypes
+import sys
 from collections.abc import Iterator
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, contextmanager
 from typing import Protocol, TypedDict, cast
 
 SAMPLE_RATE = 16_000  # what Whisper wants
@@ -83,6 +85,31 @@ def _microphone(device_id: str) -> _Microphone:
     return cast(_Microphone, sc.get_microphone(device_id, include_loopback=True))
 
 
+COINIT_MULTITHREADED = 0x0
+CO_E_NOTINITIALIZED = 0x800401F0
+
+
+@contextmanager
+def com_apartment() -> Iterator[None]:
+    """Join this thread to COM for as long as the block runs.
+
+    WASAPI is COM, and COM is per thread: `soundcard` initialises it on whichever thread imports
+    it, which is not the capture thread, and Windows answers the first uninitialised call with
+    `0x800401f0` (CO_E_NOTINITIALIZED). Only the thread that actually recorded needs this.
+    """
+    if sys.platform != "win32":
+        yield
+        return
+    ole32 = ctypes.windll.ole32  # type: ignore[attr-defined]
+    result = ole32.CoInitializeEx(None, COINIT_MULTITHREADED)
+    initialised = result >= 0  # S_OK or S_FALSE; RPC_E_CHANGED_MODE means somebody else did it
+    try:
+        yield
+    finally:
+        if initialised:
+            ole32.CoUninitialize()
+
+
 def blocks(device_id: str = "", block_seconds: float = BLOCK_SECONDS) -> Iterator[list[float]]:
     """Yield mono blocks of what the speakers are playing, forever.
 
@@ -92,9 +119,10 @@ def blocks(device_id: str = "", block_seconds: float = BLOCK_SECONDS) -> Iterato
     if missing:
         raise RuntimeError(missing)
     frames = max(1, int(SAMPLE_RATE * block_seconds))
-    microphone = _microphone(device_id)
-    # Stereo on purpose: WASAPI returns silence or noise for a one-channel loopback stream.
-    with microphone.recorder(SAMPLE_RATE, channels=2) as recorder:
-        while True:
-            data = recorder.record(numframes=frames)
-            yield data.mean(axis=1).tolist()
+    with com_apartment():
+        microphone = _microphone(device_id)
+        # Stereo on purpose: WASAPI returns silence or noise for a one-channel loopback stream.
+        with microphone.recorder(SAMPLE_RATE, channels=2) as recorder:
+            while True:
+                data = recorder.record(numframes=frames)
+                yield data.mean(axis=1).tolist()
