@@ -10,6 +10,7 @@ so it is fetched once on first use and cached; `model_is_cached` is what lets th
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Protocol, cast
@@ -33,13 +34,32 @@ HALLUCINATIONS = frozenset(
         "[applause]",
         "[silence]",
         "subs by www.zeoranger.co.uk",
+        "thanks very much",
+        "thank you very much",
+        "i appreciate it",
+        "alright",
+        "all right",
+        "see you",
+        "see you next time",
+        "goodbye",
+        "the end",
+        "so",
+        "yeah",
+        "hmm",
+        "mm",
     }
 )
+
+# A segment Whisper itself is unsure of: likely silence, hum or gunfire, not a teammate.
+NO_SPEECH_LIMIT = 0.5
+LOGPROB_LIMIT = -0.9
 
 
 # `faster-whisper` ships no type information; this is the part of it that is used.
 class _Segment(Protocol):
     text: str
+    no_speech_prob: float
+    avg_logprob: float
 
 
 class _WhisperModel(Protocol):
@@ -51,6 +71,8 @@ class _WhisperModel(Protocol):
         beam_size: int,
         vad_filter: bool,
         condition_on_previous_text: bool,
+        no_speech_threshold: float,
+        log_prob_threshold: float,
     ) -> tuple[Iterable[_Segment], object]: ...
 
 
@@ -146,8 +168,15 @@ class WhisperTranscriber:
             beam_size=self.beam_size,
             vad_filter=True,
             condition_on_previous_text=False,
+            no_speech_threshold=NO_SPEECH_LIMIT,
+            log_prob_threshold=LOGPROB_LIMIT,
         )
-        return clean(" ".join(segment.text for segment in segments))
+        kept = [
+            segment.text
+            for segment in segments
+            if segment.no_speech_prob < NO_SPEECH_LIMIT and segment.avg_logprob > LOGPROB_LIMIT
+        ]
+        return clean(" ".join(kept))
 
 
 def wants_cuda_runtime(exc: BaseException) -> bool:
@@ -156,9 +185,27 @@ def wants_cuda_runtime(exc: BaseException) -> bool:
     return any(word in text for word in ("cublas", "cudnn", "cuda", "cannot be loaded"))
 
 
+def _is_boilerplate(sentence: str) -> bool:
+    return sentence.casefold().strip(" .!?,") in {phrase.strip(" .!?") for phrase in HALLUCINATIONS}
+
+
 def clean(text: str) -> str:
-    """Trim Whisper's output and throw away the things it says about silence."""
+    """Trim Whisper's output and throw away the things it says about silence.
+
+    Silence does not only produce one stock phrase: it produces a string of them ("Thanks very
+    much. I appreciate it. Bye. Bye."), so every sentence is checked, and a transcript that is
+    mostly stock phrases, or the same sentence over and over, is thrown away whole.
+    """
     text = " ".join(text.split())
-    if text.casefold().strip(" .!?") in {phrase.strip(" .!?") for phrase in HALLUCINATIONS}:
+    if not text:
         return ""
-    return text
+    sentences = [part for part in re.split(r"(?<=[.!?])\s+", text) if part.strip(" .!?,")]
+    if not sentences:
+        return ""
+    boilerplate = sum(1 for part in sentences if _is_boilerplate(part))
+    if boilerplate * 2 >= len(sentences):
+        return ""
+    distinct = {part.casefold().strip(" .!?,") for part in sentences}
+    if len(sentences) >= 3 and len(distinct) * 2 <= len(sentences):
+        return ""
+    return " ".join(part for part in sentences if not _is_boilerplate(part))

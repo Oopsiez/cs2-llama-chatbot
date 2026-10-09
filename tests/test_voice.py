@@ -108,6 +108,28 @@ def test_whisper_boilerplate_is_not_treated_as_speech():
     assert transcribe.clean("  they are pushing   B  ") == "they are pushing B"
 
 
+def test_a_string_of_whisper_boilerplate_is_silence():
+    silence = "Alright. Thanks very much. I appreciate it. I appreciate it. Thank you. Bye. Bye. Bye."
+    assert transcribe.clean(silence) == ""
+    assert transcribe.clean("Thank you. Thank you. Thank you.") == ""
+    mixed = "Bye. they are pushing B, two of them. go go"
+    assert transcribe.clean(mixed) == "they are pushing B, two of them. go go"
+
+
+def test_segments_whisper_is_unsure_of_are_dropped():
+    class Seg:
+        def __init__(self, text, no_speech_prob, avg_logprob):
+            self.text, self.no_speech_prob, self.avg_logprob = text, no_speech_prob, avg_logprob
+
+    class Model:
+        def transcribe(self, audio, **kwargs):
+            return [Seg(" rush B", 0.1, -0.3), Seg(" Thank you. Bye.", 0.8, -1.4)], None
+
+    whisper = transcribe.WhisperTranscriber("tiny.en")
+    whisper._model = Model()
+    assert whisper.transcribe([0.0] * 16000) == "rush B"
+
+
 def test_a_local_model_directory_counts_as_downloaded(tmp_path):
     assert transcribe.model_is_cached(str(tmp_path))
     assert not transcribe.model_is_cached(str(tmp_path / "nope"))

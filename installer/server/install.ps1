@@ -18,9 +18,39 @@ function Find-Ollama {
 
 $ollama = Find-Ollama
 if (-not $ollama) {
-    Write-Host "Ollama is not installed - downloading it..."
     $setup = Join-Path $env:TEMP "OllamaSetup.exe"
-    Invoke-WebRequest "https://ollama.com/download/OllamaSetup.exe" -OutFile $setup -UseBasicParsing
+    $url = "https://ollama.com/download/OllamaSetup.exe"
+    Write-Host "Ollama is not installed - downloading it (about 1 GB, this takes a few minutes)..."
+    $downloaded = $false
+    try {
+        Import-Module BitsTransfer -ErrorAction Stop
+        Start-BitsTransfer -Source $url -Destination $setup -DisplayName "Ollama" -Description "Downloading Ollama"
+        $downloaded = Test-Path $setup
+    } catch {
+        Write-Host "  (BITS unavailable: $($_.Exception.Message) - falling back to a plain download)"
+    }
+    if (-not $downloaded) {
+        $client = New-Object System.Net.WebClient
+        $last = [DateTime]::MinValue
+        Register-ObjectEvent $client DownloadProgressChanged -SourceIdentifier OllamaDl -Action {
+            if (([DateTime]::Now - $Event.MessageData.Value).TotalSeconds -ge 2) {
+                $mb = [math]::Round($EventArgs.BytesReceived / 1MB)
+                $total = [math]::Round($EventArgs.TotalBytesToReceive / 1MB)
+                Write-Host ("`r  {0} MB of {1} MB ({2}%)" -f $mb, $total, $EventArgs.ProgressPercentage) -NoNewline
+                $Event.MessageData.Value = [DateTime]::Now
+            }
+        } -MessageData ([ref]$last) | Out-Null
+        $done = Register-ObjectEvent $client DownloadFileCompleted -SourceIdentifier OllamaDone
+        $client.DownloadFileAsync([Uri]$url, $setup)
+        Wait-Event -SourceIdentifier OllamaDone | Out-Null
+        Unregister-Event OllamaDl; Unregister-Event OllamaDone
+        Write-Host ""
+    }
+    if (-not (Test-Path $setup) -or (Get-Item $setup).Length -lt 100MB) {
+        Write-Host "The download did not finish. Install Ollama by hand from https://ollama.com/download and run this setup again."
+        exit 1
+    }
+    Write-Host "Installing Ollama..."
     Start-Process $setup -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
     $ollama = Find-Ollama
     if (-not $ollama) { throw "Ollama did not install; run $setup by hand and try again" }
