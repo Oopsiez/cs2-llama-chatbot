@@ -109,10 +109,10 @@
         <label class="check"><input type="checkbox" id="speech-persona-game-aware" /><span>Knows it is in a CS2 match</span></label>
       </div>
       <h3>Teammates</h3>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         People who have spoken in team chat or on voice count as teammates. Decide how the bot
         treats them, separately from how the persona treats everyone else.
-      </p>
+      </p></details>
       <label>
         <span>Towards teammates</span>
         <select id="teammates-stance">
@@ -163,10 +163,10 @@
         <input type="range" id="iq" min="0" max="100" step="1" />
         <div class="dial-desc" id="iq-desc"></div>
       </div>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         The two are independent: low literacy with high game IQ is a smart player who types like a
         goblin, and the reverse is a well-spoken fool.
-      </p>
+      </p></details>
       <label class="check">
         <input type="checkbox" id="auto-sampling" />
         <span>Derive sampling from the dials
@@ -245,11 +245,11 @@
 
     <div class="panel" data-panel="advanced">
       <h3>Model</h3>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         The model runs on <em>your</em> machine, next to CS2, so it is competing with the game for
         memory. A 1-3B model answers chat perfectly well and runs on a 4GB card - or on no GPU at
         all. Bigger is funnier, not necessary.
-      </p>
+      </p></details>
       <div class="result" id="hardware-note">—</div>
       <div class="actions">
         <button class="action" id="refresh-models">Model compatibility</button>
@@ -348,21 +348,21 @@
       </div>
     </div>
     <div class="panel" data-panel="deadalive">
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         CS2 tags a dead player's chat with <span class="mono">[DEAD]</span>. The bot reads that tag,
         pairs it with your own alive/dead state from GSI, and writes a different kind of reply for
         each combination - it does not filter anything out.
-      </p>
+      </p></details>
       <label class="check"><input type="checkbox" id="da-adapt" /><span>Adapt replies to who is dead
         <small>Tells the model whether the sender is dead, and whether you are.</small></span></label>
       <label class="check"><input type="checkbox" id="da-track" /><span>Remember who died this round
         <small>Only the first line is tagged; later untagged lines from the same player still count as dead.</small></span></label>
       <label class="check"><input type="checkbox" id="da-persona" /><span>Use the "when dead" persona while dead</span></label>
       <label class="check"><input type="checkbox" id="da-assume" /><span>Assume alive when GSI is not connected</span></label>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         Only for servers that split the chat so the living cannot see dead chat. Leave off when
         everyone sees everything.
-      </p>
+      </p></details>
       <label class="check"><input type="checkbox" id="da-enforce" /><span>Skip messages the bot could not have seen
         <small>Turns the rules below on.</small></span></label>
       <label class="check"><input type="checkbox" id="da-reply-when-dead" /><span>Keep replying while dead</span></label>
@@ -373,11 +373,11 @@
     </div>
 
     <div class="panel" data-panel="strats">
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         Real calls for the Premier / FACEIT pool - Mirage, Inferno, Dust 2, Anubis, Ancient, Nuke
         and Cache - picked for the map and side Game State Integration reports. The tactics come
         from the playbook, not from the model: the model only says them in the bot's voice.
-      </p>
+      </p></details>
       <label class="check"><input type="checkbox" id="strat-enabled" /><span>Call strats
         <small>Answers "strat?" with a call for the map and side you are on.</small></span></label>
       <label class="check"><input type="checkbox" id="strat-asked" /><span>Answer when somebody asks for a strat</span></label>
@@ -437,21 +437,21 @@
       <div class="row">
         <label class="check"><input type="checkbox" id="strat-persona-cmd" /><span>Let players control the personality in chat <span class="hint">!persona coach, or "you are now a friendly operator"</span></span></label>
       </div>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         <code>!persona toxic</code>, <code>!persona coach</code>, <code>bot be the therapist</code> - saved
         personas count too, and <code>!persona</code> on its own lists them. Orders are taken from the
         chat chosen above.
-      </p>
+      </p></details>
     </div>
 
     <div class="panel" data-panel="voice">
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         The bot listens to what your speakers are playing and transcribes it with a local Whisper
         model, so it hears the same voice comms you do without touching the game or your
         microphone. It hears <em>all</em> of the game - gunfire included - and the mix carries no
         names, so transcripts are rougher than chat and nobody is quoted by name.
         <strong>Answers always go to team chat</strong>, because voice comms are team-only.
-      </p>
+      </p></details>
       <div class="result" id="voice-status">—</div>
       <p class="hint">Listening is switched on by <b>Respond to</b> on the Personality tab (voice or both). The speech model is downloaded once, the first time it listens.</p>
       <div class="row">
@@ -510,10 +510,10 @@
     </div>
 
     <div class="panel" data-panel="speech">
-      <p class="note">How the bot talks back over team voice. Switch engines any time; each voice is fetched the first time it is used.</p>
+      <details class="help"><summary title="What this does">?</summary><p class="note">How the bot talks back over team voice. Switch engines any time; each voice is fetched the first time it is used.</p>
       <p class="hint">The bot speaks with a natural voice into a virtual microphone while holding your push-to-talk key.
         One-time setup: install <a href="https://vb-audio.com/Cable/" target="_blank" rel="noreferrer">VB-Audio Cable</a>,
-        pick <b>CABLE Input</b> below, and in CS2 → Settings → Audio set the microphone to <b>CABLE Output</b> with push-to-talk on.</p>
+        pick <b>CABLE Input</b> below, and in CS2 → Settings → Audio set the microphone to <b>CABLE Output</b> with push-to-talk on.</p></details>
       <div class="grid">
         <label>Respond with <span class="hint">all-chat replies are always typed</span>
           <select id="voice-reply-with">
@@ -560,11 +560,11 @@
       <div class="result" id="voice-speak-output">—</div>
     </div>
     <div class="panel" data-panel="snitch">
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         The bot gives away <strong>your own</strong> position - the only thing CS2's Game State
         Integration reports while you are playing. Nothing here reads game memory and nothing here
         can see the enemy.
-      </p>
+      </p></details>
       <label class="check"><input type="checkbox" id="snitch-enabled" /><span>Snitch on me
         <small>The bot knows where you are and will say so.</small></span></label>
       <label class="check"><input type="checkbox" id="snitch-asked" /><span>Answer when somebody asks where you are
@@ -619,11 +619,11 @@
       </label>
       <div class="divider"></div>
       <h3>Callouts</h3>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         GSI reports coordinates, not callout names, so you teach it: stand somewhere in game, type
         the name and record it. Anything within ~400 units of a recorded point resolves to that
         name. If CS2 is not reporting a position, the bot falls back to health and bomb state.
-      </p>
+      </p></details>
       <div class="actions">
         <input type="text" id="callout-name" placeholder="banana" style="max-width:200px" />
         <button class="action primary" id="callout-add">Record where I am standing</button>

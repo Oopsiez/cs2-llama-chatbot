@@ -220,6 +220,11 @@ button.action.primary { background: linear-gradient(180deg, #2a2114, #1b1710); b
 
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .note { color: var(--muted); font-size: 12px; }
+.help { margin: 0; }
+.help > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 600; user-select: none; }
+.help > summary::-webkit-details-marker { display: none; }
+.help > summary:hover, .help[open] > summary { color: var(--text); border-color: var(--muted); }
+.help > .note, .help > .hint { margin-top: 8px; }
 .mono { font-family: var(--mono); font-size: 12px; }
 .result { background: #0e1216; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
 .divider { height: 1px; background: var(--line); }
