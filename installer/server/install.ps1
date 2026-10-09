@@ -6,6 +6,15 @@ param(
     [int]$Port = 11434
 )
 $ErrorActionPreference = "Stop"
+$me = [Security.Principal.WindowsIdentity]::GetCurrent()
+if (-not (New-Object Security.Principal.WindowsPrincipal $me).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "Restarting as administrator (the firewall rule and Ollama setup need it)..."
+    Start-Process powershell.exe -Verb RunAs -ArgumentList @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit", "-File", "`"$PSCommandPath`"",
+        "-Model", "`"$Model`"", "-Port", "$Port"
+    )
+    exit
+}
 $ruleName = "CS2 Chatbot - Ollama"
 
 function Find-Ollama {

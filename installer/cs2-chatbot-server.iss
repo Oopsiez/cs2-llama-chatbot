@@ -37,7 +37,7 @@ Source: "..\README.md"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignorev
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -NoExit -File ""{app}\install.ps1"""; \
-  Description: "Install Ollama, open the firewall and pull the model"; Flags: postinstall shellexec waituntilterminated
+  Description: "Install Ollama, open the firewall and pull the model"; Flags: postinstall runascurrentuser waituntilterminated
 
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall.ps1"""; \
