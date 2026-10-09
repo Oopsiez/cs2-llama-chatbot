@@ -35,10 +35,6 @@ Source: "server\install.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "server\uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "server\panel.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "server\agent.ps1"; DestDir: "{app}"; Flags: ignoreversion
-
-[Registry]
-Root: HKLM; Subkey: "Software\CS2 Chatbot Server"; ValueType: string; ValueName: "Version"; \
-  ValueData: "{#AppVersion}"; Flags: uninsdeletekey
 Source: "..\README.md"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion
 
 [Icons]
@@ -60,3 +56,7 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Win
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall.ps1"""; \
   Flags: runhidden waituntilterminated; RunOnceId: "firewall"
+
+[Registry]
+Root: HKLM; Subkey: "Software\CS2 Chatbot Server"; ValueType: string; ValueName: "Version"; \
+  ValueData: "{#AppVersion}"; Flags: uninsdeletekey
