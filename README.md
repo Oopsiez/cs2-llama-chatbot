@@ -211,7 +211,7 @@ download size, what it takes to keep the whole model on the GPU **beside CS2** (
 | Llama 3.2 3B Instruct | 2.0GB | 3.5GB | 8GB |
 | Phi-3.5 Mini Instruct | 2.2GB | 4GB | 8GB |
 | Mistral 7B Instruct | 4.4GB | 6.5GB | 16GB |
-| Llama 3.1 8B Instruct | 4.7GB | 7GB | 16GB |
+| Llama 3 8B Lexi Uncensored (default) | 4.9GB | 7GB | 16GB |
 
 Limitations worth knowing before you blame the bot:
 

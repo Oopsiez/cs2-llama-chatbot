@@ -42,7 +42,7 @@ class LLMSettings(BaseModel):
     model_path: str = ""  # GGUF file for llama_cpp
     # Point this at another machine to run the model remotely, e.g. http://gpu-box:11434
     ollama_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "llama3:8b-instruct-q4_K_M"
+    ollama_model: str = "hf.co/Andycurrent/Llama-3-8B-Lexi-Uncensored:Q4_K_M"
     ollama_api_key: str = ""  # sent as `Authorization: Bearer ...` for proxied servers
     ollama_verify_tls: bool = True  # off for a self-signed certificate on your own proxy
     n_ctx: int = 4096

@@ -83,15 +83,15 @@ CHOICES: tuple[ModelChoice, ...] = (
         note="Loosest tongue of the mid-size models.",
     ),
     ModelChoice(
-        key="llama3.1-8b",
-        label="Llama 3.1 8B Instruct (Q4_K_M)",
-        ollama="llama3.1:8b-instruct-q4_K_M",
-        gguf="bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+        key="lexi-8b",
+        label="Llama 3 8B Lexi Uncensored (Q4_K_M)",
+        ollama="hf.co/Andycurrent/Llama-3-8B-Lexi-Uncensored:Q4_K_M",
+        gguf="Andycurrent/Llama-3-8B-Lexi-Uncensored",
         params="8B",
-        download_gb=4.7,
+        download_gb=4.9,
         vram_gb=7.0,
         ram_gb=16.0,
-        note="Best banter here, but wants an 8GB+ card with CS2 already on it.",
+        note="The default: best banter, says what it is told to. Wants an 8GB card - fine on a 2080 Super.",
     ),
 )
 
