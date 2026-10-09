@@ -27,6 +27,7 @@ VOICE_PACKAGES = (
     "av",
     "piper",  # natural voices; --collect-all brings espeak-ng-data and the phonemiser .pyd along
     "kokoro_onnx",
+    "tokenizers",
     "espeakng_loader",
     "phonemizer",
     "language_tags",

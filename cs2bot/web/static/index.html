@@ -488,8 +488,8 @@
       <div class="row">
         <label>Hear
           <select id="voice-capture">
-            <option value="cs2">Only one program's audio</option>
-            <option value="pc">Everything the PC plays</option>
+            <option value="pc">Everything the PC hears</option>
+            <option value="cs2">Only the program picked below</option>
           </select>
           <span class="hint" id="voice-capture-note"></span>
         </label>
@@ -559,15 +559,31 @@
         <label>Voice engine
           <select id="voice-speak-engine">
             <option value="kokoro">Kokoro - most human, 28 voices, 1-3 s per line (340 MB once)</option>
+            <option value="chatterbox">Chatterbox-Turbo - most realistic, clones a voice (1.1 GB)</option>
+            <option value="supertonic">Supertonic 2 - fast, 10 voices (260 MB)</option>
+            <option value="kitten">Kitten TTS - tiny, 8 voices (25 MB)</option>
             <option value="piper">Piper - natural, instant, CPU (60-115 MB per voice)</option>
             <option value="windows">Windows voice - robotic, nothing to download</option>
           </select>
+          <span class="hint" id="voice-engine-note"></span>
+          <button class="action" id="voice-engine-install" type="button" hidden>Install this engine</button>
         </label>
         <label>Voice <span class="hint">downloaded once, on first use</span>
           <select id="voice-speak-voice"></select>
         </label>
         <label>Speed <span class="hint">-10 slow … 10 fast</span>
           <input type="number" id="voice-speak-rate" min="-10" max="10" step="1" />
+        </label>
+      </div>
+      <div class="row" id="voice-clone-row" hidden>
+        <label>Voice to clone <span class="tip" title="Chatterbox imitates whoever is in this clip: 3-12 seconds of one person talking. Upload a file, paste a link to audio/video (direct link, or YouTube if yt-dlp is installed), or take the last teammate the bot heard.">?</span>
+          <span class="inline">
+            <input type="file" id="voice-clone-file" accept="audio/*,video/*" />
+            <input type="text" id="voice-clone-url" placeholder="https://… link to a clip" />
+            <button class="action" id="voice-clone-url-go" type="button">Use link</button>
+            <button class="action" id="voice-clone-last" type="button">Clone the last voice I heard</button>
+          </span>
+          <span class="hint" id="voice-clone-note">no clip yet</span>
         </label>
       </div>
       <div class="actions">

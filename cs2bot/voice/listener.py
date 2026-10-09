@@ -76,6 +76,7 @@ class VoiceListener:
         self.utterances_heard = 0
         self.last_text = ""
         self.last_heard_at = 0.0
+        self.last_audio: list[float] = []
 
     # ---- lifecycle --------------------------------------------------------------
 
@@ -179,6 +180,7 @@ class VoiceListener:
             self.utterances_heard += 1
             self.last_text = text
             self.last_heard_at = time.time()
+            self.last_audio = list(samples)
             run.heard.put(Utterance(text=text, seconds=len(samples) / audio.SAMPLE_RATE))
 
     def _model(self) -> Transcriber:

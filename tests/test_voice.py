@@ -599,3 +599,51 @@ def test_kokoro_offers_every_english_voice_in_quality_tiers():
     assert len(voices) >= 28
     assert {v["tier"] for v in voices} == {"best", "better", "good"}
     assert kokoro.DEFAULT_VOICE == "af_heart"
+
+
+def test_hugging_face_engines_are_listed_with_voices_and_sizes():
+    from cs2bot.voice import engines, speak
+
+    ids = {e["id"] for e in engines.status()}
+    assert ids == {"supertonic", "kitten", "chatterbox"}
+    assert ids <= set(speak.ENGINES)
+    chatterbox = next(e for e in engines.status() if e["id"] == "chatterbox")
+    assert chatterbox["clones"] and chatterbox["size_mb"] > 1000
+    assert all(e["voices"] for e in engines.status())
+
+
+def test_clone_saves_a_trimmed_mono_reference(tmp_path, monkeypatch):
+    from cs2bot.voice import clone, tts
+
+    monkeypatch.setattr(tts, "cache_dir", lambda: tmp_path)
+    assert clone.info()["ready"] is False
+    assert clone.reference() is None
+    import math
+
+    rate = 16000
+    samples = [0.5 * math.sin(i / 20) for i in range(rate * 20)]
+    info = clone.save(samples, rate, "unit test")
+    assert info["ready"] and info["seconds"] == clone.MAX_SECONDS and info["source"] == "unit test"
+    ref = clone.reference()
+    assert ref is not None and len(ref) == int(clone.MAX_SECONDS * clone.SAMPLE_RATE)
+    assert max(abs(x) for x in ref) <= 0.91
+    with pytest.raises(ValueError):
+        clone.save([0.1] * 100, rate, "too short")
+
+
+def test_clone_decodes_a_wav_upload(tmp_path, monkeypatch):
+    import array
+    import io
+    import wave
+
+    from cs2bot.voice import clone
+
+    pcm = array.array("h", [1000, -1000] * 8000)
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(8000)
+        handle.writeframes(pcm.tobytes())
+    samples, rate = clone.decode(buffer.getvalue(), "clip.wav")
+    assert rate == 8000 and len(samples) == 8000 and samples[0] == 0.0

@@ -252,7 +252,7 @@ class VoiceSettings(BaseModel):
     monitor_device: str = ""  # where "let me hear it too" plays; blank = the default speakers
     resample_48k: bool = False  # off: the engine's own rate; on: 48 kHz, which some drivers mute
     talk_key: str = "k"  # CS2's push-to-talk key
-    speak_engine: str = "kokoro"  # kokoro (most human) | piper (CPU, quick) | windows
+    speak_engine: str = "kokoro"  # kokoro | piper | windows | supertonic | kitten | chatterbox (clones)
     speak_voice: str = ""  # a voice id for the engine; blank -> its default
     speak_rate: int = 1  # -10 (slow) .. 10 (fast)
 

@@ -23,7 +23,7 @@ from typing import Any
 
 from ..novelty import similarity
 from ..output.keyboard import hold
-from . import kokoro, tts
+from . import clone, engines, kokoro, tts
 from .audio import com_apartment, loopback_missing
 
 # The Windows speech engine (System.Speech) is reached through PowerShell so the frozen exe
@@ -56,7 +56,7 @@ def uses_windows_voice(voice: str) -> bool:
     return voice.startswith(tts.WINDOWS_PREFIX)
 
 
-ENGINES = ("piper", "kokoro", "windows")
+ENGINES = ("piper", "kokoro", "windows") + tuple(e.id for e in engines.ENGINES)
 
 
 def render(text: str, voice: str = "", rate: int = 0, engine: str = "piper") -> tuple[list[float], int]:
@@ -65,6 +65,8 @@ def render(text: str, voice: str = "", rate: int = 0, engine: str = "piper") -> 
         return wav_samples(synthesise(text, voice.removeprefix(tts.WINDOWS_PREFIX), rate))
     if engine == "kokoro" and not kokoro.kokoro_missing():
         return kokoro.synthesise(text, voice or kokoro.DEFAULT_VOICE, rate)
+    if engines.find(engine) is not None:
+        return engines.synthesise(engine, text, voice, rate)
     return tts.synthesise(text, voice or tts.DEFAULT_VOICE, rate)
 
 
@@ -323,4 +325,6 @@ class Speaker:
             "speak_unsupported_reason": speaking_missing(),
             "tts": tts.status(),
             "kokoro": kokoro.status(),
+            "engines": engines.status(),
+            "clone": clone.info(),
         }

@@ -647,6 +647,48 @@ function bindActions() {
     await renderVoice();
     $("voice-cable-status").textContent = "playing into CABLE Input - now set CS2's microphone to CABLE Output and save";
   });
+  $("voice-capture").addEventListener("change", () => {
+    $("voice-capture-app").disabled = $("voice-capture").value === "pc";
+  });
+  $("voice-engine-install").addEventListener("click", async () => {
+    const id = $("voice-speak-engine").value;
+    $("voice-engine-note").textContent = "downloading… this can take a few minutes";
+    $("voice-engine-install").disabled = true;
+    const body = await (
+      await fetch("/api/voice/engines/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engine: id }),
+      })
+    ).json();
+    $("voice-engine-install").disabled = false;
+    $("voice-engine-note").textContent = body.detail;
+    await renderVoice();
+  });
+  const sendClone = async (payload) => {
+    $("voice-clone-note").textContent = "saving the clip…";
+    const body = await (
+      await fetch("/api/voice/clone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    ).json();
+    $("voice-clone-note").textContent = body.detail;
+    await renderVoice();
+  };
+  $("voice-clone-file").addEventListener("change", () => {
+    const file = $("voice-clone-file").files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => sendClone({ file: reader.result, name: file.name });
+    reader.readAsDataURL(file);
+  });
+  $("voice-clone-url-go").addEventListener("click", () => {
+    const url = $("voice-clone-url").value.trim();
+    if (url) sendClone({ url });
+  });
+  $("voice-clone-last").addEventListener("click", () => sendClone({ source: "last" }));
   $("voice-speak-engine").addEventListener("change", async () => {
     config.voice.speak_engine = $("voice-speak-engine").value;
     config.voice.speak_voice = "";
@@ -858,6 +900,35 @@ function renderOrderOptions() {
     $(id).style.display = config.strategy.obey_commands ? "" : "none";
 }
 
+function renderEngineInstall(engine, status) {
+  const hf = (status.engines || []).find((e) => e.id === engine);
+  const button = $("voice-engine-install");
+  const note = $("voice-engine-note");
+  const kokoro = status.kokoro || {};
+  if (engine === "kokoro") {
+    button.hidden = kokoro.ready;
+    note.textContent = kokoro.ready ? "installed" : kokoro.downloading ? "downloading…" : `${kokoro.size_mb} MB, once`;
+  } else if (hf) {
+    button.hidden = hf.ready;
+    note.textContent = hf.error
+      ? `install failed: ${hf.error}`
+      : hf.ready
+        ? "installed"
+        : hf.downloading
+          ? "downloading…"
+          : `${hf.size_mb} MB, once`;
+  } else {
+    button.hidden = true;
+    note.textContent = "";
+  }
+  const clone = status.clone || {};
+  $("voice-clone-row").hidden = !(hf && hf.clones);
+  if (hf && hf.clones)
+    $("voice-clone-note").textContent = clone.ready
+      ? `clip ready: ${clone.seconds} s${clone.source ? ` - ${clone.source}` : ""}`
+      : "no clip yet - add one or the bot cannot speak with this engine";
+}
+
 async function renderVoice() {
   const body = await (await fetch("/api/voice")).json();
   const select = $("voice-device");
@@ -872,6 +943,7 @@ async function renderVoice() {
   const appNames = new Set([current, ...(body.apps || [])]);
   apps.innerHTML = [...appNames].map((a) => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("");
   apps.value = current;
+  apps.disabled = (config.voice.capture || "cs2") === "pc";
   $("voice-capture-note").textContent = body.status.note || "";
   const out = $("voice-speak-device");
   out.innerHTML =
@@ -915,11 +987,16 @@ async function renderVoice() {
           "</optgroup>",
       )
       .join("");
-  } else
+  } else if (engine === "windows")
     options =
       '<option value="">Windows default</option>' +
       (body.voices || []).map((v) => `<option value="windows:${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  else {
+    const hf = (body.status.engines || []).find((e) => e.id === engine) || { voices: [] };
+    options = hf.voices.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}</option>`).join("");
+  }
   voices.innerHTML = options;
+  renderEngineInstall(engine, body.status);
   const known = [...voices.options].some((o) => o.value === config.voice.speak_voice);
   voices.value = known ? config.voice.speak_voice : voices.options[0] ? voices.options[0].value : "";
   config.voice.speak_voice = voices.value;

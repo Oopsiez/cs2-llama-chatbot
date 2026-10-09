@@ -1247,6 +1247,10 @@ class Engine:
         return self._tailer is not None and self._tailer.is_open
 
     @property
+    def listener(self) -> VoiceListener | None:
+        return self._voice
+
+    @property
     def log_reading(self) -> str:
         return str(self._tailer.path) if self._tailer is not None else ""
 

@@ -363,6 +363,53 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             return {"ok": False, "detail": f"download failed: {exc}", **tts.status()}
         return {"ok": True, "detail": f"{voice_id} ready", **tts.status()}
 
+    @app.post("/api/voice/engines/install")
+    async def voice_engine_install(payload: dict[str, Any]) -> dict[str, Any]:
+        """Download one of the Hugging Face voice engines now instead of on the first line."""
+        from ..voice import engines
+
+        found = engines.find(str(payload.get("engine") or ""))
+        if found is None:
+            return {"ok": False, "detail": "unknown voice engine", "engines": engines.status()}
+        if engines.downloading.get(found.id):
+            return {"ok": True, "detail": "already downloading", "engines": engines.status()}
+        try:
+            await asyncio.to_thread(engines.download, found)
+        except Exception as exc:
+            return {"ok": False, "detail": f"download failed: {exc}", "engines": engines.status()}
+        return {"ok": True, "detail": f"{found.label.split(' - ')[0]} installed", "engines": engines.status()}
+
+    @app.post("/api/voice/clone")
+    async def voice_clone(payload: dict[str, Any]) -> dict[str, Any]:
+        """Set the voice Chatterbox imitates: {source: "last"} | {url} | {file: base64, name}."""
+        import base64
+
+        from ..voice import clone
+
+        try:
+            if payload.get("source") == "last":
+                listener = engine.listener
+                samples = listener.last_audio if listener else []
+                if not samples or listener is None:
+                    return {"ok": False, "detail": "nothing heard yet - start the bot, let a teammate talk"}
+                result = await asyncio.to_thread(
+                    clone.save, samples, 16000, f"last voice heard: {listener.last_text[:60]}"
+                )
+            elif payload.get("url"):
+                url = str(payload["url"]).strip()
+                samples, rate = await asyncio.to_thread(clone.fetch, url)
+                result = await asyncio.to_thread(clone.save, samples, rate, url)
+            elif payload.get("file"):
+                name = str(payload.get("name") or "upload")
+                data = base64.b64decode(str(payload["file"]).split(",", 1)[-1])
+                samples, rate = await asyncio.to_thread(clone.decode, data, name)
+                result = await asyncio.to_thread(clone.save, samples, rate, name)
+            else:
+                return {"ok": False, "detail": "send a file, a URL or source=last"}
+        except (ValueError, OSError) as exc:
+            return {"ok": False, "detail": str(exc), **clone.info()}
+        return {"ok": True, "detail": f"voice clip saved ({result['seconds']} s)", **result}
+
     @app.post("/api/voice/preview")
     async def voice_preview(payload: dict[str, Any]) -> dict[str, Any]:
         """Play a line on the default speakers - no push-to-talk, no cable - to audition a voice."""
