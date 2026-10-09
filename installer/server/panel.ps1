@@ -88,7 +88,8 @@ function Apply-Port([int]$new) {
 }
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "CS2 Chatbot Server"
+$installed = (Get-ItemProperty -Path "HKLM:\Software\CS2 Chatbot Server" -Name Version -ErrorAction SilentlyContinue).Version
+$form.Text = if ($installed) { "CS2 Chatbot Server - $installed" } else { "CS2 Chatbot Server" }
 $form.Size = New-Object System.Drawing.Size(420, 300)
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false

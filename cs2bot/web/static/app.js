@@ -30,6 +30,9 @@ const BINDINGS = {
   "speech-persona-extra": ["speech_persona.extra_instructions", "text"],
   "speech-persona-game-aware": ["speech_persona.game_aware", "bool"],
   "speech-model": ["llm.speech_ollama_model", "text"],
+  "chat-enabled": ["llm.chat_enabled", "bool"],
+  "speech-enabled": ["llm.speech_enabled", "bool"],
+  "poll-seconds": ["game.poll_seconds", "float"],
   "teammates-stance": ["teammates.stance", "text"],
   "teammates-custom": ["teammates.custom", "text"],
 
@@ -315,7 +318,7 @@ function bindTabs() {
         panel.dataset.active = String(panel.dataset.panel === tab.dataset.tab);
       });
       if (tab.dataset.tab === "voice") renderVoice();
-      if (tab.dataset.tab === "model") renderGpu();
+      if (tab.dataset.tab === "advanced") renderGpu();
     });
   });
 }
@@ -407,11 +410,11 @@ function pushEvent(event) {
   } else if (event.kind === "identity") {
     line(`your name looks like "${escapeHtml(data.name)}"`, "gamestate", escapeHtml(data.source));
   } else if (event.kind === "gamestate") {
-    line(
-      `game state: ${escapeHtml(data.state)}${data.health != null ? ` (${data.health} hp)` : ""}`,
-      "gamestate",
-      escapeHtml([data.map_name, data.round_phase].filter(Boolean).join(" · ")),
-    );
+    const extra = [data.map_name, data.round_phase].filter(Boolean).join(" · ");
+    $("gamestate-line").textContent =
+      data.state === "unknown" || !data.state
+        ? "game state: unknown (CS2 is not sending game state - check the GSI setup on the Game tab)"
+        : `game state: ${data.state}${data.health != null ? ` (${data.health} hp)` : ""}${extra ? ` - ${extra}` : ""}`;
   }
 }
 
@@ -430,6 +433,7 @@ function renderStatus(status) {
     status.llm_status.startsWith("error") ? "bad" : status.llm_status === "not checked" ? "" : "good",
   );
   setPill("pill-sender", `output: ${status.sender}`);
+  if (status.pull_status) $("pull-note").textContent = status.pull_status;
   setPill(
     "pill-name",
     `you: ${status.own_name || "unknown"}`,
@@ -486,6 +490,13 @@ function bindActions() {
   });
 
   $("refresh-models").addEventListener("click", renderModels);
+  fillSpeechModels();
+  $("pull-speech-model").addEventListener("click", async () => {
+    const tag = $("speech-model").value || config.llm.ollama_model;
+    $("pull-note").textContent = `installing ${tag}…`;
+    const body = await (await fetch("/api/llm/pull", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: tag }) })).json();
+    $("pull-note").textContent = body.status;
+  });
   $("speech-same-persona").addEventListener("change", () => {
     $("speech-persona-block").style.display = $("speech-same-persona").checked ? "none" : "";
   });
@@ -899,6 +910,22 @@ async function renderCallouts() {
 
 const VERDICT_CLASS = { fits: "fits", tight: "tight", "cpu only": "cpu", "too big": "no", unknown: "no" };
 
+async function fillSpeechModels() {
+  const body = await (await fetch("/api/catalog")).json();
+  fillSpeechModelOptions(body.models);
+}
+
+function fillSpeechModelOptions(models) {
+  const chosen = config.llm.speech_ollama_model;
+  $("speech-model").innerHTML =
+    `<option value="">Same as the chat model</option>` +
+    models.map((m) => `<option value="${escapeHtml(m.ollama)}">${escapeHtml(m.label)}</option>`).join("");
+  if (chosen && ![...$("speech-model").options].some((o) => o.value === chosen)) {
+    $("speech-model").insertAdjacentHTML("beforeend", `<option value="${escapeHtml(chosen)}">${escapeHtml(chosen)}</option>`);
+  }
+  $("speech-model").value = chosen;
+}
+
 async function renderModels() {
   $("hardware-note").textContent = "looking…";
   const body = await (await fetch("/api/models")).json();
@@ -908,16 +935,7 @@ async function renderModels() {
     : "no GPU memory reported - the model would run on the CPU";
   const ram = hw.ram_gb ? `${hw.ram_gb}GB system RAM` : "system RAM unknown";
   $("hardware-note").textContent = `${card}\n${ram}`;
-  const chosen = config.llm.speech_ollama_model;
-  $("speech-model").innerHTML =
-    `<option value="">Same as the chat model</option>` +
-    body.models
-      .map((m) => `<option value="${escapeHtml(m.ollama)}">${escapeHtml(m.label)}</option>`)
-      .join("");
-  if (chosen && ![...$("speech-model").options].some((o) => o.value === chosen)) {
-    $("speech-model").insertAdjacentHTML("beforeend", `<option value="${escapeHtml(chosen)}">${escapeHtml(chosen)}</option>`);
-  }
-  $("speech-model").value = chosen;
+  fillSpeechModelOptions(body.models);
   $("model-picks").innerHTML = body.models
     .map((model) => {
       const tag = model.key === body.recommended ? " · best fit here" : "";

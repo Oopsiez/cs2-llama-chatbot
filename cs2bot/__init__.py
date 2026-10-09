@@ -2,7 +2,7 @@
 
 # Keep in step with `version` in pyproject.toml and the tag the release workflow builds from;
 # tests/test_version.py fails if they drift.
-__version__ = "1.9.0"
+__version__ = "1.10.1"
 
 try:
     from ._release import RELEASE  # written by the release workflow from the git tag

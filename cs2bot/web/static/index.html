@@ -32,10 +32,11 @@
 
   <section class="card">
     <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="general">General</button>
       <button class="tab" role="tab" data-tab="persona" aria-selected="true">Personality</button>
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
-      <button class="tab" role="tab" data-tab="model">Model</button>
-      <button class="tab" role="tab" data-tab="server">Server</button>
+      
+      <button class="tab" role="tab" data-tab="advanced">Advanced</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
       <button class="tab" role="tab" data-tab="strats">Strats</button>
       <button class="tab" role="tab" data-tab="voice">Listening</button>
@@ -128,6 +129,23 @@
       </div>
     </div>
 
+    <div class="panel" data-panel="general">
+      <h3>Game state</h3>
+      <div class="result" id="gamestate-line">game state: unknown</div>
+      <div class="divider"></div>
+      <h3>Models</h3>
+      <label class="check"><input type="checkbox" id="chat-enabled" /><span>Chat model
+        <small>Writes the typed replies. Off = nothing is typed into team chat.</small></span></label>
+      <label class="check"><input type="checkbox" id="speech-enabled" /><span>Speech model
+        <small>Writes the spoken lines. Off = the bot does not talk over voice.</small></span></label>
+      <p class="hint">The model that writes what the voice says. Two 8B models do not both fit an 8GB card,
+        so Ollama swaps them in and out - a few seconds extra on each switch. Leave on "same as chat" to avoid that.</p>
+      <label>Spoken lines are written by
+        <select id="speech-model"><option value="">Same as the chat model</option></select>
+      </label>
+      <div class="actions"><button class="action" id="pull-speech-model">Install the speech model</button></div>
+      <div class="result" id="pull-note">—</div>
+    </div>
     <div class="panel" data-panel="brain">
       <div class="dial">
         <div class="dial-head">
@@ -225,7 +243,8 @@
       </div>
     </div>
 
-    <div class="panel" data-panel="model">
+    <div class="panel" data-panel="advanced">
+      <h3>Model</h3>
       <p class="note">
         The model runs on <em>your</em> machine, next to CS2, so it is competing with the game for
         memory. A 1-3B model answers chat perfectly well and runs on a 4GB card - or on no GPU at
@@ -233,16 +252,9 @@
       </p>
       <div class="result" id="hardware-note">—</div>
       <div class="actions">
-        <button class="action" id="refresh-models">What can this machine run?</button>
+        <button class="action" id="refresh-models">Model compatibility</button>
       </div>
       <div id="model-picks" class="picks"></div>
-      <h3>Speech model</h3>
-      <p class="hint">The model that writes what the voice says. Two 8B models do not both fit an 8GB card,
-        so Ollama swaps them in and out - a few seconds extra on each switch. Leave on "same as chat" to avoid that.</p>
-      <label>Spoken lines are written by
-        <select id="speech-model"><option value="">Same as the chat model</option></select>
-      </label>
-      <div class="divider"></div>
       <label>Backend
         <select id="llm-backend">
           <option value="llama_cpp">llama.cpp (local GGUF)</option>
@@ -293,9 +305,13 @@
       <div id="gpu-models" class="picks"></div>
       <h4 hidden>Processes using the GPU</h4>
       <div id="gpu-processes" class="picks" hidden></div>
-    </div>
+      <label>Console log check (seconds)
+        <input type="number" id="poll-seconds" min="0.1" max="5" step="0.1" />
+        <span class="hint">How often new chat lines are read from console.log. 0.5 is plenty; GSI state is pushed by CS2 and is not polled.</span>
+      </label>
+      <div class="divider"></div>
+      <h3>Server</h3>
 
-    <div class="panel" data-panel="server">
       <label class="check"><input type="checkbox" id="use-server" /><span>Run the model on a server on my network
         <small>Off = the model runs on this PC. On = this PC only types and talks; a server on your network does the thinking.</small></span></label>
       <div id="server-block">

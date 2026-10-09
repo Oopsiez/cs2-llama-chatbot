@@ -22,7 +22,7 @@ from ..gamestate import gsi_endpoint, inspect_gsi_cfg, install_gsi_cfg
 from ..hardware import CS2_VRAM_RESERVE_GB, probe
 from ..identity import detect_name_from_line
 from ..llm import BACKENDS
-from ..llm.catalog import recommended, survey
+from ..llm.catalog import CHOICES, recommended, survey
 from ..models import LifeState
 from ..output import keyboard
 from ..parser import parse_chat_line
@@ -98,6 +98,18 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         config = engine.config.model_copy(update={"enabled": bool(payload.get("enabled"))})
         await engine.apply_config(config)
         return engine.status()
+
+    @app.get("/api/catalog")
+    async def list_catalog() -> dict[str, Any]:
+        """The model picker's choices without probing the hardware."""
+        return {"models": [{"label": c.label, "ollama": c.ollama} for c in CHOICES]}
+
+    @app.post("/api/llm/pull")
+    async def pull_model(payload: dict[str, Any]) -> dict[str, Any]:
+        tag = str(payload.get("model") or "").strip()
+        if not tag:
+            return {"status": "error: no model named"}
+        return {"status": engine.pull_model(tag)}
 
     @app.get("/api/models")
     async def list_models() -> dict[str, Any]:

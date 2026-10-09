@@ -123,6 +123,8 @@ class Engine:
         self.last_voice_reply_at = float("-inf")
         self._task: asyncio.Task[None] | None = None
         self._warm_task: asyncio.Task[None] | None = None
+        self._pull_task: asyncio.Task[None] | None = None
+        self.pull_status = ""
         # Every roll the bot makes - reply probability, typos - comes from here, so passing a
         # seed makes a run reproducible.
         self._random = random.Random(seed)
@@ -374,7 +376,7 @@ class Engine:
         self.bus.publish("status", self.status())
         try:
             self.llm_status = await self.backend.warm()
-            if self.speech_backend is not self.backend:
+            if self.speech_backend is not self.backend and self.config.llm.speech_enabled:
                 self.llm_status += f"; speech: {await self.speech_backend.warm()}"
         except LLMError as exc:
             self.llm_status = f"error: {exc}"
@@ -413,7 +415,7 @@ class Engine:
             except Exception as exc:  # keep the loop alive across transient failures
                 self.last_error = f"{type(exc).__name__}: {exc}"
                 self.bus.publish("error", {"message": self.last_error})
-            await asyncio.sleep(POLL_INTERVAL)
+            await asyncio.sleep(max(0.05, self.config.game.poll_seconds))
 
     async def _tick(self) -> None:
         # Voice arrives on the speakers, not in the log, so it is pumped whether or not
@@ -454,6 +456,10 @@ class Engine:
         return self._speaker
 
     def _reply_modes(self, message: ChatMessage) -> tuple[bool, bool]:
+        typed, spoken = self._wanted_modes(message)
+        return typed and self.config.llm.chat_enabled, spoken and self.config.llm.speech_enabled
+
+    def _wanted_modes(self, message: ChatMessage) -> tuple[bool, bool]:
         """`(typed, spoken)` for a reply, per the Voice tab's reply-with setting.
 
         All-chat replies are always typed: the other team cannot hear team voice.
@@ -520,7 +526,30 @@ class Engine:
 
     @property
     def answers_text(self) -> bool:
-        return self.config.respond_to != "voice"
+        return self.config.respond_to != "voice" and self.config.llm.chat_enabled
+
+    def pull_model(self, tag: str) -> str:
+        """Start downloading `tag` on the Ollama server the config points at; progress lands in
+        `pull_status` (and the status feed) so the panel can show it."""
+        backend = self.backend
+        if not isinstance(backend, OllamaBackend):
+            self.pull_status = "error: models are only installed through Ollama"
+            return self.pull_status
+        if self._pull_task is not None and not self._pull_task.done():
+            return self.pull_status
+        self.pull_status = f"{tag}: starting…"
+        self._pull_task = asyncio.create_task(self._pull(backend, tag), name="cs2bot-pull")
+        return self.pull_status
+
+    async def _pull(self, backend: OllamaBackend, tag: str) -> None:
+        try:
+            async for progress in backend.pull(tag):
+                self.pull_status = f"{tag}: {progress}"
+                self.bus.publish("status", self.status())
+            self.pull_status = f"{tag}: installed"
+        except LLMError as exc:
+            self.pull_status = f"error: {exc}"
+        self.bus.publish("status", self.status())
 
     async def handle_voice(self, text: str) -> BotReply | None:
         """Treat a transcript as if it had been typed in team chat.
@@ -1199,6 +1228,7 @@ class Engine:
             "running": self._task is not None and not self._task.done(),
             "llm_backend": self.config.llm.backend,
             "llm_status": self.llm_status,
+            "pull_status": self.pull_status,
             "llm_loading": self.llm_loading,
             "sender": self.sender.describe(),
             "log_path": self.config.game.console_log_path,

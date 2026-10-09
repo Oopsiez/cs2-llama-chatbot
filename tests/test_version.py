@@ -27,3 +27,17 @@ def test_the_server_counts_as_behind_only_when_its_release_is_older():
     assert not behind("v1.9.0-rc24", "v1.9.0-rc24")
     assert not behind("unknown", "v1.9.0-rc24")
     assert agent_url("http://192.168.0.70:11434") == "http://192.168.0.70:11435"
+
+
+def test_switching_a_model_off_stops_that_kind_of_reply():
+    from cs2bot.config import AppConfig
+    from cs2bot.models import ChatChannel, ChatMessage
+
+    engine = Engine(AppConfig())
+    message = ChatMessage(raw="x", sender="mate", text="rush b?", channel=ChatChannel.TEAM)
+    typed, spoken = engine._reply_modes(message)
+    engine.config.llm.chat_enabled = False
+    engine.config.llm.speech_enabled = False
+    assert engine._reply_modes(message) == (False, False)
+    assert engine.answers_text is False
+    assert (typed, spoken) != (False, False)

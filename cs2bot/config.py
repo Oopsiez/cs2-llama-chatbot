@@ -20,6 +20,7 @@ class GameSettings(BaseModel):
     """Where CS2 lives and how we type into it."""
 
     console_log_path: str = ""
+    poll_seconds: float = 0.5  # how often the console log is re-read for new lines
     cfg_dir: str = ""
     exec_cfg_name: str = "message.cfg"
     bind_key: str = "p"
@@ -54,6 +55,8 @@ class LLMSettings(BaseModel):
     request_timeout: float = 30.0
     cpu_only: bool = False  # keep the model off the graphics card entirely (saves VRAM for CS2)
     speech_ollama_model: str = ""  # Ollama tag used for spoken lines; blank -> the chat model
+    chat_enabled: bool = True  # off -> no typed replies are generated
+    speech_enabled: bool = True  # off -> no spoken replies are generated
     warm_on_start: bool = True  # load the model while you are in the menu, not on the first reply
 
 

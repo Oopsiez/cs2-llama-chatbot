@@ -8,6 +8,9 @@ a home proxy that turning verification off has to be possible.
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
+
 import httpx
 
 from .base import ChatTurn, LLMBackend, LLMError, SamplingParams
@@ -85,6 +88,27 @@ class OllamaBackend(LLMBackend):
         except httpx.HTTPError:
             return []
         return [m.get("name", "") for m in response.json().get("models", [])]
+
+    async def pull(self, tag: str) -> AsyncIterator[str]:
+        """Download `tag` on the server, yielding Ollama's progress lines as it goes."""
+        try:
+            async with self._client.stream(
+                "POST", "/api/pull", json={"model": tag, "stream": True}, timeout=None
+            ) as response:
+                response.raise_for_status()
+                async for raw in response.aiter_lines():
+                    if not raw.strip():
+                        continue
+                    chunk = json.loads(raw)
+                    if chunk.get("error"):
+                        raise LLMError(str(chunk["error"]))
+                    status = str(chunk.get("status", ""))
+                    total, done = chunk.get("total"), chunk.get("completed")
+                    if total and done is not None:
+                        status += f" {100 * done // total}% ({done / 1e9:.1f}/{total / 1e9:.1f} GB)"
+                    yield status
+        except httpx.HTTPError as exc:
+            raise LLMError(f"could not pull {tag} from {self.base_url}: {exc}") from exc
 
     async def warm(self) -> str:
         ready = await self.health()
