@@ -25,7 +25,14 @@ from .models import BotReply, ChatChannel, ChatMessage, LifeState, MessageSource
 from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
-from .persona import build_reveal_turns, build_strategy_turns, build_turns, find_persona, persona_choices
+from .persona import (
+    build_reveal_turns,
+    build_strategy_turns,
+    build_turns,
+    find_persona,
+    persona_choices,
+    persona_from_order,
+)
 from .roster import Roster
 from .rules import is_question, should_reply
 from .snitch import announcement, is_request, where
@@ -222,9 +229,7 @@ class Engine:
             return message
         if not self.own_name and self.config.game.auto_detect_name:
             self._learn_name(message.sender, "your own reply in chat")
-        return message.model_copy(
-            update={"is_self": True, "addressed_to_me": False, "mention_reason": ""}
-        )
+        return message.model_copy(update={"is_self": True, "addressed_to_me": False, "mention_reason": ""})
 
     def annotate(self, message: ChatMessage) -> ChatMessage:
         """Mark whether the sender is the user, and whether they are talking to the user."""
@@ -517,14 +522,8 @@ class Engine:
             return None
 
         if not text:
-            reason = (
-                "kept repeating itself"
-                if self.last_generation_repeated
-                else "model returned nothing"
-            )
-            self.bus.publish(
-                "skipped", {"message": message.model_dump(mode="json"), "reason": reason}
-            )
+            reason = "kept repeating itself" if self.last_generation_repeated else "model returned nothing"
+            self.bus.publish("skipped", {"message": message.model_dump(mode="json"), "reason": reason})
             return None
 
         self._remember_reply(text)
@@ -646,12 +645,11 @@ class Engine:
         wanted = find_persona(command.persona, self.config.saved_personas)
         if wanted is None:
             # "be careful" is a teammate talking, not a persona nobody has; only an explicit
-            # `!persona x` is worth a "never heard of it".
+            # `!persona x` or a "you are now ..." order is worth acting on.
             if not command.explicit:
                 return False, None
-            return True, await self._say_command_answer(
-                f"no persona called {command.persona} - try: {', '.join(available)}", message
-            )
+            # Not a name on the list, so it is a description: the bot becomes exactly that.
+            wanted = persona_from_order(command.instruction or command.persona, self.config.persona)
         await self.apply_config(self.config.model_copy(update={"persona": wanted}))
         self.bus.publish("command", {"kind": "persona", "by": message.sender, "to": wanted.name})
         return True, await self._say_command_answer(f"ok, {wanted.name} it is", message)
@@ -659,9 +657,7 @@ class Engine:
     async def _say_command_answer(self, text: str, asked_by: ChatMessage) -> BotReply:
         """Answer an order in the bot's own words - no model, so it lands even when it is down."""
         lines = _wrap(text, self.config.game.chat_char_limit)
-        team_only = asked_by.is_voice or commands.answer_in_team_chat(
-            self.config.strategy, asked_by.channel
-        )
+        team_only = asked_by.is_voice or commands.answer_in_team_chat(self.config.strategy, asked_by.channel)
         delivered, detail = True, ""
         for line in lines:
             self.echo.remember(line)
@@ -673,9 +669,7 @@ class Engine:
             self.last_voice_reply_at = time.monotonic()
         else:
             self.last_reply_at = time.monotonic()
-        return BotReply(
-            in_reply_to=asked_by, text="\n".join(lines), delivered=delivered, reason=detail
-        )
+        return BotReply(in_reply_to=asked_by, text="\n".join(lines), delivered=delivered, reason=detail)
 
     async def maybe_call_strategy(self) -> None:
         """Call the round's strat unprompted, once, if that was asked for in the settings."""
@@ -692,16 +686,12 @@ class Engine:
         self._called_for = self._round_marker
         await self.call_strategy()
 
-    async def call_strategy(
-        self, asked_by: ChatMessage | None = None, site: str = ""
-    ) -> BotReply | None:
+    async def call_strategy(self, asked_by: ChatMessage | None = None, site: str = "") -> BotReply | None:
         """Pick a real call for the map and side we are on, say it, and send it."""
         settings = self.config.strategy
         player = self.game_state.player
         side = player.team if player.team in (Team.T, Team.CT) else self._fallback_side()
-        strategy = playbook.pick(
-            player.map_name, side, site=site, avoid=self.recent_strats, rng=self._random
-        )
+        strategy = playbook.pick(player.map_name, side, site=site, avoid=self.recent_strats, rng=self._random)
         if strategy is None:
             return None
 
@@ -767,9 +757,7 @@ class Engine:
             return plain
         try:
             raw = await self.backend.generate(
-                build_strategy_turns(
-                    self.config, self.game_state.player, strategy, asked_by, names
-                ),
+                build_strategy_turns(self.config, self.game_state.player, strategy, asked_by, names),
                 self._sampling_params(),
             )
         except LLMError as exc:
@@ -805,10 +793,7 @@ class Engine:
             return
 
         now = time.monotonic()
-        due = (
-            settings.announce_interval > 0
-            and now - self.last_announce_at >= settings.announce_interval
-        )
+        due = settings.announce_interval > 0 and now - self.last_announce_at >= settings.announce_interval
         if not (due or (settings.announce_on_death and just_died)):
             return
 
@@ -820,9 +805,7 @@ class Engine:
         self.echo.remember(text)
         delivered, detail = await self.sender.send(text, team_only=settings.channel == "team")
         self.last_spoke_at = time.time()
-        self.bus.publish(
-            "snitch", {"text": text, "delivered": delivered, "reason": detail}
-        )
+        self.bus.publish("snitch", {"text": text, "delivered": delivered, "reason": detail})
 
     async def maybe_reveal(self) -> None:
         """Own up on the end-of-match scoreboard, once.
@@ -862,12 +845,15 @@ class Engine:
                 # The match is over either way; the canned line is better than silence.
                 self.last_error = str(exc)
                 generated = ""
-            written = humanize(
-                generated,
-                literacy=self.config.behavior.literacy,
-                max_chars=max(40, self.config.persona.max_reply_chars - len(settings.link) - 1),
-                seed=self._random.randrange(2**32),
-            ) or written
+            written = (
+                humanize(
+                    generated,
+                    literacy=self.config.behavior.literacy,
+                    max_chars=max(40, self.config.persona.max_reply_chars - len(settings.link) - 1),
+                    seed=self._random.randrange(2**32),
+                )
+                or written
+            )
         link = settings.link.strip()
         if link and link not in written:
             written = f"{written} {link}".strip()
@@ -908,9 +894,7 @@ class Engine:
             params = self._sampling_params()
             if attempt:
                 # Nudge it out of the groove it just fell into.
-                params = replace(
-                    params, temperature=min(1.6, params.temperature + 0.15 * attempt)
-                )
+                params = replace(params, temperature=min(1.6, params.temperature + 0.15 * attempt))
             raw = await self.backend.generate(turns, params)
             text = humanize(
                 raw,
@@ -1007,9 +991,7 @@ class Engine:
             "own_name": self.own_name,
             "name_source": self.name_source,
             "name_probe": self.last_name_probe,
-            "local_state": self.game_state.local_state(
-                self.config.dead_alive.assume_alive_without_gsi
-            ).value,
+            "local_state": self.game_state.local_state(self.config.dead_alive.assume_alive_without_gsi).value,
             "dead_players": self.deaths.dead_players,
             "callout": where(player, self.config.callouts),
             "has_position": player.position is not None,

@@ -204,7 +204,8 @@ class StrategySettings(BaseModel):
     fallback_side: str = "T"
     obey_commands: bool = True  # !quiet / !talk / !strat a
     quiet_seconds: float = 120.0  # how long `!quiet` shuts the bot up for
-    # Let players swap the bot's personality from chat: `!persona toxic`, `!persona list`.
+    # Let players control the bot's personality from chat: `!persona toxic`, `!persona list`,
+    # or an order in their own words - "you are now a friendly operator" becomes the persona.
     obey_persona_commands: bool = True
 
 

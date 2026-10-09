@@ -136,3 +136,14 @@ def test_a_saved_persona_wins_over_a_preset_of_the_same_name():
 def test_an_unknown_persona_is_not_guessed_at():
     assert persona.find_persona("astronaut", {}) is None
     assert persona.find_persona("  ", {}) is None
+
+
+def test_a_persona_is_written_from_an_order():
+    from cs2bot.config import PersonaSettings
+    from cs2bot.persona import persona_from_order
+
+    current = PersonaSettings(game_aware=False, dead_notes="salty")
+    made = persona_from_order("you are now a friendly operator who never swears", current)
+    assert made.description.startswith("You are a friendly operator who never swears.")
+    assert made.name == "a friendly operator who"
+    assert made.game_aware is False and made.dead_notes == ""

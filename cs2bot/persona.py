@@ -93,8 +93,7 @@ PRESETS: dict[str, PersonaSettings] = {
     "Deadpan Bot": PersonaSettings(
         name="Deadpan Bot",
         description=(
-            "You are a Counter-Strike 2 player who answers everything with dry, deadpan "
-            "one-liners."
+            "You are a Counter-Strike 2 player who answers everything with dry, deadpan one-liners."
         ),
         style_notes="Minimal words. No exclamation marks. Never explain the joke.",
         dead_notes="Being dead has not changed your tone in the slightest.",
@@ -130,6 +129,34 @@ _NICKNAMES = {
 def persona_choices(saved: Mapping[str, PersonaSettings]) -> dict[str, PersonaSettings]:
     """Every persona that can be asked for by name: the built-in ones and the saved ones."""
     return {**PRESETS, **saved}
+
+
+def persona_from_order(order: str, current: PersonaSettings) -> PersonaSettings:
+    """A persona written on the spot from what a player said the bot now is.
+
+    "a friendly operator who never swears" becomes the whole description; the style and game
+    awareness of the persona being replaced are kept, so an order changes who the bot is, not
+    whether it knows it is in a match.
+    """
+    text = " ".join(order.split()).strip(" .!")
+    for lead in ("you are now ", "you're now ", "you are ", "you're ", "now "):
+        if text.casefold().startswith(lead):
+            text = text[len(lead) :]
+            break
+    lowered = text.casefold()
+    if lowered.startswith("talk like "):
+        description = f"You {text}. Stay in that voice for everything you say."
+    else:
+        description = f"You are {text}. Stay fully in that character for everything you say."
+    name = " ".join(text.split()[:4]).strip(" ,.")
+    return current.model_copy(
+        update={
+            "name": name[:40] or "As ordered",
+            "description": description,
+            "dead_notes": current.dead_notes if current.game_aware else "",
+            "extra_instructions": "",
+        }
+    )
 
 
 def find_persona(wanted: str, saved: Mapping[str, PersonaSettings]) -> PersonaSettings | None:
@@ -195,9 +222,7 @@ def game_context(
     if incoming.is_voice:
         bits.append(f"a {sender_state} teammate said this over voice comms")
     else:
-        bits.append(
-            f"{incoming.sender} is {sender_state} and wrote in {_CHANNEL_LABEL[incoming.channel]}"
-        )
+        bits.append(f"{incoming.sender} is {sender_state} and wrote in {_CHANNEL_LABEL[incoming.channel]}")
     return "; ".join(bits)
 
 
@@ -409,7 +434,7 @@ def build_strategy_turns(
         ChatTurn(
             role="user",
             content=(
-                f"{ask}The call is \"{strategy.name}\":\n{numbered}"
+                f'{ask}The call is "{strategy.name}":\n{numbered}'
                 + (f"\n(why: {strategy.detail})" if strategy.detail else "")
             ),
         ),
@@ -426,9 +451,7 @@ def build_turns(
     recent_replies: list[str] | None = None,
     is_teammate: bool = False,
 ) -> list[ChatTurn]:
-    system = build_system_prompt(
-        config, player, local_state, incoming, own_name, recent_replies, is_teammate
-    )
+    system = build_system_prompt(config, player, local_state, incoming, own_name, recent_replies, is_teammate)
     turns = [ChatTurn(role="system", content=system)]
     for message in history[-config.behavior.history_turns :]:
         role = "assistant" if message.is_self else "user"

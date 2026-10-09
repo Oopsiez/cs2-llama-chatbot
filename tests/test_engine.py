@@ -440,7 +440,9 @@ async def test_a_persona_nobody_has_is_answered_only_when_it_was_an_order(tmp_pa
     monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
     engine = build_engine()
     await engine.handle_message(chat(sender="Gavin", text="!persona astronaut"))
-    assert "no persona called astronaut" in " ".join(line for line, _ in engine._sender.sent)
+    # Not a preset, so the bot becomes exactly what was asked for.
+    assert "ok, astronaut it is" in " ".join(line for line, _ in engine._sender.sent)
+    assert engine.config.persona.description.startswith("You are astronaut.")
     # "be careful" is a teammate talking, so it gets an ordinary reply instead of a complaint.
     engine._sender.sent.clear()
     reply = await engine.handle_message(chat(sender="Gavin", text="be careful"))
@@ -494,3 +496,13 @@ def test_the_mock_backend_is_not_warmed_and_a_reply_is_not_held_back():
         await engine.stop()
 
     asyncio.run(run())
+
+
+@pytest.mark.asyncio
+async def test_a_player_can_rewrite_the_personality_in_their_own_words(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.strategy.enabled = True
+    reply = await engine.handle_message(chat(sender="Gavin", text="you are now a friendly operator"))
+    assert reply is not None
+    assert "friendly operator" in engine.config.persona.description
