@@ -37,6 +37,7 @@
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
       
       <button class="tab" role="tab" data-tab="advanced">Advanced</button>
+      <button class="tab" role="tab" data-tab="server">Server</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
       <button class="tab" role="tab" data-tab="strats">Strats</button>
       <button class="tab" role="tab" data-tab="speech">Speech</button>
@@ -314,14 +315,13 @@
         <input type="number" id="poll-seconds" min="0.1" max="5" step="0.1" />
         <span class="hint">How often new chat lines are read from console.log. 0.5 is plenty; GSI state is pushed by CS2 and is not polled.</span>
       </label>
-      <div class="divider"></div>
-      <h3>Server</h3>
+    </div>
+    <div class="panel" data-panel="server">
 
       <label class="check"><input type="checkbox" id="use-server" /><span>Run the model on a server on my network <span class="tip" title="Off = the model runs on this PC. On = this PC only types and talks; a server on your network does the thinking.">?</span></span></label>
       <div id="server-block">
-      <h3>Use a server on my network</h3>
-      <p class="hint">Run <b>CS2 Chatbot Server Setup.exe</b> on the other PC (it installs Ollama, opens the firewall on your
-        private network and pulls the model), then paste the address it prints here. Nothing runs on this PC's GPU.</p>
+      <details class="help"><summary title="What this does">?</summary><p class="note">Run <b>CS2 Chatbot Server Setup.exe</b> on the other PC (it installs Ollama, opens the firewall on your
+        private network and pulls the model), then paste the address it prints here. Nothing runs on this PC's GPU.</p></details>
       <div class="actions">
         <input type="text" id="remote-host" placeholder="http://192.168.1.50:11434" style="max-width:280px" />
         <button class="action primary" id="use-remote">Use this server</button>

@@ -38,6 +38,15 @@ class OllamaBackend(LLMBackend):
             base_url=self.base_url, timeout=timeout, headers=headers, verify=verify_tls
         )
 
+    def _why(self, exc: httpx.HTTPError) -> str:
+        """httpx errors often stringify to nothing - name the failure and the host."""
+        if isinstance(exc, httpx.TimeoutException):
+            return f"no answer from {self.base_url} within {self._client.timeout.read}s"
+        if isinstance(exc, httpx.ConnectError):
+            return f"nothing is listening at {self.base_url}"
+        text = str(exc).strip()
+        return f"{type(exc).__name__} talking to {self.base_url}" + (f": {text}" if text else "")
+
     async def generate(self, turns: list[ChatTurn], params: SamplingParams) -> str:
         payload = {
             "model": self.model,
@@ -61,7 +70,7 @@ class OllamaBackend(LLMBackend):
             response = await self._client.post("/api/chat", json=payload)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise LLMError(f"Ollama request failed: {exc}") from exc
+            raise LLMError(f"Ollama request failed - {self._why(exc)}") from exc
         data = response.json()
         return (data.get("message", {}).get("content") or "").strip()
 
@@ -70,7 +79,7 @@ class OllamaBackend(LLMBackend):
             response = await self._client.get("/api/tags")
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise LLMError(f"Ollama unreachable at {self.base_url}: {exc}") from exc
+            raise LLMError(f"Ollama unreachable - {self._why(exc)}") from exc
         models = [m.get("name", "") for m in response.json().get("models", [])]
         if self.model not in models:
             there = ", ".join(models) if models else "nothing"
@@ -108,7 +117,7 @@ class OllamaBackend(LLMBackend):
                         status += f" {100 * done // total}% ({done / 1e9:.1f}/{total / 1e9:.1f} GB)"
                     yield status
         except httpx.HTTPError as exc:
-            raise LLMError(f"could not pull {tag} from {self.base_url}: {exc}") from exc
+            raise LLMError(f"could not pull {tag} - {self._why(exc)}") from exc
 
     async def warm(self) -> str:
         ready = await self.health()
@@ -119,7 +128,7 @@ class OllamaBackend(LLMBackend):
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise LLMError(f"Ollama could not load {self.model}: {exc}") from exc
+            raise LLMError(f"Ollama could not load {self.model} - {self._why(exc)}") from exc
         return ready
 
     async def aclose(self) -> None:
