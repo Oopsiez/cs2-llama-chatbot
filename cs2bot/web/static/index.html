@@ -150,11 +150,14 @@
       <h3>Models</h3>
       <label class="check"><input type="checkbox" id="chat-enabled" /><span>Chat model <span class="tip" title="Writes the typed replies. Off = nothing is typed into team chat.">?</span></span></label>
       <label class="check"><input type="checkbox" id="speech-enabled" /><span>Speech model <span class="tip" title="Writes the spoken lines. Off = the bot does not talk over voice.">?</span></span></label>
-      <p class="hint">The model that writes what the voice says. Two 8B models do not both fit an 8GB card,
-        so Ollama swaps them in and out - a few seconds extra on each switch. Leave on "same as chat" to avoid that.</p>
-      <label>Spoken lines are written by
-        <select id="speech-model"><option value="">Same as the chat model</option></select>
-      </label>
+      <div class="row">
+        <label>Chat model <span class="tip" title="Writes the typed replies. The same list, with what this machine can run, is on the Advanced tab.">?</span>
+          <select id="chat-model"></select>
+        </label>
+        <label>Speech model <span class="tip" title="Writes what the voice says, grouped by how natural the banter sounds. Two 8B models do not both fit an 8GB card, so Ollama swaps them - a few seconds per switch; 'Same as the chat model' avoids that.">?</span>
+          <select id="speech-model"><option value="">Same as the chat model</option></select>
+        </label>
+      </div>
       <div class="actions"><button class="action" id="pull-speech-model">Install the speech model</button></div>
       <div class="result" id="pull-note">—</div>
     </div>

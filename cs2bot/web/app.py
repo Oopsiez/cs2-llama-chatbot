@@ -102,7 +102,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.get("/api/catalog")
     async def list_catalog() -> dict[str, Any]:
         """The model picker's choices without probing the hardware."""
-        return {"models": [{"label": c.label, "ollama": c.ollama} for c in CHOICES]}
+        return {
+        "models": [
+            {"label": c.label, "ollama": c.ollama, "speech_tier": c.speech_tier} for c in CHOICES
+        ]
+    }
 
     @app.post("/api/llm/pull")
     async def pull_model(payload: dict[str, Any]) -> dict[str, Any]:

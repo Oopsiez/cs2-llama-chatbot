@@ -816,6 +816,8 @@ class Engine:
                 return False, None
             # Not a name on the list, so it is a description: the bot becomes exactly that.
             wanted = persona_from_order(command.instruction or command.persona, self.config.persona)
+            saved = {**self.config.saved_personas, wanted.name: wanted}
+            await self.apply_config(self.config.model_copy(update={"saved_personas": saved}))
         await self.apply_config(self.config.model_copy(update={"persona": wanted}))
         self.bus.publish("command", {"kind": "persona", "by": message.sender, "to": wanted.name})
         return True, await self._say_command_answer(f"ok, {wanted.name} it is", message)

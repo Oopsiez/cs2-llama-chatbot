@@ -44,3 +44,12 @@ def test_a_stale_model_name_gives_way_to_the_catalog_model_the_server_has():
     assert known_on_server("lexi:latest", ["other:latest", lexi]) == lexi
     assert known_on_server(lexi, [lexi]) == lexi
     assert known_on_server("lexi:latest", ["other:latest"]) == ""
+
+
+def test_the_uncensored_models_are_tiered_for_speech():
+    from cs2bot.llm.catalog import CHOICES, SPEECH_TIERS
+
+    tiered = {c.key: c.speech_tier for c in CHOICES if c.speech_tier}
+    assert set(tiered.values()) <= set(SPEECH_TIERS)
+    assert tiered["stheno-8b"] == "best" and tiered["lexi-8b"] == "good"
+    assert "llama3.2-1b" not in tiered and "mistral-7b" not in tiered

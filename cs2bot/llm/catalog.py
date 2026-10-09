@@ -24,6 +24,9 @@ class ModelChoice:
     vram_gb: float  # to keep it entirely on the GPU beside CS2
     ram_gb: float  # to run it on the CPU instead
     note: str
+    speech_tier: str = ""  # good | better | best - how natural it sounds spoken; blank = not offered
+
+SPEECH_TIERS = ("good", "better", "best")
 
 
 CHOICES: tuple[ModelChoice, ...] = (
@@ -92,6 +95,7 @@ CHOICES: tuple[ModelChoice, ...] = (
         vram_gb=7.0,
         ram_gb=16.0,
         note="The default: best banter, says what it is told to. Wants an 8GB card - fine on a 2080 Super.",
+        speech_tier="good",
     ),
     ModelChoice(
         key="lexi-v2-8b",
@@ -103,6 +107,7 @@ CHOICES: tuple[ModelChoice, ...] = (
         vram_gb=7.0,
         ram_gb=16.0,
         note="Uncensored. The newer Lexi: same attitude, follows persona orders more closely.",
+        speech_tier="better",
     ),
     ModelChoice(
         key="stheno-8b",
@@ -114,6 +119,7 @@ CHOICES: tuple[ModelChoice, ...] = (
         vram_gb=7.0,
         ram_gb=16.0,
         note="Uncensored. Most natural spoken-style dialogue of the lot - the pick for the voice.",
+        speech_tier="best",
     ),
     ModelChoice(
         key="dolphin3-8b",
@@ -125,6 +131,7 @@ CHOICES: tuple[ModelChoice, ...] = (
         vram_gb=7.0,
         ram_gb=16.0,
         note="Uncensored. Chatty and obedient to the system prompt.",
+        speech_tier="good",
     ),
     ModelChoice(
         key="darkidol-8b",
@@ -136,6 +143,7 @@ CHOICES: tuple[ModelChoice, ...] = (
         vram_gb=7.0,
         ram_gb=16.0,
         note="Uncensored. Roleplay-tuned: stays in character hardest.",
+        speech_tier="better",
     ),
 )
 

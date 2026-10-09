@@ -30,6 +30,7 @@ const BINDINGS = {
   "speech-persona-extra": ["speech_persona.extra_instructions", "text"],
   "speech-persona-game-aware": ["speech_persona.game_aware", "bool"],
   "speech-model": ["llm.speech_ollama_model", "text"],
+  "chat-model": ["llm.ollama_model", "text"],
   "chat-enabled": ["llm.chat_enabled", "bool"],
   "speech-enabled": ["llm.speech_enabled", "bool"],
   "poll-seconds": ["game.poll_seconds", "float"],
@@ -208,10 +209,8 @@ function writeField(el, kind, value) {
 }
 
 function renderConfig() {
-  const speechModel = config.llm.speech_ollama_model;
-  if (speechModel && ![...$("speech-model").options].some((o) => o.value === speechModel)) {
-    $("speech-model").insertAdjacentHTML("beforeend", `<option value="${escapeHtml(speechModel)}">${escapeHtml(speechModel)}</option>`);
-  }
+  keepChosen($("speech-model"), config.llm.speech_ollama_model);
+  keepChosen($("chat-model"), config.llm.ollama_model);
   for (const [id, [path, kind]] of Object.entries(BINDINGS)) {
     const el = $(id);
     if (el) writeField(el, kind, getPath(config, path));
@@ -249,6 +248,16 @@ function renderSavedPersonas() {
   select.innerHTML = names.length
     ? names.map((n) => `<option value="${n}">${n}</option>`).join("")
     : '<option value="">(nothing saved)</option>';
+  renderPresetChoices();
+}
+
+function renderPresetChoices() {
+  const option = (name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+  const saved = Object.keys(config.saved_personas || {});
+  $("preset").innerHTML =
+    '<option value="">— choose a preset —</option>' +
+    `<optgroup label="Built in">${Object.keys(presets).map(option).join("")}</optgroup>` +
+    (saved.length ? `<optgroup label="Your personas">${saved.map(option).join("")}</optgroup>` : "");
 }
 
 function scheduleSave() {
@@ -495,7 +504,8 @@ function bindActions() {
   $("clear-feed").addEventListener("click", () => ($("feed").innerHTML = ""));
 
   $("preset").addEventListener("change", () => {
-    const preset = presets[$("preset").value];
+    const name = $("preset").value;
+    const preset = (config.saved_personas || {})[name] || presets[name];
     if (!preset) return;
     config.persona = structuredClone(preset);
     renderConfig();
@@ -934,15 +944,27 @@ async function fillSpeechModels() {
   fillSpeechModelOptions(body.models);
 }
 
-function fillSpeechModelOptions(models) {
-  const chosen = config.llm.speech_ollama_model;
-  $("speech-model").innerHTML =
-    `<option value="">Same as the chat model</option>` +
-    models.map((m) => `<option value="${escapeHtml(m.ollama)}">${escapeHtml(m.label)}</option>`).join("");
-  if (chosen && ![...$("speech-model").options].some((o) => o.value === chosen)) {
-    $("speech-model").insertAdjacentHTML("beforeend", `<option value="${escapeHtml(chosen)}">${escapeHtml(chosen)}</option>`);
+const TIERS = [["best", "Best"], ["better", "Better"], ["good", "Good"]];
+
+function optionsFor(models) {
+  return models.map((m) => `<option value="${escapeHtml(m.ollama)}">${escapeHtml(m.label)}</option>`).join("");
+}
+
+function keepChosen(select, chosen) {
+  if (chosen && ![...select.options].some((o) => o.value === chosen)) {
+    select.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(chosen)}">${escapeHtml(chosen)}</option>`);
   }
-  $("speech-model").value = chosen;
+  select.value = chosen;
+}
+
+function fillSpeechModelOptions(models) {
+  const groups = TIERS.filter(([tier]) => models.some((m) => m.speech_tier === tier))
+    .map(([tier, name]) => `<optgroup label="${name}">${optionsFor(models.filter((m) => m.speech_tier === tier))}</optgroup>`)
+    .join("");
+  $("speech-model").innerHTML = `<option value="">Same as the chat model</option>` + groups;
+  keepChosen($("speech-model"), config.llm.speech_ollama_model);
+  $("chat-model").innerHTML = optionsFor(models);
+  keepChosen($("chat-model"), config.llm.ollama_model);
 }
 
 async function renderModels() {
@@ -974,6 +996,7 @@ async function renderModels() {
     button.addEventListener("click", () => {
       config.llm.backend = "ollama";
       config.llm.ollama_model = model.ollama;
+      keepChosen($("chat-model"), model.ollama);
       renderConfig();
       scheduleSave();
       $("llm-note").textContent = `set to ${model.ollama} - pull it with: ollama pull ${model.ollama}`;
@@ -1037,9 +1060,7 @@ async function init() {
   const body = await response.json();
   config = body.config;
   presets = body.presets;
-  $("preset").innerHTML =
-    '<option value="">— choose a preset —</option>' +
-    Object.keys(presets).map((name) => `<option value="${name}">${name}</option>`).join("");
+  renderPresetChoices();
   renderConfig();
   bindInputs();
   bindTabs();
