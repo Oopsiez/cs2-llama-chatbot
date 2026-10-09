@@ -140,6 +140,7 @@ const BINDINGS = {
   "name-aliases": ["game.name_aliases", "list"],
   "auto-detect-name": ["game.auto_detect_name", "bool"],
   "bind-key": ["game.bind_key", "text"],
+  "bind-key-general": ["game.bind_key", "text"],
   "char-limit": ["game.chat_char_limit", "int"],
   "send-delay": ["game.chat_send_delay", "float"],
   "output-backend": ["game.output_backend", "text"],
@@ -209,6 +210,7 @@ function writeField(el, kind, value) {
 }
 
 function renderConfig() {
+  renderPresetChoices();
   keepChosen($("speech-model"), config.llm.speech_ollama_model);
   keepChosen($("chat-model"), config.llm.ollama_model);
   for (const [id, [path, kind]] of Object.entries(BINDINGS)) {
@@ -246,13 +248,30 @@ function renderSavedPersonas() {
   renderPresetChoices();
 }
 
-function renderPresetChoices() {
+function personaChoices() {
   const option = (name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
   const saved = Object.keys(config.saved_personas || {});
-  $("preset").innerHTML =
-    '<option value="">— choose a preset —</option>' +
+  return (
     `<optgroup label="Built in">${Object.keys(presets).map(option).join("")}</optgroup>` +
-    (saved.length ? `<optgroup label="Your personas">${saved.map(option).join("")}</optgroup>` : "");
+    (saved.length ? `<optgroup label="Your personas">${saved.map(option).join("")}</optgroup>` : "")
+  );
+}
+
+function renderPresetChoices() {
+  $("preset").innerHTML = '<option value="">— choose a preset —</option>' + personaChoices();
+  const current = config.persona.name;
+  const names = [...Object.keys(presets), ...Object.keys(config.saved_personas || {})];
+  $("persona-pick").innerHTML =
+    (names.includes(current) ? "" : `<option value="">${escapeHtml(current || "custom")}</option>`) + personaChoices();
+  $("persona-pick").value = names.includes(current) ? current : "";
+}
+
+function wearPersona(name) {
+  const preset = (config.saved_personas || {})[name] || presets[name];
+  if (!preset) return;
+  config.persona = structuredClone(preset);
+  renderConfig();
+  scheduleSave();
 }
 
 function scheduleSave() {
@@ -449,7 +468,6 @@ function renderStatus(status) {
     `llm: ${status.llm_backend}`,
     status.llm_status.startsWith("error") ? "bad" : status.llm_status === "not checked" ? "" : "good",
   );
-  setPill("pill-sender", `output: ${status.sender}`);
   if (status.pull_status) $("pull-note").textContent = status.pull_status;
   setPill(
     "pill-name",
@@ -498,14 +516,8 @@ function bindActions() {
 
   $("clear-feed").addEventListener("click", () => ($("feed").innerHTML = ""));
 
-  $("preset").addEventListener("change", () => {
-    const name = $("preset").value;
-    const preset = (config.saved_personas || {})[name] || presets[name];
-    if (!preset) return;
-    config.persona = structuredClone(preset);
-    renderConfig();
-    scheduleSave();
-  });
+  $("preset").addEventListener("change", () => wearPersona($("preset").value));
+  $("persona-pick").addEventListener("change", () => wearPersona($("persona-pick").value));
 
   $("refresh-models").addEventListener("click", renderModels);
   fillSpeechModels();

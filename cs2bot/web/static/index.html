@@ -15,7 +15,6 @@
     <span class="pill" id="pill-gsi">gsi: waiting</span>
     <span class="pill" id="pill-log">log: detached</span>
     <span class="pill" id="pill-llm">llm: not checked</span>
-    <span class="pill" id="pill-sender">output: -</span>
     <span class="pill" id="pill-name">you: unknown</span>
     <button class="toggle" id="toggle" data-on="false">Start bot</button>
   </div>
@@ -145,6 +144,16 @@
     <div class="panel" data-panel="general">
       <h3>Game state</h3>
       <div class="result" id="gamestate-line">game state: unknown</div>
+      <div class="divider"></div>
+      <h3>Chat</h3>
+      <div class="row">
+        <label>Personality <span class="tip" title="Who the bot is right now - the built-in presets and the personas you saved. Edit the details on the Personality tab.">?</span>
+          <select id="persona-pick"></select>
+        </label>
+        <label>Chat key <span class="tip" title="The key CS2 has bound to exec message.cfg - the bot presses it to send each line. Same setting as Bind key on the Game tab.">?</span>
+          <input type="text" id="bind-key-general" maxlength="12" style="max-width:100px" />
+        </label>
+      </div>
       <div class="divider"></div>
       <h3>Models</h3>
       <label class="check"><input type="checkbox" id="chat-enabled" /><span>Chat model <span class="tip" title="Writes the typed replies. Off = nothing is typed into team chat.">?</span></span></label>
