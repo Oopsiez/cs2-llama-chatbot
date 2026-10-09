@@ -13,6 +13,7 @@ Windows, `unavailable()` says why and the caller falls back to listening to the 
 from __future__ import annotations
 
 import ctypes
+import os
 import sys
 import threading
 from collections.abc import Callable, Iterator
@@ -26,6 +27,7 @@ CS2_PROCESS = "cs2.exe"
 
 VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK = "VAD\\Process_Loopback"
 PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0
+PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE = 1
 AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK = 1
 AUDCLNT_SHAREMODE_SHARED = 0
 AUDCLNT_STREAMFLAGS_LOOPBACK = 0x00020000
@@ -231,12 +233,12 @@ class _CompletionHandler:
         return 0
 
 
-def _activate(pid: int) -> c_void_p:
-    """An IAudioClient over `pid`'s audio, via ActivateAudioInterfaceAsync."""
+def _activate(pid: int, mode: int = PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE) -> c_void_p:
+    """An IAudioClient over `pid`'s audio (or everyone else's, in exclude mode)."""
     mmdevapi = ctypes.WinDLL("Mmdevapi")  # type: ignore[attr-defined]
     params = _ActivationParams(
         AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
-        _ProcessLoopbackParams(pid, PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE),
+        _ProcessLoopbackParams(pid, mode),
     )
     prop = _PropVariant()
     prop.vt = VT_BLOB
@@ -278,16 +280,25 @@ def _format() -> _WaveFormatEx:
 
 def blocks(process: str = CS2_PROCESS, block_seconds: float = 0.05) -> Iterator[list[float]]:
     """Yield mono blocks of what `process` is playing, forever; raises if it cannot."""
+    pid = find_process(process) if not unavailable() else 0
+    if not pid and not unavailable():
+        raise RuntimeError(f"{process} is not running")
+    yield from _capture(pid, PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, block_seconds)
+
+
+def blocks_except_me(block_seconds: float = 0.05) -> Iterator[list[float]]:
+    """Yield mono blocks of everything the PC plays except this program's own voice."""
+    yield from _capture(os.getpid(), PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE, block_seconds)
+
+
+def _capture(pid: int, mode: int, block_seconds: float) -> Iterator[list[float]]:
     missing = unavailable()
     if missing:
         raise RuntimeError(missing)
-    pid = find_process(process)
-    if not pid:
-        raise RuntimeError(f"{process} is not running")
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
     frames_per_block = max(1, int(SAMPLE_RATE * block_seconds))
     with com_apartment():
-        client = _activate(pid)
+        client = _activate(pid, mode)
         capture = c_void_p()
         event = kernel32.CreateEventW(None, False, False, None)
         try:

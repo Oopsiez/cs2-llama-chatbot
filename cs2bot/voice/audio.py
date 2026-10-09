@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import warnings
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from typing import Protocol, TypedDict, cast
@@ -142,13 +143,19 @@ def capture(
     is told what is being heard and why, so the panel can say so.
     """
     note = on_note or (lambda text: None)
-    if scope != "cs2":
-        note("hearing the whole PC")
-        yield from blocks(device_id)
-        return
     from . import process_loopback
 
     reason = process_loopback.unavailable()
+    if scope != "cs2":
+        if not reason:
+            note("hearing the whole PC except the bot's own voice")
+            try:
+                yield from process_loopback.blocks_except_me()
+            except Exception as exc:
+                reason = f"could not leave out the bot's own voice: {exc}"
+        note(f"hearing the whole PC: {reason}")
+        yield from blocks(device_id)
+        return
     if reason:
         note(f"hearing the whole PC: {reason}")
         yield from blocks(device_id)
@@ -186,6 +193,9 @@ def blocks(device_id: str = "", block_seconds: float = BLOCK_SECONDS) -> Iterato
     if missing:
         raise RuntimeError(missing)
     frames = max(1, int(SAMPLE_RATE * block_seconds))
+    # soundcard warns every time the reader is a little late (Whisper or a clip playing hogs the
+    # CPU); a few lost milliseconds do not matter to speech, and the warning floods the console.
+    warnings.filterwarnings("ignore", message="data discontinuity in recording")
     with com_apartment():
         microphone = _microphone(device_id)
         # Stereo on purpose: WASAPI returns silence or noise for a one-channel loopback stream.

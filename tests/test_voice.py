@@ -1,3 +1,4 @@
+import sys
 import threading
 import time
 
@@ -213,7 +214,7 @@ def test_the_stalest_audio_is_dropped_when_the_model_falls_behind():
         listener._offer(listener._run, [float(index)])
     assert listener._run.pending.qsize() == PENDING_LIMIT
     # The oldest two are gone, so what is left starts part-way through.
-    assert listener._run.pending.get_nowait() == [2.0]
+    assert listener._run.pending.get_nowait()[0] == [2.0]
 
 
 def test_a_failing_model_stops_the_listener_instead_of_failing_on_every_word():
@@ -679,3 +680,23 @@ def test_listener_drops_the_bots_own_voice_before_transcribing():
     assert listener._run.pending.qsize() == 1 and listener.own_voice_ignored == 1
     samples, ended_at = listener._run.pending.get_nowait()
     assert ended_at == 50.0 and len(samples) == 16000
+
+
+def test_whole_pc_capture_tries_to_leave_the_bot_out(monkeypatch):
+    from cs2bot.voice import audio, process_loopback
+
+    notes: list[str] = []
+    monkeypatch.setattr(process_loopback, "unavailable", lambda: "")
+    monkeypatch.setattr(process_loopback, "blocks_except_me", lambda: iter([[0.5]]))
+    monkeypatch.setattr(audio, "blocks", lambda device_id="": iter([[0.1]]))
+    assert list(audio.capture(scope="pc", on_note=notes.append)) == [[0.5], [0.1]]
+    assert notes[0] == "hearing the whole PC except the bot's own voice"
+    assert notes[1].startswith("hearing the whole PC: ")
+
+
+def test_leaving_the_bot_out_needs_windows():
+    from cs2bot.voice import process_loopback
+
+    if sys.platform != "win32":
+        with pytest.raises(RuntimeError):
+            list(process_loopback.blocks_except_me())
