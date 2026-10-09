@@ -88,7 +88,22 @@ Write-Host "Pulling $Model (about 5 GB, once)..."
 & $ollama pull $Model
 if ($LASTEXITCODE -ne 0) { throw "ollama pull failed" }
 
-$ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1).IPAddress
+# The address the game PC can reach: the adapter that carries the default route, not a
+# Hyper-V / VPN / Docker adapter that happens to be listed first.
+$ip = $null
+$route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+    Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1
+if ($route) {
+    $ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
+}
+if (-not $ip) {
+    $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object {
+        $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and $_.PrefixOrigin -ne "WellKnown"
+    } | Select-Object -First 1).IPAddress
+}
+$others = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -ne $ip -and $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" }).IPAddress
+if ($others) { Write-Host "Other addresses on this PC (use one of these if the game PC cannot reach the one below): $($others -join ', ')" }
 Write-Host ""
 Write-Host "Done. On the gaming PC, open the bot's Model tab -> 'Use a server on my network' and enter:"
 Write-Host "    http://${ip}:$Port"
