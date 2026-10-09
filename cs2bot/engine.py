@@ -450,6 +450,7 @@ class Engine:
             self._speaker = Speaker()
         self._speaker.device = settings.speak_device
         self._speaker.monitor = settings.speak_monitor
+        self._speaker.monitor_device = settings.monitor_device
         self._speaker.talk_key = settings.talk_key
         self._speaker.engine = settings.speak_engine
         self._speaker.voice = settings.speak_voice

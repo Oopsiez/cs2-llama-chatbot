@@ -138,11 +138,11 @@ def resample(samples: list[float], rate: int, target: int) -> list[float]:
     return np.interp(points, np.arange(len(data)), data).astype("float32").tolist()
 
 
-def play_targets(device_id: str = "", monitor: bool = False) -> list[str]:
-    """Where a clip goes: the chosen device, plus the default speakers when the player wants
+def play_targets(device_id: str = "", monitor: bool = False, monitor_device: str = "") -> list[str]:
+    """Where a clip goes: the chosen device, plus the monitor speakers when the player wants
     to hear it too. Blank already means the default speakers, so it is never played twice."""
-    if device_id and monitor:
-        return [device_id, ""]
+    if device_id and monitor and monitor_device != device_id:
+        return [device_id, monitor_device]
     return [device_id]
 
 
@@ -160,30 +160,55 @@ def find_speaker(sc: Any, target: str) -> Any:
         raise RuntimeError(f"output device '{target}' is not there (found: {names})") from None
 
 
-def play(samples: list[float], rate: int, device_id: str = "", monitor: bool = False) -> None:
+def play(
+    samples: list[float], rate: int, device_id: str = "", monitor: bool = False, monitor_device: str = ""
+) -> None:
     """Play samples on an output device; blank means the default speakers.
 
-    With `monitor`, the same clip also plays on the default speakers at the same time, so the
-    player hears what the bot is saying into the virtual microphone.
+    With `monitor`, the same clip also plays on `monitor_device` (blank = default speakers) at
+    the same time, so the player hears what the bot is saying into the virtual microphone. A
+    monitor that fails, or that turns out to be the same device as the virtual microphone, is
+    reported rather than silently skipped.
     """
     import numpy as np
     import soundcard as sc
 
     data = np.asarray(resample(samples, rate, CABLE_RATE), dtype="float32")
     rate = CABLE_RATE
+    problems: list[str] = []
 
-    def one(target: str) -> None:
-        with com_apartment():
-            speaker = sc.default_speaker() if not target else find_speaker(sc, target)
-            speaker.play(data, samplerate=rate)
+    def resolve(target: str) -> Any:
+        return sc.default_speaker() if not target else find_speaker(sc, target)
 
-    targets = play_targets(device_id, monitor)
-    extra = [threading.Thread(target=one, args=(t,), daemon=True) for t in targets[1:]]
+    def one(target: str, main: bool) -> None:
+        try:
+            with com_apartment():
+                speaker = resolve(target)
+                if not main and str(speaker.id) == str(resolve(device_id).id):
+                    problems.append(
+                        "monitor skipped: the default speakers ARE the virtual microphone - "
+                        "pick your real speakers/headset under 'Also play on'"
+                    )
+                    return
+                speaker.play(data, samplerate=rate)
+        except Exception as exc:
+            if main:
+                raise
+            problems.append(f"monitor failed on '{target or 'default speakers'}': {exc}")
+
+    targets = play_targets(device_id, monitor, monitor_device)
+    extra = [threading.Thread(target=one, args=(t, False), daemon=True) for t in targets[1:]]
     for thread in extra:
         thread.start()
-    one(targets[0])
+    one(targets[0], True)
     for thread in extra:
         thread.join()
+    if problems:
+        raise MonitorError("; ".join(problems))
+
+
+class MonitorError(RuntimeError):
+    """The clip reached the virtual microphone but the player's own copy did not play."""
 
 
 @dataclass
@@ -191,7 +216,8 @@ class Speaker:
     """Talks over push-to-talk: synthesise, hold the key, play into the virtual mic, release."""
 
     device: str = ""
-    monitor: bool = True  # also play on the default speakers so the player hears it
+    monitor: bool = True  # also play on the monitor speakers so the player hears it
+    monitor_device: str = ""  # blank = default speakers
     talk_key: str = "k"
     engine: str = "piper"
     voice: str = ""
@@ -236,8 +262,11 @@ class Speaker:
         async with self._lock:
             self.talk_started_at = time.time()
             self.recent.append((text, self.talk_started_at))
+            warning = ""
             try:
                 await asyncio.to_thread(self._speak, text)
+            except MonitorError as exc:
+                warning = str(exc)
             except Exception as exc:  # a device error must show in the panel, not a 500
                 self.last_error = f"{type(exc).__name__}: {exc}"
                 return False, self.last_error
@@ -245,14 +274,14 @@ class Speaker:
                 self.last_spoke_at = time.time()
         self.said += 1
         self.last_text = text
-        self.last_error = ""
-        return True, "spoken"
+        self.last_error = warning
+        return True, f"spoken - {warning}" if warning else "spoken"
 
     def _speak(self, text: str) -> None:
         samples, rate = render(text, self.voice, self.rate, self.engine)
         with hold(self.talk_key):
             time.sleep(self.lead_seconds)
-            play(samples, rate, self.device, self.monitor)
+            play(samples, rate, self.device, self.monitor, self.monitor_device)
             time.sleep(0.15)
 
     def status(self) -> dict[str, object]:

@@ -514,3 +514,24 @@ def test_spoken_lines_are_resampled_to_the_cable_rate():
     out = speak.resample([0.0, 1.0, 0.0, -1.0] * 100, 24000, 48000)
     assert len(out) == 800
     assert speak.resample([0.5], 48000, 48000) == [0.5]
+
+
+def test_the_monitor_goes_to_its_own_device_and_never_doubles_the_cable():
+    from cs2bot.voice import speak
+
+    assert speak.play_targets("cable", monitor=True, monitor_device="headset") == ["cable", "headset"]
+    assert speak.play_targets("cable", monitor=True, monitor_device="cable") == ["cable"]
+    assert speak.play_targets("", monitor=True, monitor_device="headset") == [""]
+
+
+def test_a_failed_monitor_still_counts_as_spoken_but_says_so(monkeypatch):
+    import asyncio
+
+    from cs2bot.voice import speak
+
+    monkeypatch.setattr(speak, "speaking_missing", lambda: "")
+    speaker = speak.Speaker()
+    speaker._speak = lambda text: (_ for _ in ()).throw(speak.MonitorError("monitor failed on 'x': boom"))  # type: ignore[method-assign]
+    spoken, detail = asyncio.run(speaker.say("mic check"))
+    assert spoken and detail.startswith("spoken - monitor failed")
+    assert speaker.status()["speak_error"].startswith("monitor failed")

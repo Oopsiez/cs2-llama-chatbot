@@ -537,7 +537,10 @@
         </label>
         <label class="check">
           <input type="checkbox" id="voice-speak-monitor" />
-          <span>Let me hear it too - each line also plays on your own speakers/headset, not just into the virtual mic.</span>
+          <span>Let me hear it too <span class="tip" title="Each line also plays on your own speakers/headset, not just into the virtual mic.">?</span></span>
+        </label>
+        <label>Also play on <span class="tip" title="Where 'Let me hear it too' plays. Pick your real speakers/headset - if Windows' default output is CABLE Input, 'default speakers' would be the virtual mic itself and you would hear nothing.">?</span>
+          <select id="voice-monitor-device"></select>
         </label>
         <label>Push-to-talk key
           <span style="display:flex;gap:6px;align-items:center">

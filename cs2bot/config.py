@@ -248,6 +248,7 @@ class VoiceSettings(BaseModel):
     reply_with: str = "text"
     speak_device: str = ""  # the output device to play into - pick the CABLE Input
     speak_monitor: bool = True  # also play it on the default speakers so the player hears it
+    monitor_device: str = ""  # where "let me hear it too" plays; blank = the default speakers
     talk_key: str = "k"  # CS2's push-to-talk key
     speak_engine: str = "piper"  # piper (CPU, quick) | kokoro (CPU, most human, slower) | windows
     speak_voice: str = ""  # a voice id for the engine; blank -> its default
