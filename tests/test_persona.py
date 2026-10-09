@@ -168,6 +168,7 @@ def test_spoken_lines_get_the_talking_directive_instead_of_the_typed_one():
     config.persona.max_reply_chars = 0
     spoken = prompt(config)
     assert "talking out loud" in spoken and "chat message only" not in spoken
+    assert "Sound like these" in spoken
     config.persona.max_reply_chars = 120
     typed = prompt(config)
     assert "chat message only" in typed and "talking out loud" not in typed

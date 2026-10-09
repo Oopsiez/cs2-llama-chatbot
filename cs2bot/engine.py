@@ -1188,6 +1188,9 @@ class Engine:
         text = ""
         for attempt in range(attempts):
             params = self._sampling_params()
+            if spoken:
+                # Spoken banter wants looser sampling than typed chat, or it reads like prose.
+                params = replace(params, temperature=max(params.temperature, 1.0), repeat_penalty=1.1)
             if attempt:
                 # Nudge it out of the groove it just fell into.
                 params = replace(params, temperature=min(1.6, params.temperature + 0.15 * attempt))
