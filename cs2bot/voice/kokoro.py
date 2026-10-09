@@ -99,12 +99,12 @@ def speed(rate: int) -> float:
 def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple[list[float], int]:
     """Mono float samples and sample rate; the model must be installed first."""
     global _model
+    if not is_cached():
+        raise RuntimeError("Kokoro is not installed - press Install on the Speech tab")
     from kokoro_onnx import Kokoro
 
     from .tts import for_speech
 
-    if not is_cached():
-        raise RuntimeError("Kokoro is not installed - press Install on the Speech tab")
     known = {v for v, _, _ in VOICES}
     voice = voice_id if voice_id in known else DEFAULT_VOICE
     lang = "en-gb" if voice.startswith("b") else "en-us"

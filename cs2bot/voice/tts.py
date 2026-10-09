@@ -165,12 +165,12 @@ def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple
     Each line gets a little random variation in pace and prosody so twenty replies do not come
     out with the exact same cadence - the thing that gives synthetic speech away first.
     """
-    from piper import PiperVoice, SynthesisConfig
-
     voice = find(voice_id) or find(DEFAULT_VOICE)
     assert voice is not None
     if not is_cached(voice.id):
         raise RuntimeError(f"Piper voice {voice.id} is not installed - press Install on the Speech tab")
+    from piper import PiperVoice, SynthesisConfig
+
     with _lock:
         model = _loaded.get(voice.id)
         if model is None:
