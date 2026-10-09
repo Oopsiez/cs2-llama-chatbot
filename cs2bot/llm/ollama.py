@@ -70,10 +70,21 @@ class OllamaBackend(LLMBackend):
             raise LLMError(f"Ollama unreachable at {self.base_url}: {exc}") from exc
         models = [m.get("name", "") for m in response.json().get("models", [])]
         if self.model not in models:
+            there = ", ".join(models) if models else "nothing"
             raise LLMError(
-                f"Model '{self.model}' is not on {self.base_url}. Run there: ollama pull {self.model}"
+                f"Model '{self.model}' is not on {self.base_url} (it has: {there}). "
+                f"Pick one of those on the Model tab, or run there: ollama pull {self.model}"
             )
         return f"ollama ready: {self.model} at {self.base_url}"
+
+    async def models(self) -> list[str]:
+        """The tags the server has pulled; empty when it cannot be reached."""
+        try:
+            response = await self._client.get("/api/tags")
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return []
+        return [m.get("name", "") for m in response.json().get("models", [])]
 
     async def warm(self) -> str:
         ready = await self.health()

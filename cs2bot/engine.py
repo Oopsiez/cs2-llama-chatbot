@@ -19,7 +19,8 @@ from .gamestate import GameStateStore
 from .humanize import humanize, sampling_for
 from .identity import addressed_to, detect_name_from_line
 from .liveness import DeathBoard
-from .llm import LLMBackend, LLMError, SamplingParams, build_backend
+from .llm import LLMBackend, LLMError, OllamaBackend, SamplingParams, build_backend
+from .llm.catalog import known_on_server
 from .logtail import LogTailer
 from .models import BotReply, ChatChannel, ChatMessage, LifeState, MessageSource, Team
 from .novelty import is_repetitive
@@ -326,8 +327,31 @@ class Engine:
             self.llm_status = await self.backend.health()
         except LLMError as exc:
             self.llm_status = f"error: {exc}"
+            switched = await self._adopt_server_model()
+            if switched:
+                try:
+                    self.llm_status = f"switched to {switched} (the one the server has) - " + (
+                        await self.backend.health()
+                    )
+                except LLMError as again:
+                    self.llm_status = f"error: {again}"
         self.bus.publish("status", self.status())
         return self.llm_status
+
+    async def _adopt_server_model(self) -> str:
+        """When the configured tag is not on the Ollama server but one of the catalog's is,
+        take that one - a stale name from an older build should not stop the first reply."""
+        backend = self.backend
+        if not isinstance(backend, OllamaBackend):
+            return ""
+        available = await backend.models()
+        tag = known_on_server(self.config.llm.ollama_model, available)
+        if not tag or tag == self.config.llm.ollama_model:
+            return ""
+        config = self.config.model_copy(deep=True)
+        config.llm.ollama_model = tag
+        await self.apply_config(config)
+        return tag
 
     @property
     def llm_loading(self) -> bool:

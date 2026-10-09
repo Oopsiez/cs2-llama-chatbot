@@ -35,3 +35,12 @@ def test_every_model_is_offered_with_its_cost():
     rows = catalog.survey(Hardware(ram_gb=16, vram_gb=8))
     assert len(rows) == len(catalog.CHOICES)
     assert all(row["download_gb"] and row["verdict"] and row["ollama"] for row in rows)
+
+
+def test_a_stale_model_name_gives_way_to_the_catalog_model_the_server_has():
+    from cs2bot.llm.catalog import known_on_server
+
+    lexi = "hf.co/Andycurrent/Llama-3-8B-Lexi-Uncensored:Q4_K_M"
+    assert known_on_server("lexi:latest", ["other:latest", lexi]) == lexi
+    assert known_on_server(lexi, [lexi]) == lexi
+    assert known_on_server("lexi:latest", ["other:latest"]) == ""

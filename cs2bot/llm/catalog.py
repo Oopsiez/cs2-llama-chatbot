@@ -187,3 +187,14 @@ def survey(hardware: Hardware) -> list[dict[str, str | float]]:
             }
         )
     return rows
+
+
+def known_on_server(wanted: str, available: list[str]) -> str:
+    """The catalog tag the server actually has when `wanted` is not there - the default first,
+    then the rest in catalog order - or "" when nothing on it is one of ours."""
+    if wanted in available:
+        return wanted
+    for choice in CHOICES:
+        if choice.ollama in available:
+            return choice.ollama
+    return ""
