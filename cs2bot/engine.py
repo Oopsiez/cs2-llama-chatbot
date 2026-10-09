@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import __version__, commands, playbook
+from . import RELEASE, __version__, commands, playbook
 from .config import AppConfig, load_config, save_config
 from .echo import EchoGuard
 from .events import EventBus
@@ -1194,6 +1194,7 @@ class Engine:
         player = self.game_state.player
         return {
             "version": __version__,
+            "release": RELEASE,
             "enabled": self.config.enabled,
             "running": self._task is not None and not self._task.done(),
             "llm_backend": self.config.llm.backend,

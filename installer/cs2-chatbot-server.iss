@@ -34,6 +34,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "server\install.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "server\uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "server\panel.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "server\agent.ps1"; DestDir: "{app}"; Flags: ignoreversion
+
+[Registry]
+Root: HKLM; Subkey: "Software\CS2 Chatbot Server"; ValueType: string; ValueName: "Version"; \
+  ValueData: "{#AppVersion}"; Flags: uninsdeletekey
 Source: "..\README.md"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion
 
 [Icons]

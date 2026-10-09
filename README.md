@@ -268,6 +268,8 @@ reboot.
 
 The server installer also puts **CS2 Chatbot Server** in the Start menu: a small window with an on/off switch for the AI models, the address the gaming PC should use (and the port, which updates the firewall rule), and who is connected right now.
 
+It also installs a small **update agent** (TCP 11435, private network only). On the gaming PC, *Test server* on the Model tab shows which release the server is on; when the server is behind, an **Update server** button has it download and silently install the matching `CS2.Chatbot.Server.Setup.exe` from GitHub - so only the gaming PC needs a manual install from then on.
+
 ## Is this a cheat?
 
 **No, and deliberately so.** The bot never touches the game's memory or process. It reads a log file

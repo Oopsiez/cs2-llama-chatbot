@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .. import gpu
+from .. import RELEASE, gpu, server_update
 from ..callouts import DEFAULT_RADIUS, Callout
 from ..config import AppConfig, PersonaSettings, config_path, load_config, save_config
 from ..elevate import relaunch_as_admin
@@ -117,6 +117,20 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.post("/api/llm/check")
     async def llm_check() -> dict[str, str]:
         return {"status": await engine.check_llm()}
+
+    @app.get("/api/server/version")
+    async def server_version_report() -> dict[str, Any]:
+        """What the LAN server's update agent says is installed there, against this client."""
+        server = await server_update.server_version(engine.config.llm.ollama_url)
+        return {
+            "client": RELEASE,
+            "server": server,
+            "behind": server_update.behind(str(server.get("version", "")), RELEASE),
+        }
+
+    @app.post("/api/server/update")
+    async def server_update_request() -> dict[str, Any]:
+        return await server_update.request_update(engine.config.llm.ollama_url, RELEASE)
 
     @app.get("/api/gpu")
     async def gpu_report() -> dict[str, Any]:

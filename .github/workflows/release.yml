@@ -20,6 +20,10 @@ jobs:
           python-version: "3.12"
       # `[voice]` is what makes voice comms work out of the installer instead of being a
       # `pip install` the user has to know about.
+      - name: Stamp the release tag into the package
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: Set-Content cs2bot/_release.py "RELEASE = `"${{ github.ref_name }}`""
       - run: pip install ".[voice]" pyinstaller
       - run: python scripts/build_exe.py
       - name: Check the executable actually starts

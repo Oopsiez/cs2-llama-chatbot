@@ -77,6 +77,22 @@ New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Action Allow -Pro
     -LocalPort $Port -Profile Private, Domain | Out-Null
 Write-Host "Firewall: TCP $Port open on the private network"
 
+# The update agent: the gaming PC asks it which version is here and can have it install a newer one.
+$agentPort = 11435
+$agentRule = "CS2 Chatbot - Update agent"
+Get-NetFirewallRule -DisplayName $agentRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+New-NetFirewallRule -DisplayName $agentRule -Direction Inbound -Action Allow -Protocol TCP `
+    -LocalPort $agentPort -Profile Private, Domain | Out-Null
+$agentTask = "CS2 Chatbot Server Agent"
+Unregister-ScheduledTask -TaskName $agentTask -Confirm:$false -ErrorAction SilentlyContinue
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\agent.ps1`" -Port $agentPort"
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName $agentTask -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
+Start-ScheduledTask -TaskName $agentTask
+Write-Host "Update agent: listening on TCP $agentPort (the game PC can push server updates)"
+
 # Restart Ollama so it picks up the new host setting (the tray app relaunches at login on its own).
 Get-Process "ollama app", "ollama" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2

@@ -596,11 +596,35 @@ function bindActions() {
   });
   $("llm-placement").addEventListener("change", () => applyPlacement($("llm-placement").value));
   $("split-layers").addEventListener("change", () => applyPlacement("split"));
+  async function checkServerVersion() {
+    const data = await (await fetch("/api/server/version")).json();
+    const server = data.server || {};
+    if (server.error) {
+      $("server-version").textContent = `server version unknown - ${server.error}`;
+    } else if (server.updating) {
+      $("server-version").textContent = `server is updating (${(server.log || []).slice(-1)[0] || "…"})`;
+    } else if (data.behind) {
+      $("server-version").textContent = `server is on ${server.version}, you are on ${data.client}`;
+    } else {
+      $("server-version").textContent = `server is on ${server.version} - up to date`;
+    }
+    $("update-server").hidden = !(data.behind && !server.updating && !server.error);
+  }
   $("test-server").addEventListener("click", async () => {
     $("llm-note").textContent = "testing the server…";
     await saveConfig();
     const response = await fetch("/api/llm/check", { method: "POST" });
     $("llm-note").textContent = (await response.json()).status;
+    await checkServerVersion();
+  });
+  $("update-server").addEventListener("click", async () => {
+    $("server-version").textContent = "asking the server to update…";
+    $("update-server").hidden = true;
+    const response = await fetch("/api/server/update", { method: "POST" });
+    const data = await response.json();
+    $("server-version").textContent = data.error
+      ? data.error
+      : `${data.status} - it downloads and installs on its own; test again in a few minutes`;
   });
   $("voice-preview").addEventListener("click", async () => {
     const voice = $("voice-speak-voice").value;
