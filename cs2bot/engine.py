@@ -282,13 +282,14 @@ class Engine:
     @property
     def speech_config(self) -> AppConfig:
         """The settings spoken lines are generated with: the speech persona swapped in if it is separate."""
-        if self.config.speech_same_persona:
-            return self.config
-        return self.config.model_copy(update={"persona": self.config.speech_persona})
+        config = self.config
+        persona = config.persona if config.speech_same_persona else config.speech_persona
+        persona = persona.model_copy(update={"max_reply_chars": config.speech_max_reply_chars})
+        return config.model_copy(update={"persona": persona})
 
     @property
     def speech_differs(self) -> bool:
-        return self.speech_config is not self.config or self.speech_backend is not self.backend
+        return not self.config.speech_same_persona or self.speech_backend is not self.backend
 
     @property
     def sender(self) -> ChatSender:

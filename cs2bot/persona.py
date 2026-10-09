@@ -323,7 +323,7 @@ def build_system_prompt(
         )
     lines.append(
         "Reply with the chat message only: no quotes, no name prefix, no narration, "
-        f"and at most {persona.max_reply_chars} characters."
+        f"and {length_rule(persona.max_reply_chars)}."
     )
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
@@ -381,7 +381,7 @@ def build_reveal_turns(config: AppConfig) -> list[ChatTurn]:
     # The link is appended afterwards, so the model must not invent one of its own.
     lines.append(
         "Reply with the chat message only: no quotes, no name prefix, no narration, no links, "
-        f"and at most {max(40, persona.max_reply_chars - len(config.reveal.link) - 2)} characters."
+        f"and {length_rule(persona.max_reply_chars, reserve=len(config.reveal.link) + 2)}."
     )
     return [
         ChatTurn(role="system", content="\n".join(lines)),
@@ -437,6 +437,13 @@ def build_initiative_turns(
     return turns
 
 
+def length_rule(max_chars: int, reserve: int = 0) -> str:
+    """The length clause of the prompt; 0 means spoken, where a sentence or two reads naturally."""
+    if max_chars <= 0:
+        return "a sentence or two, like somebody talking on voice"
+    return f"at most {max(40, max_chars - reserve) if reserve else max_chars} characters"
+
+
 def build_strategy_turns(
     config: AppConfig,
     player: LocalPlayer,
@@ -473,7 +480,7 @@ def build_strategy_turns(
     lines.append("; ".join(where_bits))
     lines.append(
         "Reply with the chat lines only, separated by newlines: no numbering, no quotes, no name "
-        f"prefix, no narration, and at most {persona.max_reply_chars} characters per line."
+        f"prefix, no narration, and {length_rule(persona.max_reply_chars)} per line."
     )
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")

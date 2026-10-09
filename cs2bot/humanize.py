@@ -102,11 +102,14 @@ def _typo(word: str, rng: random.Random) -> str:
     return word[:index] + word[index + 1 :]  # dropped key
 
 
+SPECIAL_TOKEN = re.compile(r"<\|[^|<>]{1,32}\|>")  # <|im_end|>, <|eot_id|> ... leaked by some GGUFs
+
+
 def humanize(text: str, literacy: int, max_chars: int, seed: int | None = None) -> str:
-    """Apply the literacy-dependent degradation and trim to the chat limit."""
+    """Apply the literacy-dependent degradation and trim to the chat limit (`max_chars` 0 = none)."""
     rng = random.Random(seed)
     level = max(0, min(100, literacy))
-    result = re.sub(r"\s+", " ", text).strip().strip('"')
+    result = re.sub(r"\s+", " ", SPECIAL_TOKEN.sub(" ", text)).strip().strip('"')
 
     # Models love to prefix replies with the speaker's name or stage directions.
     result = re.sub(r"^\s*\*[^*]{0,60}\*\s*", "", result)
@@ -128,7 +131,7 @@ def humanize(text: str, literacy: int, max_chars: int, seed: int | None = None) 
 
     word_cap = max(3, int(round(4 + level * 0.26)))
     words = result.split(" ")
-    if len(words) > word_cap:
+    if max_chars > 0 and len(words) > word_cap:
         result = " ".join(words[:word_cap])
 
     if max_chars > 0 and len(result) > max_chars:

@@ -34,3 +34,18 @@ def test_directives_change_with_level():
     assert literacy_directive(0) != literacy_directive(100)
     assert game_iq_directive(0) != game_iq_directive(100)
     assert literacy_directive(50) != game_iq_directive(50)
+
+
+def test_leaked_chat_template_tokens_are_never_typed_or_spoken():
+    from cs2bot.humanize import humanize
+
+    assert humanize("rush b<|im_end|>", literacy=100, max_chars=0) == "rush b"
+    assert "<|" not in humanize("<|start_header_id|>ok <|eot_id|>", literacy=100, max_chars=160)
+
+
+def test_no_cap_means_no_cap():
+    from cs2bot.humanize import humanize
+
+    text = " ".join(["word"] * 60)
+    assert humanize(text, literacy=100, max_chars=0) == text
+    assert len(humanize(text, literacy=100, max_chars=0).split()) == 60

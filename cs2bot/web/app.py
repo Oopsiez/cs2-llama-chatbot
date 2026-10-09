@@ -116,6 +116,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         tag = str(payload.get("model") or "").strip()
         if not tag:
             return {"status": "error: no model named"}
+        if engine.config.llm.backend != "ollama":
+            llm = engine.config.llm.model_copy(update={"backend": "ollama"})
+            await engine.apply_config(engine.config.model_copy(update={"llm": llm}))
         return {"status": engine.pull_model(tag)}
 
     @app.get("/api/models")

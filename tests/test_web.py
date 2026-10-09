@@ -277,3 +277,22 @@ def test_a_settings_save_cannot_wipe_a_saved_persona(client):
 
 def test_the_app_picker_always_offers_cs2(client):
     assert "cs2.exe" in client.get("/api/voice/apps").json()["apps"]
+
+
+def test_installing_a_model_switches_the_panel_to_ollama_instead_of_refusing(client):
+    config = client.get("/api/config").json()["config"]
+    config["llm"]["backend"] = "mock"
+    assert client.put("/api/config", json=config).status_code == 200
+    status = client.post("/api/llm/pull", json={"model": "x:latest"}).json()["status"]
+    assert "only installed through Ollama" not in status
+    assert client.get("/api/config").json()["config"]["llm"]["backend"] == "ollama"
+
+
+def test_spoken_lines_have_no_length_cap_by_default():
+    from cs2bot.config import AppConfig
+    from cs2bot.llm.base import SamplingParams
+    from cs2bot.persona import length_rule
+
+    assert AppConfig().speech_max_reply_chars == 0
+    assert "at most" not in length_rule(0)
+    assert "<|im_end|>" in SamplingParams().stop

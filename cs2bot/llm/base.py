@@ -13,7 +13,9 @@ class SamplingParams:
     top_k: int = 40
     repeat_penalty: float = 1.15
     max_tokens: int = 80
-    stop: list[str] = field(default_factory=lambda: ["\n\n", "<|eot_id|>"])
+    stop: list[str] = field(
+        default_factory=lambda: ["\n\n", "<|eot_id|>", "<|im_end|>", "<|end|>", "<|endoftext|>"]
+    )
 
 
 @dataclass
