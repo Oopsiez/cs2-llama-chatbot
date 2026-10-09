@@ -666,6 +666,8 @@ function bindActions() {
     const on = $("use-server").checked;
     $("server-block").style.display = on ? "" : "none";
     if (!on) {
+      config.llm.backend = "ollama";
+      $("llm-backend").value = "ollama";
       config.llm.ollama_url = LOCAL_OLLAMA;
       $("ollama-url").value = LOCAL_OLLAMA;
       $("server-test-note").textContent = "back to this PC";

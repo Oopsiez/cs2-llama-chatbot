@@ -296,3 +296,11 @@ def test_spoken_lines_have_no_length_cap_by_default():
     assert AppConfig().speech_max_reply_chars == 0
     assert "at most" not in length_rule(0)
     assert "<|im_end|>" in SamplingParams().stop
+
+
+def test_a_fresh_install_runs_ollama_on_this_pc():
+    from cs2bot.config import AppConfig
+
+    llm = AppConfig().llm
+    assert llm.backend == "ollama"
+    assert llm.ollama_url == "http://127.0.0.1:11434"

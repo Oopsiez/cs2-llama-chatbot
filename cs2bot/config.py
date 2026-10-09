@@ -39,7 +39,7 @@ class GameSettings(BaseModel):
 class LLMSettings(BaseModel):
     """Which Llama 3 runtime to talk to."""
 
-    backend: str = "mock"  # llama_cpp | ollama | mock
+    backend: str = "ollama"  # llama_cpp | ollama | mock; local Ollama until the Server tab says otherwise
     model_path: str = ""  # GGUF file for llama_cpp
     # Point this at another machine to run the model remotely, e.g. http://gpu-box:11434
     ollama_url: str = "http://127.0.0.1:11434"
