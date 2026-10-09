@@ -35,12 +35,10 @@
       <button class="tab" role="tab" data-tab="persona" aria-selected="true">Personality</button>
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
       <button class="tab" role="tab" data-tab="model">Model</button>
-      <button class="tab" role="tab" data-tab="gpu">GPU</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
       <button class="tab" role="tab" data-tab="strats">Strats</button>
       <button class="tab" role="tab" data-tab="voice">Listening</button>
       <button class="tab" role="tab" data-tab="speech">Speech</button>
-      <button class="tab" role="tab" data-tab="snitch">Snitch</button>
       <button class="tab" role="tab" data-tab="game">Game</button>
       <button class="tab" role="tab" data-tab="test">Test</button>
     </div>
@@ -119,7 +117,7 @@
     <div class="panel" data-panel="brain">
       <div class="dial">
         <div class="dial-head">
-          <strong>Literacy</strong>
+          <strong>Literacy <span class="hint">typed and spoken - natural dumbness to full correctness</span></strong>
           <span class="dial-value" id="literacy-value">60</span>
         </div>
         <input type="range" id="literacy" min="0" max="100" step="1" />
@@ -213,29 +211,6 @@
       </div>
     </div>
 
-    <div class="panel" data-panel="gpu">
-      <p class="note">
-        Everything sitting on the graphics card right now. Ollama keeps a model loaded for a while
-        after it is used, and other assistants that start with Windows can hold gigabytes - unload
-        or end them here before a match so CS2 and the bot's own model get the VRAM.
-      </p>
-      <div class="result" id="gpu-note">—</div>
-      <div class="actions">
-        <button class="action" id="refresh-gpu">Refresh</button>
-      </div>
-      <h3>Save VRAM</h3>
-      <div class="row">
-        <label class="check"><input type="checkbox" id="llm-cpu-only" /><span>Run the chat model on the CPU only
-          <small>No VRAM used at all; a 3-8B model answers in a few seconds on a 12-core CPU.</small></span></label>
-        <button class="action" id="all-cpu">Everything on CPU</button>
-      </div>
-      <p class="hint">Speech-to-text (Whisper) and the Piper/Kokoro voices already run on the CPU, so with this on, the card is CS2's alone.</p>
-      <h3>Models loaded in Ollama</h3>
-      <div id="gpu-models" class="picks"></div>
-      <h3>Processes using the GPU</h3>
-      <div id="gpu-processes" class="picks"></div>
-    </div>
-
     <div class="panel" data-panel="model">
       <p class="note">
         The model runs on <em>your</em> machine, next to CS2, so it is competing with the game for
@@ -261,7 +236,7 @@
       </label>
       <div class="row">
         <label>Context size<input type="number" id="n_ctx" min="512" step="512" /></label>
-        <label>GPU layers <span class="hint">-1 = all</span><input type="number" id="n_gpu_layers" min="-1" /></label>
+        <label>GPU layers <span class="hint">set by "Where it runs" below</span><input type="number" id="n_gpu_layers" min="-1" readonly /></label>
       </div>
       <div class="row">
         <label>Threads <span class="hint">0 = auto</span><input type="number" id="n_threads" min="0" /></label>
@@ -273,7 +248,7 @@
         private network and pulls the model), then paste the address it prints here. Nothing runs on this PC's GPU.</p>
       <div class="actions">
         <input type="text" id="remote-host" placeholder="http://192.168.1.50:11434" style="max-width:280px" />
-        <button class="action primary" id="use-remote">Use this server</button>
+        <button class="action primary" id="use-remote">Use and test this server</button>
         <span class="note" id="remote-note"></span>
       </div>
       <div class="row">
@@ -292,8 +267,35 @@
       </div>
       <div class="actions">
         <button class="action primary" id="check-llm">Check model</button>
+        <button class="action" id="test-server">Test server</button>
         <span class="note" id="llm-note"></span>
       </div>
+      <div class="divider"></div>
+      <h3>Where it runs</h3>
+      <div class="row">
+        <label>Chat model on
+          <select id="llm-placement">
+            <option value="gpu">GPU - fastest, uses VRAM next to CS2</option>
+            <option value="split">Split - some layers on the GPU, the rest on the CPU</option>
+            <option value="cpu">CPU only - no VRAM at all</option>
+          </select>
+        </label>
+        <label id="split-layers-label">Layers on the GPU <span class="hint">an 8B model has 32; fewer = less VRAM, slower</span>
+          <input type="number" id="split-layers" min="1" max="80" step="1" />
+        </label>
+      </div>
+      <p class="hint">Speech-to-text (Whisper) and the Piper/Kokoro voices always run on the CPU, so on <b>CPU only</b> the card is CS2's alone.
+        A 12-core CPU answers with a 3-8B model in a few seconds.</p>
+      <h3>On the graphics card now</h3>
+      <p class="hint">Ollama keeps a model loaded for a while after use, and other assistants that start with Windows can hold gigabytes - unload or end them before a match.</p>
+      <div class="result" id="gpu-note">—</div>
+      <div class="actions">
+        <button class="action" id="refresh-gpu">Refresh</button>
+      </div>
+      <h4>Models loaded in Ollama</h4>
+      <div id="gpu-models" class="picks"></div>
+      <h4>Processes using the GPU</h4>
+      <div id="gpu-processes" class="picks"></div>
     </div>
 
     <div class="panel" data-panel="deadalive">

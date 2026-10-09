@@ -18,6 +18,15 @@ BACKENDS = ("llama_cpp", "ollama", "mock")
 GGUF_OVERHEAD_GB = 1.0
 
 
+def ollama_gpu_layers(settings: LLMSettings) -> int | None:
+    """`num_gpu` for Ollama: 0 on CPU-only, the chosen count for a split, else Ollama's own choice."""
+    if settings.cpu_only:
+        return 0
+    if not settings.gpu_auto and settings.n_gpu_layers >= 0:
+        return settings.n_gpu_layers
+    return None
+
+
 def gpu_layers_for(settings: LLMSettings, hardware: Hardware) -> int:
     """All layers on the card when the file fits beside CS2, none when it does not."""
     if settings.cpu_only:
@@ -49,7 +58,7 @@ def build_backend(settings: LLMSettings) -> LLMBackend:
             api_key=settings.ollama_api_key,
             verify_tls=settings.ollama_verify_tls,
             num_thread=settings.n_threads or threads_for_the_model(),
-            num_gpu=0 if settings.cpu_only else None,
+            num_gpu=ollama_gpu_layers(settings),
         )
     if settings.backend == "mock":
         return MockBackend()

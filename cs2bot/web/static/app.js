@@ -120,7 +120,6 @@ const BINDINGS = {
   "gsi-token": ["gsi.auth_token", "text"],
 
   "respond-to": ["respond_to", "text"],
-  "llm-cpu-only": ["llm.cpu_only", "bool"],
   "voice-speak-engine": ["voice.speak_engine", "text"],
   "voice-device": ["voice.device", "text"],
   "voice-reply-with": ["voice.reply_with", "text"],
@@ -183,6 +182,7 @@ function renderConfig() {
     const el = $(id);
     if (el) writeField(el, kind, getPath(config, path));
   }
+  renderPlacement();
   $("reply-all").checked = config.behavior.reply_channels.includes("all");
   $("reply-team").checked = config.behavior.reply_channels.includes("team");
   renderDials();
@@ -250,6 +250,37 @@ function bindInputs() {
   }
 }
 
+function placementOf(llm) {
+  if (llm.cpu_only) return "cpu";
+  if (!llm.gpu_auto && llm.n_gpu_layers >= 0) return "split";
+  return "gpu";
+}
+
+function applyPlacement(mode) {
+  const llm = config.llm;
+  if (mode === "cpu") {
+    llm.cpu_only = true;
+  } else if (mode === "split") {
+    llm.cpu_only = false;
+    llm.gpu_auto = false;
+    llm.n_gpu_layers = Math.max(1, Number($("split-layers").value || 16));
+  } else {
+    llm.cpu_only = false;
+    llm.gpu_auto = true;
+    llm.n_gpu_layers = -1;
+  }
+  renderPlacement();
+}
+
+function renderPlacement() {
+  const mode = placementOf(config.llm);
+  $("llm-placement").value = mode;
+  $("split-layers-label").style.display = mode === "split" ? "" : "none";
+  if (mode === "split") $("split-layers").value = config.llm.n_gpu_layers;
+  else if (!$("split-layers").value) $("split-layers").value = 16;
+  $("n_gpu_layers").value = config.llm.cpu_only ? 0 : config.llm.n_gpu_layers;
+}
+
 function bindTabs() {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -258,7 +289,7 @@ function bindTabs() {
         panel.dataset.active = String(panel.dataset.panel === tab.dataset.tab);
       });
       if (tab.dataset.tab === "voice") renderVoice();
-      if (tab.dataset.tab === "gpu") renderGpu();
+      if (tab.dataset.tab === "model") renderGpu();
     });
   });
 }
@@ -546,11 +577,13 @@ function bindActions() {
     config.voice.speak_voice = "";
     await renderVoice();
   });
-  $("all-cpu").addEventListener("click", async () => {
-    config.llm.cpu_only = true;
-    $("llm-cpu-only").checked = true;
-    if (config.voice.speak_engine === "kokoro") config.voice.speak_engine = "piper";
-    $("gpu-note").textContent = "chat model, speech-to-text and voices all on the CPU - save to apply";
+  $("llm-placement").addEventListener("change", () => applyPlacement($("llm-placement").value));
+  $("split-layers").addEventListener("change", () => applyPlacement("split"));
+  $("test-server").addEventListener("click", async () => {
+    $("llm-note").textContent = "testing the server…";
+    await saveConfig();
+    const response = await fetch("/api/llm/check", { method: "POST" });
+    $("llm-note").textContent = (await response.json()).status;
   });
   $("voice-preview").addEventListener("click", async () => {
     const voice = $("voice-speak-voice").value;

@@ -426,3 +426,12 @@ def test_render_dispatches_on_engine(monkeypatch):
     assert speak.render("hi", "", 0, "piper") == ([1.0], 22050)
     assert speak.render("hi", "am_adam", 0, "kokoro") == ([2.0], 24000)
     assert set(kokoro.status()) >= {"supported", "ready", "voices", "size_mb"}
+
+
+def test_ollama_gpu_layers_follow_the_placement():
+    from cs2bot.config import LLMSettings
+    from cs2bot.llm import ollama_gpu_layers
+
+    assert ollama_gpu_layers(LLMSettings(cpu_only=True)) == 0
+    assert ollama_gpu_layers(LLMSettings(gpu_auto=False, n_gpu_layers=12)) == 12
+    assert ollama_gpu_layers(LLMSettings()) is None
