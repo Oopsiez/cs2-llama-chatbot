@@ -29,7 +29,7 @@ from ..parser import parse_chat_line
 from ..persona import PRESETS, build_system_prompt
 from ..rules import should_reply
 from ..snitch import where
-from ..voice import cable, tts
+from ..voice import cable, process_loopback, tts
 from ..voice.audio import output_devices_report
 from ..voice.binds import detect_voice_key
 from ..voice.speak import installed_voices, play, render
@@ -314,7 +314,13 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "devices_error": devices_error,
             "settings": engine.config.voice.model_dump(mode="json"),
             "voices": await asyncio.to_thread(installed_voices),
+            "apps": await asyncio.to_thread(process_loopback.running_apps),
         }
+
+    @app.get("/api/voice/apps")
+    async def voice_apps() -> dict[str, Any]:
+        """Programs the bot could listen to on their own (the ones with a window right now)."""
+        return {"apps": await asyncio.to_thread(process_loopback.running_apps)}
 
     @app.get("/api/voice/talk-key")
     async def voice_talk_key() -> dict[str, Any]:

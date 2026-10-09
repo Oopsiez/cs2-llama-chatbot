@@ -55,6 +55,7 @@ class VoiceListener:
         *,
         device: str = "",
         capture: str = "pc",
+        process: str = "cs2.exe",
         transcriber: Transcriber | None = None,
         source: BlockSource | None = None,
         segmenter: Segmenter | None = None,
@@ -65,7 +66,8 @@ class VoiceListener:
         self._transcriber = transcriber
         self.capture = capture
         self.note = ""
-        self._source = source or (lambda: audio.capture(device, capture, self._set_note))
+        self.process = process
+        self._source = source or (lambda: audio.capture(device, capture, self._set_note, process))
         self._segmenter = segmenter or Segmenter(audio.SAMPLE_RATE)
         self._run = _Run()
         self._threads: list[threading.Thread] = []

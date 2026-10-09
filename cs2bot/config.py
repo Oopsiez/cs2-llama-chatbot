@@ -229,6 +229,7 @@ class VoiceSettings(BaseModel):
     # What it listens to: "cs2" - only the game's own audio (Windows 10 2004+; falls back to the
     # speakers when it cannot), or "pc" - everything the speakers play.
     capture: str = "cs2"
+    capture_process: str = "cs2.exe"  # which program's audio to hear when capture is "cs2"
     model: str = "small.en"  # a Whisper model name, downloaded once on first use
     # What it answers: "everything" it hears, "questions" only, or "triggers" - speech that
     # contains one of `trigger_words`. Questions always get an answer in the first two modes.
@@ -249,7 +250,7 @@ class VoiceSettings(BaseModel):
     speak_device: str = ""  # the output device to play into - pick the CABLE Input
     speak_monitor: bool = True  # also play it on the default speakers so the player hears it
     monitor_device: str = ""  # where "let me hear it too" plays; blank = the default speakers
-    resample_48k: bool = True  # feed the cable 48 kHz; off = play at the engine's own rate
+    resample_48k: bool = False  # off: the engine's own rate; on: 48 kHz, which some drivers mute
     talk_key: str = "k"  # CS2's push-to-talk key
     speak_engine: str = "piper"  # piper (CPU, quick) | kokoro (CPU, most human, slower) | windows
     speak_voice: str = ""  # a voice id for the engine; blank -> its default

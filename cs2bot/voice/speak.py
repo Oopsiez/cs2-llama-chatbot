@@ -176,7 +176,7 @@ def play(
     device_id: str = "",
     monitor: bool = False,
     monitor_device: str = "",
-    resample_48k: bool = True,
+    resample_48k: bool = False,
 ) -> str:
     """Play samples on an output device; blank means the default speakers.
 
@@ -244,7 +244,7 @@ class Speaker:
     device: str = ""
     monitor: bool = True  # also play on the monitor speakers so the player hears it
     monitor_device: str = ""  # blank = default speakers
-    resample: bool = True  # 48 kHz for the cable; off plays the engine's native rate
+    resample: bool = False  # 48 kHz for the cable; some headset drivers play that back as silence
     talk_key: str = "k"
     engine: str = "piper"
     voice: str = ""

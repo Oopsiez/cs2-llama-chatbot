@@ -504,6 +504,7 @@ class Engine:
             self._voice = VoiceListener(
                 device=settings.device,
                 capture=settings.capture,
+                process=settings.capture_process,
                 model_name=settings.model,
                 segmenter=Segmenter(SAMPLE_RATE, floor=settings.noise_floor),
             )

@@ -560,5 +560,32 @@ def test_a_spoken_line_reports_what_played_where(monkeypatch):
 def test_resampling_can_be_turned_off_for_drivers_that_want_the_native_rate():
     from cs2bot.config import VoiceSettings
 
-    assert VoiceSettings().resample_48k is True
-    assert VoiceSettings(resample_48k=False).resample_48k is False
+    assert VoiceSettings().resample_48k is False
+    assert VoiceSettings(resample_48k=True).resample_48k is True
+
+
+def test_hearing_one_program_switches_to_it_the_moment_it_starts(monkeypatch):
+    from cs2bot.voice import process_loopback
+
+    notes: list[str] = []
+    seen = {"checks": 0}
+    monkeypatch.setattr(process_loopback, "unavailable", lambda: "")
+    monkeypatch.setattr(audio, "RECHECK_SECONDS", audio.BLOCK_SECONDS)
+
+    def find(name="cs2.exe"):
+        seen["checks"] += 1
+        return 7 if seen["checks"] > 1 else 0
+
+    monkeypatch.setattr(process_loopback, "find_process", find)
+    monkeypatch.setattr(
+        process_loopback, "blocks", lambda process="cs2.exe", block_seconds=0.05: iter([[1.0]])
+    )
+    monkeypatch.setattr(audio, "blocks", lambda device_id="", block_seconds=0.05: iter([[0.0], [0.0], [0.0]]))
+
+    stream = audio.capture("", "cs2", notes.append, "cs2.exe")
+    assert next(stream) == [0.0]  # speakers while the game is not running
+    assert notes[-1].startswith("hearing the whole PC: cs2.exe is not running")
+    assert next(stream) == [1.0]  # the game appeared on the re-check
+    assert notes[-1] == "hearing cs2.exe only"
+    assert next(stream) == [0.0]  # and back to the speakers when its stream ended
+    assert notes[-1] == "hearing the whole PC: cs2.exe stopped"

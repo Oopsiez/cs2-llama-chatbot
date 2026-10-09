@@ -158,6 +158,7 @@ const BINDINGS = {
   "voice-resample-48k": ["voice.resample_48k", "bool"],
   "voice-talk-key": ["voice.talk_key", "text"],
   "voice-capture": ["voice.capture", "text"],
+  "voice-capture-app": ["voice.capture_process", "text"],
   "voice-enabled": ["voice.enabled", "bool"],
   "voice-enabled-speech": ["voice.enabled", "bool"],
   "voice-speak-voice": ["voice.speak_voice", "text"],
@@ -858,6 +859,12 @@ async function renderVoice() {
       .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`)
       .join("");
   select.value = config.voice.device;
+  const apps = $("voice-capture-app");
+  const current = config.voice.capture_process || "cs2.exe";
+  const appNames = new Set([current, ...(body.apps || [])]);
+  apps.innerHTML = [...appNames].map((a) => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("");
+  apps.value = current;
+  $("voice-capture-note").textContent = body.status.note || "";
   const out = $("voice-speak-device");
   out.innerHTML =
     '<option value="">default speakers (your team will not hear it)</option>' +
@@ -908,7 +915,10 @@ async function renderVoice() {
         : "virtual microphone not installed yet";
     })
     .catch(() => {});
-  if (status.speak_error) $("voice-speak-output").textContent = `could not speak: ${status.speak_error}`;
+  if (status.speak_error)
+    $("voice-speak-output").textContent = status.speak_error.startsWith("monitor")
+      ? `spoken into the virtual mic, but your own copy did not play - ${status.speak_error}`
+      : `could not speak: ${status.speak_error}`;
   else if (!status.speak_supported)
     $("voice-speak-output").textContent = `cannot talk here: ${status.speak_unsupported_reason}`;
   else if (status.said)
@@ -924,6 +934,7 @@ async function renderVoice() {
     `speech model: ${status.model} (${status.model_ready ? "ready" : "downloads on first use"})`,
     `heard ${status.heard} time${status.heard === 1 ? "" : "s"}${status.last_text ? `, last: "${status.last_text}"` : ""}`,
   );
+  if (status.note) lines.push(status.note);
   $("voice-status").textContent = lines.join("\n");
 }
 

@@ -234,7 +234,7 @@ def test_recording_and_deleting_a_callout(client):
 
 def test_voice_tab_says_whether_it_can_listen_here(client):
     body = client.get("/api/voice").json()
-    assert set(body) == {"status", "devices", "devices_error", "settings", "voices"}
+    assert set(body) == {"status", "devices", "devices_error", "settings", "voices", "apps"}
     assert body["settings"]["enabled"] is True
     assert isinstance(body["status"]["supported"], bool)
     assert isinstance(body["devices"], list)
@@ -273,3 +273,7 @@ def test_a_settings_save_cannot_wipe_a_saved_persona(client):
     assert client.put("/api/config", json=config).status_code == 200  # stale body, no saved_personas
     assert "Grumpy" in client.get("/api/personas").json()["saved"]
     assert "Grumpy" in client.get("/api/config").json()["config"]["saved_personas"]
+
+
+def test_the_app_picker_always_offers_cs2(client):
+    assert "cs2.exe" in client.get("/api/voice/apps").json()["apps"]

@@ -126,6 +126,34 @@ def unavailable() -> str:
     return ""
 
 
+def running_apps() -> list[str]:
+    """Exe names of programs with a window right now (cs2.exe, Discord.exe ...), for the picker."""
+    if sys.platform != "win32":
+        return [CS2_PROCESS]
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-Process | Where-Object { $_.MainWindowTitle } | "
+                "Select-Object -ExpandProperty ProcessName -Unique",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return [CS2_PROCESS]
+    names = {f"{line.strip()}.exe" for line in out.stdout.splitlines() if line.strip()}
+    names.add(CS2_PROCESS)
+    return sorted(names, key=lambda n: (n != CS2_PROCESS, n.casefold()))
+
+
 def find_process(name: str = CS2_PROCESS) -> int:
     """The pid of a running program by exe name, or 0 if it is not running."""
     if sys.platform != "win32":

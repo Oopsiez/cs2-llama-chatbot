@@ -126,28 +126,55 @@ def com_apartment() -> Iterator[None]:
             ole32.CoUninitialize()
 
 
+RECHECK_SECONDS = 2.0  # how often the speakers fallback looks for the program to appear
+
+
 def capture(
-    device_id: str = "", scope: str = "cs2", on_note: Callable[[str], None] | None = None
+    device_id: str = "",
+    scope: str = "cs2",
+    on_note: Callable[[str], None] | None = None,
+    process: str = "cs2.exe",
 ) -> Iterator[list[float]]:
-    """Blocks of audio from the chosen scope: CS2 alone when possible, else the speakers.
+    """Blocks of audio from the chosen scope: one program alone when possible, else the speakers.
 
-    `on_note` is told why the scope fell back (no process loopback here, CS2 not running yet)
-    so the panel can say so.
+    The program is usually not running yet when the panel starts, so the speakers fallback keeps
+    looking for it and switches over the moment it appears (and back when it quits). `on_note`
+    is told what is being heard and why, so the panel can say so.
     """
-    if scope == "cs2":
-        from . import process_loopback
+    note = on_note or (lambda text: None)
+    if scope != "cs2":
+        note("hearing the whole PC")
+        yield from blocks(device_id)
+        return
+    from . import process_loopback
 
-        reason = process_loopback.unavailable()
-        if not reason and not process_loopback.find_process():
-            reason = "CS2 is not running - listening to the speakers until it is"
-        if not reason:
-            if on_note:
-                on_note("hearing CS2 only")
-            yield from process_loopback.blocks()
+    reason = process_loopback.unavailable()
+    if reason:
+        note(f"hearing the whole PC: {reason}")
+        yield from blocks(device_id)
+        return
+    while True:
+        if process_loopback.find_process(process):
+            note(f"hearing {process} only")
+            try:
+                yield from process_loopback.blocks(process)
+            except Exception as exc:
+                reason = f"{process} capture failed: {exc}"
+            else:
+                reason = f"{process} stopped"
+        else:
+            reason = f"{process} is not running - listening to the speakers until it is"
+        note(f"hearing the whole PC: {reason}")
+        yield from speakers_until(device_id, lambda: bool(process_loopback.find_process(process)))
+
+
+def speakers_until(device_id: str, found: Callable[[], bool]) -> Iterator[list[float]]:
+    """The speakers' audio until `found()` says the program to hear is there."""
+    every = max(1, int(RECHECK_SECONDS / BLOCK_SECONDS))
+    for index, block in enumerate(blocks(device_id), 1):
+        yield block
+        if index % every == 0 and found():
             return
-        if on_note:
-            on_note(f"hearing the whole PC: {reason}")
-    yield from blocks(device_id)
 
 
 def blocks(device_id: str = "", block_seconds: float = BLOCK_SECONDS) -> Iterator[list[float]]:

@@ -488,10 +488,13 @@
       <div class="row">
         <label>Hear
           <select id="voice-capture">
-            <option value="cs2">Only CS2's audio (Windows 10 2004 or newer)</option>
+            <option value="cs2">Only one program's audio</option>
             <option value="pc">Everything the PC plays</option>
           </select>
-          <span class="hint" id="voice-capture-note">Only CS2 keeps Discord, music and browsers out of the bot's ears.</span>
+          <span class="hint" id="voice-capture-note"></span>
+        </label>
+        <label>Program to hear <span class="tip" title="Which program's audio the bot listens to (Windows 10 2004 or newer). It switches to the program the moment it starts and listens to the speakers until then; the status line above says what it is hearing right now.">?</span>
+          <select id="voice-capture-app"></select>
         </label>
         <label>Listen to
           <select id="voice-device"></select>
@@ -544,7 +547,7 @@
         </label>
         <label class="check">
           <input type="checkbox" id="voice-resample-48k" />
-          <span>Resample to 48 kHz <span class="tip" title="Converts every line to 48 kHz before it reaches the virtual mic, which stops the wavy sound in CS2/Discord. Turn it off if the mic check reports a clip but you hear nothing - some headset drivers want the voice's own rate.">?</span></span>
+          <span>Resample to 48 kHz <span class="tip" title="Converts every line to 48 kHz before it reaches the virtual mic, which stops the wavy sound in CS2/Discord. Off by default because some headset drivers play 48 kHz back as silence; turn it on only if CS2/Discord hear the voice wavy.">?</span></span>
         </label>
         <label>Push-to-talk key
           <span style="display:flex;gap:6px;align-items:center">
