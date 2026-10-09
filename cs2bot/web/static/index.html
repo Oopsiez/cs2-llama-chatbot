@@ -268,6 +268,14 @@
         <label>Request timeout (s)<input type="number" id="request_timeout" min="1" step="1" /></label>
       </div>
       <div class="divider"></div>
+      <h3>Use a server on my network</h3>
+      <p class="hint">Run <b>CS2 Chatbot Server Setup.exe</b> on the other PC (it installs Ollama, opens the firewall on your
+        private network and pulls the model), then paste the address it prints here. Nothing runs on this PC's GPU.</p>
+      <div class="actions">
+        <input type="text" id="remote-host" placeholder="http://192.168.1.50:11434" style="max-width:280px" />
+        <button class="action primary" id="use-remote">Use this server</button>
+        <span class="note" id="remote-note"></span>
+      </div>
       <div class="row">
         <label>Ollama URL
           <span class="hint">Remote is fine: http://gpu-box:11434 or a proxy over https.</span>

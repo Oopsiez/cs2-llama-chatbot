@@ -431,6 +431,22 @@ function bindActions() {
   $("refresh-models").addEventListener("click", renderModels);
   $("refresh-gpu").addEventListener("click", renderGpu);
 
+  $("use-remote").addEventListener("click", async () => {
+    let host = $("remote-host").value.trim();
+    if (!host) return;
+    if (!/^https?:\/\//.test(host)) host = `http://${host}`;
+    if (!/:\d+$/.test(host)) host = `${host}:11434`;
+    config.llm.backend = "ollama";
+    config.llm.ollama_url = host;
+    config.llm.cpu_only = false;
+    $("llm-backend").value = "ollama";
+    $("ollama-url").value = host;
+    $("remote-note").textContent = "checking…";
+    await saveConfig();
+    const response = await fetch("/api/llm/check", { method: "POST" });
+    $("remote-note").textContent = (await response.json()).status;
+  });
+
   $("check-llm").addEventListener("click", async () => {
     $("llm-note").textContent = "checking…";
     await saveConfig();

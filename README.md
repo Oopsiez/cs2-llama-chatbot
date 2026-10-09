@@ -257,12 +257,14 @@ them even as a toxic persona, or follows your own instructions for them.
 
 ## Running the model on another computer
 
-The model is the only heavy part, so it can live on a different machine - a desktop with a GPU, a
-home server, anything reachable over the network. On that machine run Ollama with
-`OLLAMA_HOST=0.0.0.0 ollama serve`, then on the **Model** tab set the Ollama URL to
-`http://that-machine:11434`. If it sits behind a reverse proxy with a password, put the token in
-*Ollama API key*; for a self-signed HTTPS certificate, untick *Verify TLS certificate*.
-
+A spare PC on the same network (anything with 16 GB RAM; a GPU with 8 GB makes it quick) can be
+the brain, so nothing fights CS2 for the graphics card. On that PC run **CS2 Chatbot Server
+Setup.exe** from the release: it installs Ollama if needed, sets it to listen on the LAN, adds a
+Windows Firewall rule for TCP 11434 on the *private* network profile only, pulls the default model
+and prints the address to use. On the gaming PC, Model tab → *Use a server on my network* → paste
+that address. Uninstalling the server package removes the firewall rule and puts Ollama back to
+localhost only. Ollama's tray app starts with Windows, so the server comes back by itself after a
+reboot.
 ## Is this a cheat?
 
 **No, and deliberately so.** The bot never touches the game's memory or process. It reads a log file
