@@ -505,3 +505,12 @@ def test_the_player_hears_the_bot_too_only_when_it_talks_into_the_cable():
     assert speak.play_targets("cable-input", monitor=True) == ["cable-input", ""]
     assert speak.play_targets("cable-input", monitor=False) == ["cable-input"]
     assert speak.play_targets("", monitor=True) == [""]
+
+
+def test_spoken_lines_are_resampled_to_the_cable_rate():
+    pytest.importorskip("numpy")
+    from cs2bot.voice import speak
+
+    out = speak.resample([0.0, 1.0, 0.0, -1.0] * 100, 24000, 48000)
+    assert len(out) == 800
+    assert speak.resample([0.5], 48000, 48000) == [0.5]

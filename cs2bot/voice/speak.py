@@ -122,6 +122,21 @@ def wav_samples(data: bytes) -> tuple[list[float], int]:
     return mono, rate
 
 
+CABLE_RATE = 48000  # what VB-Cable and CS2's voice path expect; other rates come out wavy
+
+
+def resample(samples: list[float], rate: int, target: int) -> list[float]:
+    """Linear resample to `target` Hz; the engines render at 22.05 or 24 kHz."""
+    if rate == target or not samples:
+        return samples
+    import numpy as np
+
+    data = np.asarray(samples, dtype="float32")
+    count = int(round(len(data) * target / rate))
+    points = np.linspace(0, len(data) - 1, count)
+    return np.interp(points, np.arange(len(data)), data).astype("float32").tolist()
+
+
 def play_targets(device_id: str = "", monitor: bool = False) -> list[str]:
     """Where a clip goes: the chosen device, plus the default speakers when the player wants
     to hear it too. Blank already means the default speakers, so it is never played twice."""
@@ -139,7 +154,8 @@ def play(samples: list[float], rate: int, device_id: str = "", monitor: bool = F
     import numpy as np
     import soundcard as sc
 
-    data = np.asarray(samples, dtype="float32")
+    data = np.asarray(resample(samples, rate, CABLE_RATE), dtype="float32")
+    rate = CABLE_RATE
 
     def one(target: str) -> None:
         with com_apartment():
