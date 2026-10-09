@@ -535,3 +535,30 @@ def test_a_failed_monitor_still_counts_as_spoken_but_says_so(monkeypatch):
     spoken, detail = asyncio.run(speaker.say("mic check"))
     assert spoken and detail.startswith("spoken - monitor failed")
     assert speaker.status()["speak_error"].startswith("monitor failed")
+
+
+def test_the_mic_check_says_how_long_how_loud_and_where():
+    from cs2bot.voice import speak
+
+    line = speak.describe([0.0, 0.5, -0.25] * 16000, 48000, "Headset (Realtek)")
+    assert line.startswith("1.0 s, peak -6 dB, into 'Headset (Realtek)'")
+    assert "silent" in speak.describe([0.0] * 100, 48000, "x")
+
+
+def test_a_spoken_line_reports_what_played_where(monkeypatch):
+    import asyncio
+
+    from cs2bot.voice import speak
+
+    monkeypatch.setattr(speak, "speaking_missing", lambda: "")
+    speaker = speak.Speaker()
+    speaker._speak = lambda text: "1.2 s, peak -3 dB, into 'CABLE Input'"  # type: ignore[method-assign]
+    spoken, detail = asyncio.run(speaker.say("mic check"))
+    assert spoken and detail == "spoken 1.2 s, peak -3 dB, into 'CABLE Input'"
+
+
+def test_resampling_can_be_turned_off_for_drivers_that_want_the_native_rate():
+    from cs2bot.config import VoiceSettings
+
+    assert VoiceSettings().resample_48k is True
+    assert VoiceSettings(resample_48k=False).resample_48k is False

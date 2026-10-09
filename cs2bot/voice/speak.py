@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import math
 import subprocess
 import sys
 import tempfile
@@ -160,22 +161,40 @@ def find_speaker(sc: Any, target: str) -> Any:
         raise RuntimeError(f"output device '{target}' is not there (found: {names})") from None
 
 
+def describe(samples: list[float], rate: int, device: str) -> str:
+    """What was played and how loud: a silent clip and a wrong device both read as "spoken"
+    otherwise, which is exactly the report that cannot be debugged."""
+    seconds = len(samples) / rate if rate else 0.0
+    peak = max((abs(x) for x in samples), default=0.0)
+    level = f"{20 * math.log10(peak):.0f} dB" if peak > 0 else "silent"
+    return f"{seconds:.1f} s, peak {level}, into '{device}'"
+
+
 def play(
-    samples: list[float], rate: int, device_id: str = "", monitor: bool = False, monitor_device: str = ""
-) -> None:
+    samples: list[float],
+    rate: int,
+    device_id: str = "",
+    monitor: bool = False,
+    monitor_device: str = "",
+    resample_48k: bool = True,
+) -> str:
     """Play samples on an output device; blank means the default speakers.
 
     With `monitor`, the same clip also plays on `monitor_device` (blank = default speakers) at
     the same time, so the player hears what the bot is saying into the virtual microphone. A
     monitor that fails, or that turns out to be the same device as the virtual microphone, is
-    reported rather than silently skipped.
+    reported rather than silently skipped. Returns what played where (`describe`).
     """
     import numpy as np
     import soundcard as sc
 
-    data = np.asarray(resample(samples, rate, CABLE_RATE), dtype="float32")
-    rate = CABLE_RATE
+    if not samples:
+        raise RuntimeError("the voice engine produced no audio - pick another voice or engine")
+    if resample_48k:
+        samples, rate = resample(samples, rate, CABLE_RATE), CABLE_RATE
+    data = np.asarray(samples, dtype="float32")
     problems: list[str] = []
+    played: list[str] = []
 
     def resolve(target: str) -> Any:
         return sc.default_speaker() if not target else find_speaker(sc, target)
@@ -191,6 +210,8 @@ def play(
                     )
                     return
                 speaker.play(data, samplerate=rate)
+                if main:
+                    played.append(describe(samples, rate, str(speaker.name)))
         except Exception as exc:
             if main:
                 raise
@@ -204,11 +225,16 @@ def play(
     for thread in extra:
         thread.join()
     if problems:
-        raise MonitorError("; ".join(problems))
+        raise MonitorError("; ".join(problems), played[0] if played else "")
+    return played[0] if played else ""
 
 
 class MonitorError(RuntimeError):
     """The clip reached the virtual microphone but the player's own copy did not play."""
+
+    def __init__(self, problem: str, played: str = "") -> None:
+        super().__init__(problem)
+        self.played = played
 
 
 @dataclass
@@ -218,6 +244,7 @@ class Speaker:
     device: str = ""
     monitor: bool = True  # also play on the monitor speakers so the player hears it
     monitor_device: str = ""  # blank = default speakers
+    resample: bool = True  # 48 kHz for the cable; off plays the engine's native rate
     talk_key: str = "k"
     engine: str = "piper"
     voice: str = ""
@@ -264,9 +291,9 @@ class Speaker:
             self.recent.append((text, self.talk_started_at))
             warning = ""
             try:
-                await asyncio.to_thread(self._speak, text)
+                played = await asyncio.to_thread(self._speak, text)
             except MonitorError as exc:
-                warning = str(exc)
+                warning, played = str(exc), exc.played
             except Exception as exc:  # a device error must show in the panel, not a 500
                 self.last_error = f"{type(exc).__name__}: {exc}"
                 return False, self.last_error
@@ -275,14 +302,16 @@ class Speaker:
         self.said += 1
         self.last_text = text
         self.last_error = warning
-        return True, f"spoken - {warning}" if warning else "spoken"
+        detail = f"spoken {played}" if played else "spoken"
+        return True, f"{detail} - {warning}" if warning else detail
 
-    def _speak(self, text: str) -> None:
+    def _speak(self, text: str) -> str:
         samples, rate = render(text, self.voice, self.rate, self.engine)
         with hold(self.talk_key):
             time.sleep(self.lead_seconds)
-            play(samples, rate, self.device, self.monitor, self.monitor_device)
+            played = play(samples, rate, self.device, self.monitor, self.monitor_device, self.resample)
             time.sleep(0.15)
+        return played
 
     def status(self) -> dict[str, object]:
         return {

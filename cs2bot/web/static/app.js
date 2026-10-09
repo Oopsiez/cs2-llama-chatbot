@@ -155,6 +155,7 @@ const BINDINGS = {
   "voice-speak-device": ["voice.speak_device", "text"],
   "voice-speak-monitor": ["voice.speak_monitor", "bool"],
   "voice-monitor-device": ["voice.monitor_device", "text"],
+  "voice-resample-48k": ["voice.resample_48k", "bool"],
   "voice-talk-key": ["voice.talk_key", "text"],
   "voice-capture": ["voice.capture", "text"],
   "voice-enabled": ["voice.enabled", "bool"],
@@ -718,7 +719,7 @@ function bindActions() {
     });
     const body = await response.json();
     $("voice-speak-output").textContent = body.spoken
-      ? "spoken - did your team hear it?"
+      ? `${body.detail} - did your team hear it?`
       : `could not speak: ${body.detail}`;
   });
   $("voice-restart").addEventListener("click", async () => {
