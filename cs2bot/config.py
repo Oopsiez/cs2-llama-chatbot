@@ -104,6 +104,7 @@ class BehaviorSettings(BaseModel):
     intelligence: int = 60  # 0..100, game IQ: how good the tactical thinking is
     literacy: int = 60  # 0..100, how well it writes: spelling, punctuation, sentence length
     unprompted_advice: bool = False  # volunteer pointers instead of only answering
+    game_mode: bool = True  # tell the model the score: match just started, close, match point
     avoid_repeats: bool = True
     repeat_memory: int = 8  # how many of the bot's own lines to remember
     repeat_similarity: float = 0.75  # 0..1, above this a reply counts as a repeat

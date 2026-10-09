@@ -329,6 +329,8 @@ def build_system_prompt(
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
     if aware:
         lines.append("Live game context - " + game_context(player, local_state, incoming, own_name))
+        if config.behavior.game_mode and player.match_situation:
+            lines.append("Match situation - " + player.match_situation + ".")
         if config.dead_alive.adapt_replies:
             state = state_note(local_state, incoming)
             if state:
@@ -391,6 +393,8 @@ OCCASIONS = {
     "round_start": "A new round is starting and nobody has said anything yet.",
     "death": "You just died this round.",
     "quiet": "Nobody has said anything for a while.",
+    "match_start": "The match has just started - first round.",
+    "match_point": "It is match point - the next round can decide the whole match.",
 }
 
 

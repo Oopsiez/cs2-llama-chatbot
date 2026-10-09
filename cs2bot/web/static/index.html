@@ -52,10 +52,8 @@
           <option value="both">Both text and voice</option>
         </select>
       </label>
-      <label class="check"><input type="checkbox" id="voice-enabled" /><span>Listen to voice comms
-        <small>Hears the team over voice (through your speakers) and answers in team chat.</small></span></label>
-      <label class="check"><input type="checkbox" id="obey-orders" /><span>Obey orders
-        <small>"strat?", "bot quiet", "bot talk" and persona changes from players count as orders.</small></span></label>
+      <label class="check"><input type="checkbox" id="voice-enabled" /><span>Listen to voice comms <span class="tip" title="Hears the team over voice (through your speakers) and answers in team chat.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="obey-orders" /><span>Obey orders <span class="tip" title="&quot;strat?&quot;, &quot;bot quiet&quot;, &quot;bot talk&quot; and persona changes from players count as orders.">?</span></span></label>
       <details class="options" id="obey-options"><summary>Options</summary>
         <div class="row">
           <label>Take orders from
@@ -68,6 +66,8 @@
           <label class="check"><input type="checkbox" id="orders-persona" /><span>Let players change the personality</span></label>
         </div>
       </details>
+      <label class="check"><input type="checkbox" id="initiative-on" /><span>Start conversations on its own <span class="tip" title="Chimes in unprompted at round start, after dying or when it has been quiet - how often and where is set under Behaviour.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="game-mode" /><span>Game mode <span class="tip" title="Reads the score from CS2 so the bot knows when the match has just started, is close, or is at match point - and talks accordingly.">?</span></span></label>
       <label>Preset
         <select id="preset"></select>
       </label>
@@ -113,8 +113,7 @@
       <h3>Speech personality</h3>
       <label class="check">
         <input type="checkbox" id="speech-same-persona" />
-        <span>Keep speech and chat personalities the same
-          <small>Untick to give the voice its own personality; typed chat keeps the one above.</small></span>
+        <span>Keep speech and chat personalities the same <span class="tip" title="Untick to give the voice its own personality; typed chat keeps the one above.">?</span></span>
       </label>
       <div id="speech-persona-block">
         <label>Speech persona name<input type="text" id="speech-persona-name" /></label>
@@ -149,10 +148,8 @@
       <div class="result" id="gamestate-line">game state: unknown</div>
       <div class="divider"></div>
       <h3>Models</h3>
-      <label class="check"><input type="checkbox" id="chat-enabled" /><span>Chat model
-        <small>Writes the typed replies. Off = nothing is typed into team chat.</small></span></label>
-      <label class="check"><input type="checkbox" id="speech-enabled" /><span>Speech model
-        <small>Writes the spoken lines. Off = the bot does not talk over voice.</small></span></label>
+      <label class="check"><input type="checkbox" id="chat-enabled" /><span>Chat model <span class="tip" title="Writes the typed replies. Off = nothing is typed into team chat.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="speech-enabled" /><span>Speech model <span class="tip" title="Writes the spoken lines. Off = the bot does not talk over voice.">?</span></span></label>
       <p class="hint">The model that writes what the voice says. Two 8B models do not both fit an 8GB card,
         so Ollama swaps them in and out - a few seconds extra on each switch. Leave on "same as chat" to avoid that.</p>
       <label>Spoken lines are written by
@@ -184,9 +181,7 @@
       </p></details>
       <label class="check">
         <input type="checkbox" id="auto-sampling" />
-        <span>Derive sampling from the dials
-          <small>Low game IQ raises temperature, low literacy shortens replies; typos and chat
-          abbreviations are applied after generation.</small>
+        <span>Derive sampling from the dials <span class="tip" title="Low game IQ raises temperature, low literacy shortens replies; typos and chat abbreviations are applied after generation.">?</span>
         </span>
       </label>
       <div class="row-3">
@@ -211,8 +206,7 @@
       </div>
       <label>Ignore players (comma separated)<input type="text" id="ignore_players" /></label>
       <div class="row">
-        <label class="check"><input type="checkbox" id="addressed-always" /><span>Always answer when someone talks to you
-          <small>Skips trigger words, cooldown and the probability roll.</small></span></label>
+        <label class="check"><input type="checkbox" id="addressed-always" /><span>Always answer when someone talks to you <span class="tip" title="Skips trigger words, cooldown and the probability roll.">?</span></span></label>
         <label class="check"><input type="checkbox" id="addressed-only" /><span>Only answer when someone talks to you</span></label>
       </div>
       <div class="divider"></div>
@@ -224,14 +218,10 @@
         <input type="range" id="reply-delay" min="0" max="15" step="0.5" />
         <div class="dial-desc">How long it waits before the reply appears in chat.</div>
       </div>
-      <label class="check"><input type="checkbox" id="humanized-typing" /><span>Use humanized typing speed instead
-        <small>Ignores the slider: waits to "read" the message, then takes as long as typing the
-        reply would at the speed set on the CS2 tab.</small></span></label>
+      <label class="check"><input type="checkbox" id="humanized-typing" /><span>Use humanized typing speed instead <span class="tip" title="Ignores the slider: waits to &quot;read&quot; the message, then takes as long as typing the reply would at the speed set on the CS2 tab.">?</span></span></label>
       <div class="divider"></div>
-      <label class="check"><input type="checkbox" id="unprompted" /><span>Give advice unprompted
-        <small>Volunteers a pointer instead of only answering what was said.</small></span></label>
-      <label class="check"><input type="checkbox" id="avoid-repeats" /><span>Do not repeat itself
-        <small>Rejects a reply that is too close to a recent one and generates again.</small></span></label>
+      <label class="check"><input type="checkbox" id="unprompted" /><span>Give advice unprompted <span class="tip" title="Volunteers a pointer instead of only answering what was said.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="avoid-repeats" /><span>Do not repeat itself <span class="tip" title="Rejects a reply that is too close to a recent one and generates again.">?</span></span></label>
       <div class="row-3">
         <label>Lines remembered<input type="number" id="repeat-memory" min="0" max="40" step="1" /></label>
         <label>Similarity limit <span class="hint">0-1</span><input type="number" id="repeat-similarity" min="0" max="1" step="0.05" /></label>
@@ -244,8 +234,7 @@
       </div>
       <div class="divider"></div>
       <h3>Start conversations</h3>
-      <label class="check"><input type="checkbox" id="initiative-enabled" /><span>Talk on its own, without being spoken to
-        <small>A comment at round start, a word after dying, something when it goes quiet - in the current persona.</small></span></label>
+      <label class="check"><input type="checkbox" id="initiative-enabled" /><span>Talk on its own, without being spoken to <span class="tip" title="A comment at round start, a word after dying, something when it goes quiet - in the current persona.">?</span></span></label>
       <div class="grid">
         <label>Where <select id="initiative-channel"><option value="team">Team chat</option><option value="all">All chat</option></select></label>
         <label>At least this many seconds apart <input type="number" id="initiative-gap" min="10" step="5" /></label>
@@ -327,8 +316,7 @@
       <div class="divider"></div>
       <h3>Server</h3>
 
-      <label class="check"><input type="checkbox" id="use-server" /><span>Run the model on a server on my network
-        <small>Off = the model runs on this PC. On = this PC only types and talks; a server on your network does the thinking.</small></span></label>
+      <label class="check"><input type="checkbox" id="use-server" /><span>Run the model on a server on my network <span class="tip" title="Off = the model runs on this PC. On = this PC only types and talks; a server on your network does the thinking.">?</span></span></label>
       <div id="server-block">
       <h3>Use a server on my network</h3>
       <p class="hint">Run <b>CS2 Chatbot Server Setup.exe</b> on the other PC (it installs Ollama, opens the firewall on your
@@ -349,8 +337,7 @@
         <label>Ollama API key <span class="hint">optional, sent as a bearer token</span>
           <input type="password" id="ollama-key" />
         </label>
-        <label class="check"><input type="checkbox" id="ollama-verify" /><span>Verify TLS certificate
-          <small>Turn off only for a self-signed certificate on your own server.</small></span></label>
+        <label class="check"><input type="checkbox" id="ollama-verify" /><span>Verify TLS certificate <span class="tip" title="Turn off only for a self-signed certificate on your own server.">?</span></span></label>
       </div>
       <div class="actions">
         <button class="action primary" id="test-server">Test server</button>
@@ -368,18 +355,15 @@
         pairs it with your own alive/dead state from GSI, and writes a different kind of reply for
         each combination - it does not filter anything out.
       </p></details>
-      <label class="check"><input type="checkbox" id="da-adapt" /><span>Adapt replies to who is dead
-        <small>Tells the model whether the sender is dead, and whether you are.</small></span></label>
-      <label class="check"><input type="checkbox" id="da-track" /><span>Remember who died this round
-        <small>Only the first line is tagged; later untagged lines from the same player still count as dead.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-adapt" /><span>Adapt replies to who is dead <span class="tip" title="Tells the model whether the sender is dead, and whether you are.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="da-track" /><span>Remember who died this round <span class="tip" title="Only the first line is tagged; later untagged lines from the same player still count as dead.">?</span></span></label>
       <label class="check"><input type="checkbox" id="da-persona" /><span>Use the "when dead" persona while dead</span></label>
       <label class="check"><input type="checkbox" id="da-assume" /><span>Assume alive when GSI is not connected</span></label>
       <details class="help"><summary title="What this does">?</summary><p class="note">
         Only for servers that split the chat so the living cannot see dead chat. Leave off when
         everyone sees everything.
       </p></details>
-      <label class="check"><input type="checkbox" id="da-enforce" /><span>Skip messages the bot could not have seen
-        <small>Turns the rules below on.</small></span></label>
+      <label class="check"><input type="checkbox" id="da-enforce" /><span>Skip messages the bot could not have seen <span class="tip" title="Turns the rules below on.">?</span></span></label>
       <label class="check"><input type="checkbox" id="da-reply-when-dead" /><span>Keep replying while dead</span></label>
       <label class="check"><input type="checkbox" id="da-dead-when-alive" /><span>Answer dead players while alive</span></label>
       <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead</span></label>
@@ -393,8 +377,7 @@
         and Cache - picked for the map and side Game State Integration reports. The tactics come
         from the playbook, not from the model: the model only says them in the bot's voice.
       </p></details>
-      <label class="check"><input type="checkbox" id="strat-enabled" /><span>Call strats
-        <small>Answers "strat?" with a call for the map and side you are on.</small></span></label>
+      <label class="check"><input type="checkbox" id="strat-enabled" /><span>Call strats <span class="tip" title="Answers &quot;strat?&quot; with a call for the map and side you are on.">?</span></span></label>
       <label class="check"><input type="checkbox" id="strat-asked" /><span>Answer when somebody asks for a strat</span></label>
       <div class="row">
         <label>Take orders from
@@ -415,8 +398,7 @@
       <label>Ask phrases (comma separated) <span class="hint">also works as !strat, and !strat b picks the site</span>
         <input type="text" id="strat-phrases" />
       </label>
-      <label class="check"><input type="checkbox" id="strat-every-round" /><span>Call a strat every round without being asked
-        <small>One line in freezetime. Needs GSI for the round phase.</small></span></label>
+      <label class="check"><input type="checkbox" id="strat-every-round" /><span>Call a strat every round without being asked <span class="tip" title="One line in freezetime. Needs GSI for the round phase.">?</span></span></label>
       <div class="row">
         <label class="check"><input type="checkbox" id="strat-round-start" /><span>Only answer at the start of a round</span></label>
         <label>Round start lasts (seconds)
@@ -424,16 +406,14 @@
         </label>
       </div>
       <div class="row">
-        <label class="check"><input type="checkbox" id="strat-in-character" /><span>Say it in the persona's voice
-          <small>Off sends the playbook lines as written.</small></span></label>
+        <label class="check"><input type="checkbox" id="strat-in-character" /><span>Say it in the persona's voice <span class="tip" title="Off sends the playbook lines as written.">?</span></span></label>
         <label>Chat lines per strat
           <input type="number" id="strat-max-lines" min="1" max="8" step="1" />
           <span class="hint">A call is a header plus one line per player, so six says all of it.</span>
         </label>
       </div>
       <div class="row">
-        <label class="check"><input type="checkbox" id="strat-name-players" /><span>Give the jobs to teammates by name
-          <small>Names come from whoever talks in team chat; the rest are called P2, P3.</small></span></label>
+        <label class="check"><input type="checkbox" id="strat-name-players" /><span>Give the jobs to teammates by name <span class="tip" title="Names come from whoever talks in team chat; the rest are called P2, P3.">?</span></span></label>
       </div>
       <div class="row">
         <label>Side to call for without GSI
@@ -460,10 +440,8 @@
     </div>
 
     <div class="panel" data-panel="speech">
-      <label class="check"><input type="checkbox" id="voice-enabled-speech" /><span>Listen to voice comms
-        <small>Hears the team over voice (through your speakers) and answers in team chat.</small></span></label>
-      <label class="check"><input type="checkbox" id="obey-orders-speech" /><span>Obey orders
-        <small>"strat?", "bot quiet", "bot talk" and persona changes from players count as orders.</small></span></label>
+      <label class="check"><input type="checkbox" id="voice-enabled-speech" /><span>Listen to voice comms <span class="tip" title="Hears the team over voice (through your speakers) and answers in team chat.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="obey-orders-speech" /><span>Obey orders <span class="tip" title="&quot;strat?&quot;, &quot;bot quiet&quot;, &quot;bot talk&quot; and persona changes from players count as orders.">?</span></span></label>
       <details class="options" id="obey-options-speech"><summary>Options</summary>
         <label>Answer <span class="hint">questions always get an answer, even mid-cooldown</span>
           <select id="voice-answer">
@@ -484,6 +462,8 @@
           </label>
         </div>
       </details>
+      <label class="check"><input type="checkbox" id="initiative-on-speech" /><span>Start conversations on its own <span class="tip" title="Chimes in unprompted at round start, after dying or when it has been quiet - how often and where is set under Behaviour.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="game-mode-speech" /><span>Game mode <span class="tip" title="Reads the score from CS2 so the bot knows when the match has just started, is close, or is at match point - and talks accordingly.">?</span></span></label>
       <h3>Listening</h3>
       <details class="help"><summary title="What this does">?</summary><p class="note">
         The bot listens to what your speakers are playing and transcribes it with a local Whisper
@@ -583,10 +563,8 @@
         Integration reports while you are playing. Nothing here reads game memory and nothing here
         can see the enemy.
       </p></details>
-      <label class="check"><input type="checkbox" id="snitch-enabled" /><span>Snitch on me
-        <small>The bot knows where you are and will say so.</small></span></label>
-      <label class="check"><input type="checkbox" id="snitch-asked" /><span>Answer when somebody asks where you are
-        <small>Bypasses the cooldown, the same way being named does.</small></span></label>
+      <label class="check"><input type="checkbox" id="snitch-enabled" /><span>Snitch on me <span class="tip" title="The bot knows where you are and will say so.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="snitch-asked" /><span>Answer when somebody asks where you are <span class="tip" title="Bypasses the cooldown, the same way being named does.">?</span></span></label>
       <label>Ask phrases (comma separated)<input type="text" id="snitch-phrases" /></label>
       <div class="row">
         <label>Announce every (seconds) <span class="hint">0 = never</span>
@@ -610,8 +588,7 @@
       </div>
       <div class="divider"></div>
       <h3>End of match</h3>
-      <label class="check"><input type="checkbox" id="reveal-enabled" /><span>Own up when the match ends
-        <small>One line on the final scoreboard, once per match. Untick to never reveal itself.</small></span></label>
+      <label class="check"><input type="checkbox" id="reveal-enabled" /><span>Own up when the match ends <span class="tip" title="One line on the final scoreboard, once per match. Untick to never reveal itself.">?</span></span></label>
       <div class="row">
         <label>How it signs off
           <select id="reveal-mode">

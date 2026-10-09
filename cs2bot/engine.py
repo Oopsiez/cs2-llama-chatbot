@@ -105,6 +105,7 @@ class Engine:
         self._round_started_at = float("-inf")
         self._last_initiative_at = float("-inf")
         self._initiative_round: tuple[str, int] | None = None
+        self._initiative_match: str = ""
         self._was_dead = False
         self._last_activity_at = time.monotonic()
         self._round_marker: tuple[str, int] = ("", 0)
@@ -990,11 +991,22 @@ class Engine:
             return ""
         if settings.on_death and died:
             return "death"
+        if self.config.behavior.game_mode and fresh_round:
+            situation = self.game_state.player.match_situation
+            for occasion, word in (("match_start", "just started"), ("match_point", "match point")):
+                key = f"{occasion}:{self.game_state.player.map_name}:{self._initiative_match_key()}"
+                if word in situation and self._initiative_match != key:
+                    self._initiative_match = key
+                    return occasion
         if settings.on_round_start and fresh_round:
             return "round_start"
         if settings.when_quiet_seconds > 0 and now - self._last_activity_at >= settings.when_quiet_seconds:
             return "quiet"
         return ""
+
+    def _initiative_match_key(self) -> str:
+        player = self.game_state.player
+        return f"{player.score_ct}-{player.score_t}"
 
     async def maybe_initiate(self) -> None:
         """Chime in unprompted, when the settings allow and the moment calls for it."""

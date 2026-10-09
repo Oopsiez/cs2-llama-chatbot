@@ -117,6 +117,10 @@ const BINDINGS = {
 
   "reveal-enabled": ["reveal.enabled", "bool"],
   "initiative-enabled": ["initiative.enabled", "bool"],
+  "initiative-on": ["initiative.enabled", "bool"],
+  "initiative-on-speech": ["initiative.enabled", "bool"],
+  "game-mode": ["behavior.game_mode", "bool"],
+  "game-mode-speech": ["behavior.game_mode", "bool"],
   "initiative-channel": ["initiative.channel", "text"],
   "initiative-gap": ["initiative.min_gap_seconds", "number"],
   "initiative-chance": ["initiative.chance", "number"],
