@@ -346,6 +346,11 @@ def config_path() -> Path:
     return Path(user_config_dir("cs2bot", appauthor=False)) / "config.json"
 
 
+def fallback_log_path() -> Path:
+    """The bot's own log, tailed while CS2's console.log is not there yet."""
+    return config_path().parent / "cs2bot-console.log"
+
+
 def default_cs2_dir() -> Path | None:
     """Best-effort guess at `.../Counter-Strike Global Offensive/game/csgo`."""
     candidates: list[Path] = []

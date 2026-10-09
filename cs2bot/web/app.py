@@ -70,6 +70,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return {
             "path": engine.config.game.console_log_path,
             "attached": engine.log_attached,
+            "source": engine.log_source,
+            "reading": engine.log_reading,
+            "reason": engine.log_reason(),
             "lines_seen": engine.lines_seen,
             "lines": list(engine.recent_lines),
             **engine.log_file_state(),

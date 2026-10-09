@@ -304,3 +304,19 @@ def test_a_fresh_install_runs_ollama_on_this_pc():
     llm = AppConfig().llm
     assert llm.backend == "ollama"
     assert llm.ollama_url == "http://127.0.0.1:11434"
+
+
+def test_the_bots_own_log_is_read_until_cs2_writes_one(client):
+    deadline = time.monotonic() + 5
+    while client.engine.log_source != "fallback" and time.monotonic() < deadline:
+        time.sleep(0.05)
+    status = client.get("/api/status").json()
+    assert status["log_source"] == "fallback"
+    assert "console.log" in status["log_reason"]
+    client.engine.log_note("heard: rush b")
+    while client.engine.lines_seen < 1 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    body = client.get("/api/log").json()
+    assert body["source"] == "fallback"
+    assert body["lines"][0]["chat"] is False
+    assert body["lines"][0]["line"].endswith("heard: rush b")

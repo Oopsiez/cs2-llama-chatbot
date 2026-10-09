@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from . import RELEASE, __version__, commands, playbook
-from .config import AppConfig, load_config, save_config
+from .config import AppConfig, fallback_log_path, load_config, save_config
 from .echo import EchoGuard
 from .events import EventBus
 from .gamestate import GameStateStore
@@ -119,6 +119,7 @@ class Engine:
         self._speech_backend: LLMBackend | None = None
         self._sender: ChatSender | None = None
         self._tailer: LogTailer | None = None
+        self.log_source = ""  # "cs2" once console.log is being read, "fallback" for the bot's own log
         self._voice: VoiceListener | None = None
         self._speaker: Speaker | None = None
         self.last_voice_reply_at = float("-inf")
@@ -424,10 +425,18 @@ class Engine:
         # console.log has been found.
         await self.pump_voice()
         path = self.config.game.console_log_path
-        if not path:
-            return
-        if self._tailer is None:
-            self._tailer = LogTailer(path)
+        if path and Path(path).exists():
+            active, source = Path(path), "cs2"
+        else:
+            active, source = fallback_log_path(), "fallback"
+            active.parent.mkdir(parents=True, exist_ok=True)
+            active.touch(exist_ok=True)
+        if self._tailer is None or self._tailer.path != active:
+            if self._tailer is not None:
+                self._tailer.close()
+            # A console.log that appears while we are on our own log is brand new: read all of it.
+            self._tailer = LogTailer(active, from_start=self.log_source == "fallback" and source == "cs2")
+        self.log_source = source
         for line in self._tailer.read_lines():
             message = parse_chat_line(line, self.own_name, self.config.game.name_aliases)
             self.lines_seen += 1
@@ -436,6 +445,8 @@ class Engine:
                 self._note_identity(line)
                 continue
             await self.handle_message(message)
+        if source != "cs2":
+            return
         await self._maybe_ask_for_name()
         await self.maybe_call_strategy()
         await self.maybe_announce()
@@ -477,8 +488,20 @@ class Engine:
             return True, True
         return True, False
 
+    def log_note(self, text: str) -> None:
+        """Append to the bot's own log while CS2's is not there, so the Log tab still shows what
+        happened (never chat-shaped, so it is not answered)."""
+        if self.log_source != "fallback":
+            return
+        try:
+            with fallback_log_path().open("a", encoding="utf-8") as handle:
+                handle.write(f"cs2bot {datetime.now().strftime('%H:%M:%S')} {text}\n")
+        except OSError:
+            pass
+
     async def speak(self, text: str) -> tuple[bool, str]:
         spoken, detail = await self.speaker.say(text)
+        self.log_note(f"said: {text}" if spoken else f"could not say: {detail}")
         self.bus.publish("spoken" if spoken else "error", {"text": text, "detail": detail})
         return spoken, detail
 
@@ -492,6 +515,7 @@ class Engine:
         delivered, detail = (False, "")
         if typed:
             delivered, detail = await self.sender.send(text, team_only=self._team_only(message))
+            self.log_note(f"typed: {text}" if delivered else f"could not type: {detail}")
         if spoken:
             said, said_detail = await self.speak(spoken_text or text)
             delivered = delivered or said
@@ -565,6 +589,7 @@ class Engine:
         answer in all chat would be talking to the wrong five people.
         """
         text = " ".join(text.split())
+        self.log_note(f"heard: {text}")
         if len(text.split()) < self.config.voice.min_words:
             return None
         return await self.handle_message(
@@ -1221,6 +1246,21 @@ class Engine:
     def log_attached(self) -> bool:
         return self._tailer is not None and self._tailer.is_open
 
+    @property
+    def log_reading(self) -> str:
+        return str(self._tailer.path) if self._tailer is not None else ""
+
+    def log_reason(self) -> str:
+        """Why console.log is not being read, in the words the pill shows."""
+        path = self.config.game.console_log_path
+        if not path:
+            return "no console.log path set - CS2 install not found, set it on the Advanced tab"
+        if not Path(path).exists():
+            return "CS2 has not written console.log yet - add -condebug to its launch options"
+        if not self.log_attached:
+            return "press Start bot"
+        return ""
+
     def log_file_state(self) -> dict[str, Any]:
         """Whether the console log is there and growing - the first thing to check when the
         panel stays empty."""
@@ -1252,6 +1292,9 @@ class Engine:
             "sender": self.sender.describe(),
             "log_path": self.config.game.console_log_path,
             "log_attached": self.log_attached,
+            "log_source": self.log_source,
+            "log_reason": self.log_reason(),
+            "log_reading": self.log_reading,
             "lines_seen": self.lines_seen,
             **self.log_file_state(),
             "own_name": self.own_name,

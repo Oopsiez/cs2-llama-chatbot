@@ -465,7 +465,10 @@ function renderStatus(status) {
   };
   setPill("pill-state", `you: ${status.local_state}`, status.local_state === "dead" ? "bad" : "good");
   setPill("pill-gsi", status.gsi_connected ? "gsi: connected" : "gsi: waiting", status.gsi_connected ? "good" : "warn");
-  setPill("pill-log", status.log_attached ? "log: attached" : "log: detached", status.log_attached ? "good" : "warn");
+  const logText =
+    status.log_source === "fallback" ? "log: own log (CS2 log missing)" : status.log_attached ? "log: attached" : "log: detached";
+  setPill("pill-log", logText, status.log_attached && status.log_source === "cs2" ? "good" : "warn");
+  $("pill-log").title = status.log_reason || "reading CS2's console.log";
   setPill(
     "pill-llm",
     `llm: ${status.llm_backend}`,
@@ -830,8 +833,11 @@ function bindActions() {
 async function renderLog() {
   const body = await (await fetch("/api/log")).json();
   const size = body.log_exists ? `${body.log_size} bytes, last written ${body.log_modified}` : "missing";
-  $("log-note").textContent = `${body.path || "no path set"} — ${size}`;
-  if (!body.log_exists) {
+  $("log-note").textContent =
+    body.source === "fallback"
+      ? `${body.reason} — meanwhile reading the bot's own log at ${body.reading}`
+      : `${body.path || "no path set"} — ${size}`;
+  if (!body.log_exists && body.source !== "fallback") {
     $("log-output").textContent =
       "CS2 has not created this file. Add -condebug to the launch options and restart the game.";
     return;
