@@ -41,3 +41,16 @@ def test_switching_a_model_off_stops_that_kind_of_reply():
     assert engine._reply_modes(message) == (False, False)
     assert engine.answers_text is False
     assert (typed, spoken) != (False, False)
+
+
+def test_update_report_flags_a_stale_server_and_an_old_client():
+    from cs2bot.server_update import parse_release, update_report
+
+    latest = parse_release({"tag_name": "v1.10.9", "html_url": "https://x/r"})
+    assert latest == {"version": "1.10.9", "url": "https://x/r"}
+    report = update_report("v1.10.9", {"version": "v1.9.0-rc24"}, latest)
+    assert report["server_behind"] and not report["client_behind"] and not report["in_sync"]
+    report = update_report("v1.10.8", {"version": "1.10.8"}, latest)
+    assert report["in_sync"] and report["client_behind"] and not report["server_behind"]
+    report = update_report("v1.10.8", {"error": "no agent"}, {"error": "offline"})
+    assert not report["in_sync"] and not report["server_behind"] and not report["client_behind"]

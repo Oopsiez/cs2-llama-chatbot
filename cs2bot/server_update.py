@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 
 AGENT_PORT = 11435
+REPO = "Oopsiez/cs2-llama-chatbot"
 _RC = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?$")
 
 
@@ -60,3 +61,35 @@ async def request_update(ollama_url: str, version: str) -> dict[str, Any]:
             return data
     except (httpx.HTTPError, ValueError) as exc:
         return {"error": f"could not reach the update agent: {exc}"}
+
+
+def parse_release(data: dict[str, Any]) -> dict[str, Any]:
+    """`{"version", "url"}` out of a GitHub release record."""
+    tag = normalise(str(data.get("tag_name") or ""))
+    return {"version": tag, "url": str(data.get("html_url") or f"https://github.com/{REPO}/releases")}
+
+
+async def latest_release() -> dict[str, Any]:
+    """The newest published release on GitHub, or `{"error": ...}` when it cannot be asked."""
+    try:
+        async with httpx.AsyncClient(timeout=6, headers={"Accept": "application/vnd.github+json"}) as client:
+            response = await client.get(f"https://api.github.com/repos/{REPO}/releases/latest")
+            response.raise_for_status()
+            return parse_release(response.json())
+    except (httpx.HTTPError, ValueError) as exc:
+        return {"error": f"could not ask GitHub for the latest release: {exc}"}
+
+
+def update_report(client: str, server: dict[str, Any], latest: dict[str, Any]) -> dict[str, Any]:
+    """One picture of who is on what, with the flags the panel shows."""
+    server_version = str(server.get("version", ""))
+    newest = str(latest.get("version", ""))
+    return {
+        "client": client,
+        "server": server,
+        "latest": latest,
+        "server_behind": behind(server_version, client),
+        "client_behind": behind(client, newest),
+        "server_behind_latest": behind(server_version, newest),
+        "in_sync": not server.get("error") and normalise(server_version) == normalise(client),
+    }

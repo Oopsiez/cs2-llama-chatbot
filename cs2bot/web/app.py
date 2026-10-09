@@ -147,6 +147,13 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "behind": server_update.behind(str(server.get("version", "")), RELEASE),
         }
 
+    @app.get("/api/updates")
+    async def updates_report() -> dict[str, Any]:
+        """Client, server and newest GitHub release side by side - polled by the panel."""
+        server = await server_update.server_version(engine.config.llm.ollama_url)
+        latest = await server_update.latest_release()
+        return server_update.update_report(RELEASE, server, latest)
+
     @app.post("/api/server/update")
     async def server_update_request() -> dict[str, Any]:
         return await server_update.request_update(engine.config.llm.ollama_url, RELEASE)

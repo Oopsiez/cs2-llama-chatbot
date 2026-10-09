@@ -636,20 +636,10 @@ function bindActions() {
   });
   $("llm-placement").addEventListener("change", () => applyPlacement($("llm-placement").value));
   $("split-layers").addEventListener("change", () => applyPlacement("split"));
-  async function checkServerVersion() {
-    const data = await (await fetch("/api/server/version")).json();
-    const server = data.server || {};
-    if (server.error) {
-      $("server-version").textContent = `server version unknown - ${server.error}`;
-    } else if (server.updating) {
-      $("server-version").textContent = `server is updating (${(server.log || []).slice(-1)[0] || "…"})`;
-    } else if (data.behind) {
-      $("server-version").textContent = `server is on ${server.version}, you are on ${data.client}`;
-    } else {
-      $("server-version").textContent = `server is on ${server.version} - up to date`;
-    }
-    $("update-server").hidden = !(data.behind && !server.updating && !server.error);
-  }
+  $("check-updates").addEventListener("click", () => checkServerVersion(true));
+  $("update-badge").addEventListener("click", () => {
+    document.querySelector('[data-tab="server"]').click();
+  });
   $("test-server").addEventListener("click", async () => {
     $("server-test-note").textContent = "testing the server…";
     await saveConfig();
@@ -670,6 +660,7 @@ function bindActions() {
   $("update-server").addEventListener("click", async () => {
     $("server-version").textContent = "asking the server to update…";
     $("update-server").hidden = true;
+    $("update-badge").hidden = true;
     const response = await fetch("/api/server/update", { method: "POST" });
     const data = await response.json();
     $("server-version").textContent = data.error
@@ -959,6 +950,32 @@ function fillSpeechModelOptions(models) {
   keepChosen($("chat-model"), config.llm.ollama_model);
 }
 
+const UPDATE_POLL_MS = 4 * 60 * 60 * 1000;
+
+async function checkServerVersion(byHand = false) {
+  if (byHand) $("server-version").textContent = "checking…";
+  let data;
+  try {
+    data = await (await fetch("/api/updates")).json();
+  } catch (error) {
+    $("server-version").textContent = `could not check: ${error}`;
+    return;
+  }
+  const server = data.server || {};
+  const latest = data.latest || {};
+  const lines = [`you: ${data.client}`];
+  if (server.error) lines.push(`server: unknown - ${server.error}`);
+  else if (server.updating) lines.push(`server: updating (${(server.log || []).slice(-1)[0] || "…"})`);
+  else lines.push(`server: ${server.version}${data.server_behind ? " - OUT OF DATE" : data.in_sync ? " - same as you" : ""}`);
+  lines.push(latest.error ? `latest release: unknown - ${latest.error}` : `latest release: ${latest.version}`);
+  if (data.client_behind) lines.push(`a newer client is out - get it at ${latest.url}`);
+  $("server-version").textContent = lines.join("\n");
+  const serverStale = data.server_behind && !server.updating && !server.error;
+  $("update-server").hidden = !serverStale;
+  $("update-badge").hidden = !serverStale;
+  $("update-badge").textContent = serverStale ? `server out of date (${server.version})` : "";
+}
+
 async function renderModels() {
   $("hardware-note").textContent = "looking…";
   const body = await (await fetch("/api/models")).json();
@@ -1053,6 +1070,8 @@ async function init() {
   config = body.config;
   presets = body.presets;
   renderPresetChoices();
+  checkServerVersion();
+  setInterval(checkServerVersion, UPDATE_POLL_MS);
   renderConfig();
   bindInputs();
   bindTabs();

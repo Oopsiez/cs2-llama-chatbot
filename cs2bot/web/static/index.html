@@ -9,7 +9,7 @@
 </head>
 <body>
 <header>
-  <div class="brand">CS2 <span>Chatbot</span> <small id="version"></small></div>
+  <div class="brand">CS2 <span>Chatbot</span> <small id="version"></small> <span class="badge warn" id="update-badge" hidden></span></div>
   <div class="status-strip">
     <span class="pill" id="pill-state">state: unknown</span>
     <span class="pill" id="pill-gsi">gsi: waiting</span>
@@ -345,9 +345,11 @@
         <span class="note" id="server-test-note"></span>
       </div>
       <div class="actions">
-        <span class="note" id="server-version"></span>
-        <button class="action" id="update-server" hidden>Update server</button>
+        <button class="action" id="check-updates">Check for updates</button>
+        <button class="action primary" id="update-server" hidden>Update server</button>
+        <span class="tip" title="Client, server and the newest GitHub release are compared when the panel opens, every 4 hours, and when you press Check for updates. A red badge in the header stays on while the server is behind this client; Update server tells the server's agent to download and install this client's version.">?</span>
       </div>
+      <div class="result" id="server-version">—</div>
       </div>
     </div>
     <div class="panel" data-panel="deadalive">

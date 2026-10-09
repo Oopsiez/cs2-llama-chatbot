@@ -248,3 +248,5 @@ button.action.primary { background: linear-gradient(180deg, #2a2114, #1b1710); b
 .verdict.tight { color: var(--accent); }
 .verdict.cpu { color: #8fb8e0; }
 .verdict.no { color: #d98b8b; }
+
+.badge.warn { background: #b3261e; color: #fff; border-radius: 999px; padding: 2px 8px; font-size: 11px; vertical-align: middle; cursor: pointer; }
