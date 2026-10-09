@@ -243,11 +243,6 @@ function renderDials() {
 }
 
 function renderSavedPersonas() {
-  const select = $("persona-saved");
-  const names = Object.keys(config.saved_personas || {});
-  select.innerHTML = names.length
-    ? names.map((n) => `<option value="${n}">${n}</option>`).join("")
-    : '<option value="">(nothing saved)</option>';
   renderPresetChoices();
 }
 
@@ -566,24 +561,21 @@ function bindActions() {
     config.saved_personas[name] = structuredClone(config.persona);
     $("persona-save-name").value = "";
     renderSavedPersonas();
-    $("persona-saved").value = name;
-    $("persona-note").textContent = `saved "${name}"`;
-  });
-
-  $("persona-load").addEventListener("click", () => {
-    const saved = config.saved_personas[$("persona-saved").value];
-    if (!saved) return;
-    config.persona = structuredClone(saved);
-    renderConfig();
-    scheduleSave();
+    $("preset").value = name;
+    $("persona-note").textContent = `saved "${name}" - it is in the Preset list`;
   });
 
   $("persona-delete").addEventListener("click", async () => {
-    const name = $("persona-saved").value;
-    if (!name || !confirm(`Delete persona "${name}"?`)) return;
+    const name = $("preset").value;
+    if (!(name in (config.saved_personas || {}))) {
+      $("persona-note").textContent = "pick one of your personas in the Preset list first";
+      return;
+    }
+    if (!confirm(`Delete persona "${name}"?`)) return;
     await fetch(`/api/personas/${encodeURIComponent(name)}`, { method: "DELETE" });
     delete config.saved_personas[name];
     renderSavedPersonas();
+    $("persona-note").textContent = `deleted "${name}"`;
   });
 
   $("callout-add").addEventListener("click", async () => {

@@ -90,6 +90,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             config = AppConfig.model_validate(payload)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # Saved personas are only ever changed through /api/personas, so a settings save that
+        # left the panel before a persona was saved cannot wipe it.
+        config = config.model_copy(update={"saved_personas": engine.config.saved_personas})
         await engine.apply_config(config)
         return engine.config.model_dump(mode="json")
 
