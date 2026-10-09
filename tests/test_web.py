@@ -267,9 +267,9 @@ def test_the_browser_gets_a_favicon_instead_of_a_404(client):
 
 
 def test_a_settings_save_cannot_wipe_a_saved_persona(client):
-    config = client.get("/api/config").json()
+    config = client.get("/api/config").json()["config"]
     persona = dict(config["persona"], name="Grumpy")
     assert client.post("/api/personas", json={"name": "Grumpy", "persona": persona}).status_code == 200
     assert client.put("/api/config", json=config).status_code == 200  # stale body, no saved_personas
     assert "Grumpy" in client.get("/api/personas").json()["saved"]
-    assert "Grumpy" in client.get("/api/config").json()["saved_personas"]
+    assert "Grumpy" in client.get("/api/config").json()["config"]["saved_personas"]
