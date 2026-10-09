@@ -29,6 +29,7 @@ from ..parser import parse_chat_line
 from ..persona import PRESETS, build_system_prompt
 from ..rules import should_reply
 from ..snitch import where
+from ..voice import cable
 from ..voice.audio import output_devices
 from ..voice.speak import installed_voices
 
@@ -271,6 +272,18 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "settings": engine.config.voice.model_dump(mode="json"),
             "voices": await asyncio.to_thread(installed_voices),
         }
+
+    @app.get("/api/voice/cable")
+    async def voice_cable() -> dict[str, Any]:
+        """Whether the virtual microphone driver is installed."""
+        return await asyncio.to_thread(cable.driver_status)
+
+    @app.post("/api/voice/cable/install")
+    async def voice_cable_install() -> dict[str, Any]:
+        """Download VB-Audio Cable and run its installer (UAC prompt follows)."""
+        ok, detail = await asyncio.to_thread(cable.install_cable)
+        status = await asyncio.to_thread(cable.driver_status)
+        return {"ok": ok, "detail": detail, **status}
 
     @app.get("/api/voice/voices")
     async def voice_voices() -> dict[str, Any]:

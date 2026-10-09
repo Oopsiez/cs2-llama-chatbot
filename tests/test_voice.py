@@ -363,3 +363,12 @@ async def test_speaking_off_windows_fails_softly():
     spoken, detail = await speaker.say("hello")
     assert not spoken and "Windows" in detail
     assert speaker.status()["speak_supported"] is False
+
+
+def test_cable_install_is_windows_only_and_reports_absence():
+    from cs2bot.voice import cable
+
+    ok, detail = cable.install_cable()
+    assert not ok and "Windows" in detail
+    status = cable.driver_status()
+    assert status["installed"] is False and status["input_id"] == ""

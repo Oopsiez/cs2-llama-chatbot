@@ -164,8 +164,10 @@ text-to-speech and no virtual microphone, and your own microphone is never opene
 - **Talking back (optional).** *Respond with* on the Voice tab picks how team replies go out:
   text (typed in team chat), voice (spoken), or all (both); all-chat replies are always typed.
   Spoken replies use the Windows speech engine played into a virtual microphone while the bot
-  holds your push-to-talk key. One-time setup: install [VB-Audio Cable](https://vb-audio.com/Cable/)
-  (free), choose *CABLE Input* as the device the bot plays into, and in CS2 → Settings → Audio set
+  holds your push-to-talk key. One-time setup: press *Install the virtual
+  microphone* on the Voice tab (it downloads [VB-Audio Cable](https://vb-audio.com/Cable/), the
+  one piece the installer cannot bundle because it is a signed driver, and runs its setup - accept
+  the prompt and restart Windows), press *Use CABLE Input*, and in CS2 → Settings → Audio set
   the microphone to *CABLE Output* with push-to-talk on the same key as the panel's *Push-to-talk
   key*. "Say mic check now" proves the chain before a match. Nothing is injected into the game:
   it is a real key press and a real microphone, just one only the bot talks into.

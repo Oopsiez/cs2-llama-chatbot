@@ -508,6 +508,21 @@ function bindActions() {
       : `heard "${body.heard}" — said nothing back`;
   });
 
+  $("voice-cable-install").addEventListener("click", async () => {
+    $("voice-cable-status").textContent = "downloading VB-Cable… accept the Windows prompt when it appears";
+    const body = await (await fetch("/api/voice/cable/install", { method: "POST" })).json();
+    $("voice-cable-status").textContent = body.detail;
+  });
+  $("voice-cable-use").addEventListener("click", async () => {
+    const body = await (await fetch("/api/voice/cable")).json();
+    if (!body.input_id) {
+      $("voice-cable-status").textContent = "no CABLE Input device found - install VB-Cable and restart Windows first";
+      return;
+    }
+    config.voice.speak_device = body.input_id;
+    await renderVoice();
+    $("voice-cable-status").textContent = "playing into CABLE Input - now set CS2's microphone to CABLE Output and save";
+  });
   $("voice-speak-test").addEventListener("click", async () => {
     $("voice-speak-output").textContent = "speaking…";
     const response = await fetch("/api/voice/speak", {
@@ -664,6 +679,14 @@ async function renderVoice() {
     (body.voices || []).map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
   voices.value = config.voice.speak_voice;
   const status = body.status;
+  fetch("/api/voice/cable")
+    .then((r) => r.json())
+    .then((cable) => {
+      $("voice-cable-status").textContent = cable.installed
+        ? `virtual microphone installed: ${cable.devices.join(", ")}`
+        : "virtual microphone not installed yet";
+    })
+    .catch(() => {});
   if (status.speak_error) $("voice-speak-output").textContent = `could not speak: ${status.speak_error}`;
   else if (!status.speak_supported)
     $("voice-speak-output").textContent = `cannot talk here: ${status.speak_unsupported_reason}`;
