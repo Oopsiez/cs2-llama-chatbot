@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from typing import Protocol, TypedDict, cast
 
@@ -108,6 +108,30 @@ def com_apartment() -> Iterator[None]:
     finally:
         if initialised:
             ole32.CoUninitialize()
+
+
+def capture(
+    device_id: str = "", scope: str = "cs2", on_note: Callable[[str], None] | None = None
+) -> Iterator[list[float]]:
+    """Blocks of audio from the chosen scope: CS2 alone when possible, else the speakers.
+
+    `on_note` is told why the scope fell back (no process loopback here, CS2 not running yet)
+    so the panel can say so.
+    """
+    if scope == "cs2":
+        from . import process_loopback
+
+        reason = process_loopback.unavailable()
+        if not reason and not process_loopback.find_process():
+            reason = "CS2 is not running - listening to the speakers until it is"
+        if not reason:
+            if on_note:
+                on_note("hearing CS2 only")
+            yield from process_loopback.blocks()
+            return
+        if on_note:
+            on_note(f"hearing the whole PC: {reason}")
+    yield from blocks(device_id)
 
 
 def blocks(device_id: str = "", block_seconds: float = BLOCK_SECONDS) -> Iterator[list[float]]:

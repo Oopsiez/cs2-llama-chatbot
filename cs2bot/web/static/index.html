@@ -425,9 +425,16 @@
       <div class="result" id="voice-status">—</div>
       <p class="hint">Listening is switched on by <b>Respond to</b> on the Personality tab (voice or both). The speech model is downloaded once, the first time it listens.</p>
       <div class="row">
+        <label>Hear
+          <select id="voice-capture">
+            <option value="cs2">Only CS2's audio (Windows 10 2004 or newer)</option>
+            <option value="pc">Everything the PC plays</option>
+          </select>
+          <span class="hint" id="voice-capture-note">Only CS2 keeps Discord, music and browsers out of the bot's ears.</span>
+        </label>
         <label>Listen to
           <select id="voice-device"></select>
-          <span class="hint">The speakers CS2 plays through.</span>
+          <span class="hint">The speakers CS2 plays through (used when hearing everything, or until CS2 starts).</span>
         </label>
         <label>Speech model
           <select id="voice-model">
@@ -488,7 +495,13 @@
         <label>Play into <span class="hint">the virtual microphone</span>
           <select id="voice-speak-device"></select>
         </label>
-        <label>Push-to-talk key <input type="text" id="voice-talk-key" maxlength="1" style="max-width:80px" /></label>
+        <label>Push-to-talk key
+          <span style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="voice-talk-key" maxlength="12" style="max-width:100px" />
+            <button class="action" id="voice-talk-key-detect" type="button">Detect from CS2</button>
+          </span>
+          <span class="hint" id="voice-talk-key-note">Type it, or detect it from CS2's own keybinds (+voicerecord).</span>
+        </label>
         <label>Voice engine
           <select id="voice-speak-engine">
             <option value="piper">Piper - natural, instant, CPU (60-115 MB per voice)</option>

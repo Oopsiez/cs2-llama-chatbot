@@ -222,6 +222,9 @@ class VoiceSettings(BaseModel):
 
     enabled: bool = False
     device: str = ""  # blank -> the default speakers
+    # What it listens to: "cs2" - only the game's own audio (Windows 10 2004+; falls back to the
+    # speakers when it cannot), or "pc" - everything the speakers play.
+    capture: str = "cs2"
     model: str = "small.en"  # a Whisper model name, downloaded once on first use
     # What it answers: "everything" it hears, "questions" only, or "triggers" - speech that
     # contains one of `trigger_words`. Questions always get an answer in the first two modes.

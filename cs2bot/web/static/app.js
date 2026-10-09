@@ -132,6 +132,7 @@ const BINDINGS = {
   "voice-reply-with": ["voice.reply_with", "text"],
   "voice-speak-device": ["voice.speak_device", "text"],
   "voice-talk-key": ["voice.talk_key", "text"],
+  "voice-capture": ["voice.capture", "text"],
   "voice-speak-voice": ["voice.speak_voice", "text"],
   "voice-speak-rate": ["voice.speak_rate", "number"],
   "voice-model": ["voice.model", "text"],
@@ -616,6 +617,18 @@ function bindActions() {
     ).json();
     $("voice-speak-output").textContent = body.detail;
     await renderVoice();
+  });
+  $("voice-talk-key-detect").addEventListener("click", async () => {
+    $("voice-talk-key-note").textContent = "reading CS2's keybinds…";
+    const body = await (await fetch("/api/voice/talk-key")).json();
+    if (body.key) {
+      config.voice.talk_key = body.key;
+      $("voice-talk-key").value = body.key;
+      $("voice-talk-key-note").textContent = `detected "${body.key}" in ${body.where}`;
+      await saveConfig();
+    } else {
+      $("voice-talk-key-note").textContent = body.where;
+    }
   });
   $("voice-speak-test").addEventListener("click", async () => {
     $("voice-speak-output").textContent = "speaking…";

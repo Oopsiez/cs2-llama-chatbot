@@ -31,6 +31,7 @@ from ..rules import should_reply
 from ..snitch import where
 from ..voice import cable, tts
 from ..voice.audio import output_devices
+from ..voice.binds import detect_voice_key
 from ..voice.speak import installed_voices, play, render
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -272,6 +273,12 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "settings": engine.config.voice.model_dump(mode="json"),
             "voices": await asyncio.to_thread(installed_voices),
         }
+
+    @app.get("/api/voice/talk-key")
+    async def voice_talk_key() -> dict[str, Any]:
+        """CS2's own push-to-talk bind, read from Steam's userdata."""
+        key, where = await asyncio.to_thread(detect_voice_key, engine.config.game.cfg_dir)
+        return {"key": key, "where": where}
 
     @app.get("/api/voice/cable")
     async def voice_cable() -> dict[str, Any]:

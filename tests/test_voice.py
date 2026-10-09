@@ -118,6 +118,7 @@ def test_a_string_of_whisper_boilerplate_is_silence():
 
 def test_segments_whisper_is_unsure_of_are_dropped():
     pytest.importorskip("numpy")
+
     class Seg:
         def __init__(self, text, no_speech_prob, avg_logprob):
             self.text, self.no_speech_prob, self.avg_logprob = text, no_speech_prob, avg_logprob
@@ -476,3 +477,23 @@ def test_speech_persona_and_model_are_separate_only_when_asked():
     assert engine.config.persona.name != "Voice"
     assert engine.speech_backend is engine.backend
     assert engine.speech_differs
+
+
+def test_the_voice_key_is_read_from_cs2_user_keys(tmp_path):
+    from cs2bot.voice import binds
+
+    cfg = tmp_path / "userdata" / "123" / "730" / "local" / "cfg"
+    cfg.mkdir(parents=True)
+    (cfg / "cs2_user_keys.vcfg").write_text(
+        '"config"\n{\n\t"bindings"\n\t{\n\t\t"k"\t\t"+voicerecord"\n\t\t"p"\t"say hi"\n\t}\n}\n'
+    )
+    assert binds.detect_voice_key(roots=[tmp_path]) == ("k", str(cfg / "cs2_user_keys.vcfg"))
+    assert binds.voice_key_in('bind "MOUSE4" "+voicerecord"') == "mouse4"
+    assert binds.detect_voice_key(roots=[tmp_path / "nope"])[0] == ""
+
+
+def test_hearing_cs2_falls_back_to_the_speakers_off_windows(monkeypatch):
+    notes = []
+    monkeypatch.setattr(audio, "blocks", lambda device_id="", block_seconds=0.05: iter([[0.0]]))
+    assert list(audio.capture("", "cs2", notes.append)) == [[0.0]]
+    assert notes and notes[0].startswith("hearing the whole PC")

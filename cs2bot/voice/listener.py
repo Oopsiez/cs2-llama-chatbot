@@ -43,9 +43,7 @@ class _Run:
     """One spell of listening: the threads started together share these and nothing else."""
 
     stop: threading.Event = field(default_factory=threading.Event)
-    pending: queue.Queue[Sequence[float]] = field(
-        default_factory=lambda: queue.Queue(maxsize=PENDING_LIMIT)
-    )
+    pending: queue.Queue[Sequence[float]] = field(default_factory=lambda: queue.Queue(maxsize=PENDING_LIMIT))
     heard: queue.Queue[Utterance] = field(default_factory=queue.Queue)
 
 
@@ -56,6 +54,7 @@ class VoiceListener:
         self,
         *,
         device: str = "",
+        capture: str = "pc",
         transcriber: Transcriber | None = None,
         source: BlockSource | None = None,
         segmenter: Segmenter | None = None,
@@ -64,7 +63,9 @@ class VoiceListener:
         self.device = device
         self.model_name = model_name
         self._transcriber = transcriber
-        self._source = source or (lambda: audio.blocks(device))
+        self.capture = capture
+        self.note = ""
+        self._source = source or (lambda: audio.capture(device, capture, self._set_note))
         self._segmenter = segmenter or Segmenter(audio.SAMPLE_RATE)
         self._run = _Run()
         self._threads: list[threading.Thread] = []
@@ -125,6 +126,9 @@ class VoiceListener:
 
     # ---- threads ----------------------------------------------------------------
 
+    def _set_note(self, note: str) -> None:
+        self.note = note
+
     def _listen(self, run: _Run) -> None:
         try:
             for block in self._source():
@@ -173,9 +177,7 @@ class VoiceListener:
             self.utterances_heard += 1
             self.last_text = text
             self.last_heard_at = time.time()
-            run.heard.put(
-                Utterance(text=text, seconds=len(samples) / audio.SAMPLE_RATE)
-            )
+            run.heard.put(Utterance(text=text, seconds=len(samples) / audio.SAMPLE_RATE))
 
     def _model(self) -> Transcriber:
         if self._transcriber is None:
@@ -192,6 +194,8 @@ class VoiceListener:
         return {
             "running": self.running,
             "device": self.device,
+            "capture": self.capture,
+            "note": self.note,
             "model": self.model_name,
             "model_ready": model_is_cached(self.model_name),
             "downloading": self.loading,
