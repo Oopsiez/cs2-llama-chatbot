@@ -24,7 +24,9 @@ class OllamaBackend(LLMBackend):
         api_key: str = "",
         verify_tls: bool = True,
         num_thread: int = 0,
+        num_gpu: int | None = None,
     ) -> None:
+        self.num_gpu = num_gpu
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.num_thread = num_thread
@@ -43,6 +45,7 @@ class OllamaBackend(LLMBackend):
             "messages": [{"role": t.role, "content": t.content} for t in turns],
             "options": {
                 **({"num_thread": self.num_thread} if self.num_thread else {}),
+                **({"num_gpu": self.num_gpu} if self.num_gpu is not None else {}),
                 "temperature": params.temperature,
                 "top_p": params.top_p,
                 "top_k": params.top_k,
@@ -68,8 +71,7 @@ class OllamaBackend(LLMBackend):
         models = [m.get("name", "") for m in response.json().get("models", [])]
         if self.model not in models:
             raise LLMError(
-                f"Model '{self.model}' is not on {self.base_url}. "
-                f"Run there: ollama pull {self.model}"
+                f"Model '{self.model}' is not on {self.base_url}. Run there: ollama pull {self.model}"
             )
         return f"ollama ready: {self.model} at {self.base_url}"
 

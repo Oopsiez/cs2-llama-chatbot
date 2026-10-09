@@ -20,7 +20,7 @@ from pathlib import Path
 
 from ..novelty import similarity
 from ..output.keyboard import KeyPressError, hold
-from . import tts
+from . import kokoro, tts
 from .audio import com_apartment, loopback_missing
 
 # The Windows speech engine (System.Speech) is reached through PowerShell so the frozen exe
@@ -53,10 +53,15 @@ def uses_windows_voice(voice: str) -> bool:
     return voice.startswith(tts.WINDOWS_PREFIX)
 
 
-def render(text: str, voice: str = "", rate: int = 0) -> tuple[list[float], int]:
-    """Samples + rate for `text`: a natural Piper voice by default, Windows' own when asked for."""
-    if uses_windows_voice(voice) or (tts.piper_missing() and sys.platform == "win32"):
+ENGINES = ("piper", "kokoro", "windows")
+
+
+def render(text: str, voice: str = "", rate: int = 0, engine: str = "piper") -> tuple[list[float], int]:
+    """Samples + rate for `text` from the chosen engine: Piper (quick), Kokoro (most human) or Windows."""
+    if engine == "windows" or uses_windows_voice(voice) or (tts.piper_missing() and sys.platform == "win32"):
         return wav_samples(synthesise(text, voice.removeprefix(tts.WINDOWS_PREFIX), rate))
+    if engine == "kokoro" and not kokoro.kokoro_missing():
+        return kokoro.synthesise(text, voice or kokoro.DEFAULT_VOICE, rate)
     return tts.synthesise(text, voice or tts.DEFAULT_VOICE, rate)
 
 
@@ -132,6 +137,7 @@ class Speaker:
 
     device: str = ""
     talk_key: str = "k"
+    engine: str = "piper"
     voice: str = ""
     rate: int = 0
     lead_seconds: float = 0.25  # CS2 opens the mic a beat after the key goes down
@@ -187,7 +193,7 @@ class Speaker:
         return True, "spoken"
 
     def _speak(self, text: str) -> None:
-        samples, rate = render(text, self.voice, self.rate)
+        samples, rate = render(text, self.voice, self.rate, self.engine)
         with hold(self.talk_key):
             time.sleep(self.lead_seconds)
             play(samples, rate, self.device)
@@ -202,4 +208,5 @@ class Speaker:
             "speak_supported": not speaking_missing(),
             "speak_unsupported_reason": speaking_missing(),
             "tts": tts.status(),
+            "kokoro": kokoro.status(),
         }

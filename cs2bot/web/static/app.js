@@ -119,7 +119,9 @@ const BINDINGS = {
 
   "gsi-token": ["gsi.auth_token", "text"],
 
-  "voice-enabled": ["voice.enabled", "bool"],
+  "respond-to": ["respond_to", "text"],
+  "llm-cpu-only": ["llm.cpu_only", "bool"],
+  "voice-speak-engine": ["voice.speak_engine", "text"],
   "voice-device": ["voice.device", "text"],
   "voice-reply-with": ["voice.reply_with", "text"],
   "voice-speak-device": ["voice.speak_device", "text"],
@@ -523,6 +525,17 @@ function bindActions() {
     await renderVoice();
     $("voice-cable-status").textContent = "playing into CABLE Input - now set CS2's microphone to CABLE Output and save";
   });
+  $("voice-speak-engine").addEventListener("change", async () => {
+    config.voice.speak_engine = $("voice-speak-engine").value;
+    config.voice.speak_voice = "";
+    await renderVoice();
+  });
+  $("all-cpu").addEventListener("click", async () => {
+    config.llm.cpu_only = true;
+    $("llm-cpu-only").checked = true;
+    if (config.voice.speak_engine === "kokoro") config.voice.speak_engine = "piper";
+    $("gpu-note").textContent = "chat model, speech-to-text and voices all on the CPU - save to apply";
+  });
   $("voice-preview").addEventListener("click", async () => {
     const voice = $("voice-speak-voice").value;
     $("voice-speak-output").textContent = "fetching the voice if needed, then playing on your speakers…";
@@ -530,7 +543,11 @@ function bindActions() {
       await fetch("/api/voice/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voice, rate: Number($("voice-speak-rate").value || 0) }),
+        body: JSON.stringify({
+          voice,
+          engine: $("voice-speak-engine").value,
+          rate: Number($("voice-speak-rate").value || 0),
+        }),
       })
     ).json();
     $("voice-speak-output").textContent = body.detail;
@@ -687,20 +704,31 @@ async function renderVoice() {
       .join("");
   out.value = config.voice.speak_device;
   const voices = $("voice-speak-voice");
+  const engine = config.voice.speak_engine || "piper";
+  $("voice-speak-engine").value = engine;
   const tts = body.status.tts || { voices: [] };
-  const natural = tts.voices
-    .map((v) => {
-      const note = v.ready ? "" : v.downloading ? " (downloading…)" : ` (${v.size_mb} MB download)`;
-      return `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`;
-    })
-    .join("");
-  const windows = (body.voices || [])
-    .map((v) => `<option value="windows:${escapeHtml(v)}">${escapeHtml(v)} (Windows, robotic)</option>`)
-    .join("");
-  voices.innerHTML =
-    `<optgroup label="Natural voices">${natural}</optgroup>` +
-    (windows ? `<optgroup label="Windows voices">${windows}</optgroup>` : "");
-  voices.value = config.voice.speak_voice || (tts.voices[0] ? tts.voices[0].id : "");
+  const kokoro = body.status.kokoro || { voices: [] };
+  let options = "";
+  if (engine === "piper")
+    options = tts.voices
+      .map((v) => {
+        const note = v.ready ? "" : v.downloading ? " (downloading…)" : ` (${v.size_mb} MB download)`;
+        return `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`;
+      })
+      .join("");
+  else if (engine === "kokoro") {
+    const note = kokoro.ready ? "" : kokoro.downloading ? " (downloading…)" : ` (${kokoro.size_mb} MB download, once)`;
+    options = kokoro.voices
+      .map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`)
+      .join("");
+  } else
+    options =
+      '<option value="">Windows default</option>' +
+      (body.voices || []).map((v) => `<option value="windows:${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  voices.innerHTML = options;
+  const known = [...voices.options].some((o) => o.value === config.voice.speak_voice);
+  voices.value = known ? config.voice.speak_voice : voices.options[0] ? voices.options[0].value : "";
+  config.voice.speak_voice = voices.value;
   const status = body.status;
   fetch("/api/voice/cable")
     .then((r) => r.json())

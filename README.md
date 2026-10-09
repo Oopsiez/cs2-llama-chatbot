@@ -163,7 +163,7 @@ text-to-speech and no virtual microphone, and your own microphone is never opene
   occasion so it never monologues. It goes out by text, voice or both like any other team reply.
 - **Talking back (optional).** *Respond with* on the Voice tab picks how team replies go out:
   text (typed in team chat), voice (spoken), or all (both); all-chat replies are always typed.
-  Spoken replies use a natural neural voice (Piper, on the CPU, downloaded once per voice; the Windows speech engine is the fallback) played into a virtual microphone while the bot
+  Spoken replies use a natural neural voice - Piper (instant) or Kokoro (most human, 1-3 s a line), both on the CPU and downloaded once; the Windows speech engine is the fallback - chosen on the Speech tab played into a virtual microphone while the bot
   holds your push-to-talk key. One-time setup: press *Install the virtual
   microphone* on the Voice tab (it downloads [VB-Audio Cable](https://vb-audio.com/Cable/), the
   one piece the installer cannot bundle because it is a signed driver, and runs its setup - accept

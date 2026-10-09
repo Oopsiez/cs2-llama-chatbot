@@ -407,3 +407,22 @@ def test_render_routes_windows_prefixed_voices_only(monkeypatch):
     assert speak.render("hi", "", 0) == ([0.0], 22050)
     assert speak.render("hi", "en_GB-alan-medium", 0) == ([0.0], 22050)
     assert speak.uses_windows_voice("windows:Microsoft Zira Desktop")
+
+
+def test_cpu_only_keeps_the_model_off_the_card():
+    from cs2bot.config import LLMSettings
+    from cs2bot.hardware import Hardware
+    from cs2bot.llm import gpu_layers_for
+
+    assert gpu_layers_for(LLMSettings(cpu_only=True, n_gpu_layers=-1), Hardware()) == 0
+
+
+def test_render_dispatches_on_engine(monkeypatch):
+    from cs2bot.voice import kokoro, speak, tts
+
+    monkeypatch.setattr(tts, "synthesise", lambda text, voice_id, rate: ([1.0], 22050))
+    monkeypatch.setattr(kokoro, "synthesise", lambda text, voice_id, rate: ([2.0], 24000))
+    monkeypatch.setattr(kokoro, "kokoro_missing", lambda: "")
+    assert speak.render("hi", "", 0, "piper") == ([1.0], 22050)
+    assert speak.render("hi", "am_adam", 0, "kokoro") == ([2.0], 24000)
+    assert set(kokoro.status()) >= {"supported", "ready", "voices", "size_mb"}

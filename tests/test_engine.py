@@ -565,3 +565,17 @@ async def test_the_bot_stays_silent_on_its_own_unless_told_to(tmp_path, monkeypa
     engine._last_activity_at -= 5
     await engine.maybe_initiate()
     assert not engine._sender.sent
+
+
+@pytest.mark.asyncio
+async def test_respond_to_voice_turns_the_text_bot_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.behavior.cooldown_seconds = 0
+    engine.config.respond_to = "voice"
+    assert engine.listens_to_voice and not engine.answers_text
+    assert await engine.handle_message(chat(sender="Gavin", text="what do we do now?")) is None
+    assert engine._sender.sent == []
+    engine.config.respond_to = "text"
+    assert not engine.listens_to_voice and engine.answers_text
+    assert await engine.handle_message(chat(sender="Gavin", text="what do we do now?")) is not None

@@ -392,6 +392,7 @@ class Engine:
             self._speaker = Speaker()
         self._speaker.device = settings.speak_device
         self._speaker.talk_key = settings.talk_key
+        self._speaker.engine = settings.speak_engine
         self._speaker.voice = settings.speak_voice
         self._speaker.rate = settings.speak_rate
         return self._speaker
@@ -440,7 +441,7 @@ class Engine:
 
     async def pump_voice(self) -> None:
         """Start or stop listening as the settings say, and answer anything heard."""
-        if not (self.config.enabled and self.config.voice.enabled):
+        if not (self.config.enabled and self.listens_to_voice):
             if self._voice is not None:
                 self._voice.stop()
             return
@@ -450,6 +451,15 @@ class Engine:
                 self.bus.publish("skipped", {"sender": "voice", "reason": "that was the bot's own voice"})
                 continue
             await self.handle_voice(utterance.text)
+
+    @property
+    def listens_to_voice(self) -> bool:
+        """Voice comms are heard when *Respond to* includes voice (the old Voice-tab tick still counts)."""
+        return self.config.respond_to in ("voice", "both") or self.config.voice.enabled
+
+    @property
+    def answers_text(self) -> bool:
+        return self.config.respond_to != "voice"
 
     async def handle_voice(self, text: str) -> BotReply | None:
         """Treat a transcript as if it had been typed in team chat.
@@ -512,6 +522,11 @@ class Engine:
         self.bus.publish("chat", message.model_dump(mode="json"))
 
         if not self.config.enabled:
+            return None
+        if not message.is_voice and not self.answers_text:
+            self.bus.publish(
+                "skipped", {"message": message.model_dump(mode="json"), "reason": "text bot is off"}
+            )
             return None
 
         taken, called = await self._handle_command(message)

@@ -20,6 +20,8 @@ GGUF_OVERHEAD_GB = 1.0
 
 def gpu_layers_for(settings: LLMSettings, hardware: Hardware) -> int:
     """All layers on the card when the file fits beside CS2, none when it does not."""
+    if settings.cpu_only:
+        return 0
     if not settings.gpu_auto:
         return settings.n_gpu_layers
     try:
@@ -47,6 +49,7 @@ def build_backend(settings: LLMSettings) -> LLMBackend:
             api_key=settings.ollama_api_key,
             verify_tls=settings.ollama_verify_tls,
             num_thread=settings.n_threads or threads_for_the_model(),
+            num_gpu=0 if settings.cpu_only else None,
         )
     if settings.backend == "mock":
         return MockBackend()

@@ -52,6 +52,7 @@ class LLMSettings(BaseModel):
     gpu_auto: bool = True
     n_threads: int = 0  # 0 -> half the cores, so the game keeps the other half
     request_timeout: float = 30.0
+    cpu_only: bool = False  # keep the model off the graphics card entirely (saves VRAM for CS2)
     warm_on_start: bool = True  # load the model while you are in the menu, not on the first reply
 
 
@@ -239,7 +240,8 @@ class VoiceSettings(BaseModel):
     reply_with: str = "text"
     speak_device: str = ""  # the output device to play into - pick the CABLE Input
     talk_key: str = "k"  # CS2's push-to-talk key
-    speak_voice: str = ""  # a Windows voice name; blank -> the default
+    speak_engine: str = "piper"  # piper (CPU, quick) | kokoro (CPU, most human, slower) | windows
+    speak_voice: str = ""  # a voice id for the engine; blank -> its default
     speak_rate: int = 1  # -10 (slow) .. 10 (fast)
 
 
@@ -303,6 +305,7 @@ class WebSettings(BaseModel):
 
 class AppConfig(BaseModel):
     enabled: bool = False
+    respond_to: str = "both"  # text | voice | both - which chat the bot answers (voice = speaker comms)
     game: GameSettings = Field(default_factory=GameSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     generation: GenerationSettings = Field(default_factory=GenerationSettings)

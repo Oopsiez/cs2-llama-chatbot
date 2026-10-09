@@ -308,8 +308,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         text = str(payload.get("text") or "rotate B now, they are all on A").strip()
         voice_id = str(payload.get("voice") or engine.config.voice.speak_voice)
         rate = int(payload.get("rate") or engine.config.voice.speak_rate)
+        tts_engine = str(payload.get("engine") or engine.config.voice.speak_engine)
         try:
-            samples, rate_hz = await asyncio.to_thread(render, text, voice_id, rate)
+            samples, rate_hz = await asyncio.to_thread(render, text, voice_id, rate, tts_engine)
             await asyncio.to_thread(play, samples, rate_hz, "")
         except Exception as exc:
             return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
