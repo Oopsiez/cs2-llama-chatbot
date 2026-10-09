@@ -20,6 +20,7 @@ from pathlib import Path
 
 from ..novelty import similarity
 from ..output.keyboard import KeyPressError, hold
+from . import tts
 from .audio import com_apartment, loopback_missing
 
 # The Windows speech engine (System.Speech) is reached through PowerShell so the frozen exe
@@ -43,8 +44,20 @@ Add-Type -AssemblyName System.Speech
 def speaking_missing() -> str:
     """Why the bot cannot talk here, or empty when it can."""
     if sys.platform != "win32":
-        return "talking uses the Windows speech engine, so it only works on Windows"
+        return "talking holds a key and plays into a Windows audio device, so it only works on Windows"
     return loopback_missing()
+
+
+def uses_windows_voice(voice: str) -> bool:
+    """Whether `speak_voice` names a Windows System.Speech voice ("windows:Microsoft Zira Desktop")."""
+    return voice.startswith(tts.WINDOWS_PREFIX)
+
+
+def render(text: str, voice: str = "", rate: int = 0) -> tuple[list[float], int]:
+    """Samples + rate for `text`: a natural Piper voice by default, Windows' own when asked for."""
+    if uses_windows_voice(voice) or (tts.piper_missing() and sys.platform == "win32"):
+        return wav_samples(synthesise(text, voice.removeprefix(tts.WINDOWS_PREFIX), rate))
+    return tts.synthesise(text, voice or tts.DEFAULT_VOICE, rate)
 
 
 def installed_voices() -> list[str]:
@@ -174,7 +187,7 @@ class Speaker:
         return True, "spoken"
 
     def _speak(self, text: str) -> None:
-        samples, rate = wav_samples(synthesise(text, self.voice, self.rate))
+        samples, rate = render(text, self.voice, self.rate)
         with hold(self.talk_key):
             time.sleep(self.lead_seconds)
             play(samples, rate, self.device)
@@ -188,4 +201,5 @@ class Speaker:
             "speak_error": self.last_error,
             "speak_supported": not speaking_missing(),
             "speak_unsupported_reason": speaking_missing(),
+            "tts": tts.status(),
         }

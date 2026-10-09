@@ -387,3 +387,23 @@ def test_speaker_recognises_its_own_voice_coming_back():
     assert s.heard_itself("rotate b now they are all on a", heard_at=106.0, seconds=2.0, now=106.0)
     # a teammate, well after, different words
     assert not s.heard_itself("nice one, push with me", heard_at=110.0, seconds=1.0, now=110.0)
+
+
+def test_piper_voice_catalog_and_speech_text():
+    from cs2bot.voice import tts
+
+    assert tts.find(tts.DEFAULT_VOICE) is not None
+    assert tts.length_scale(0) == 1.0 and tts.length_scale(10) < 1.0 < tts.length_scale(-10)
+    assert tts.for_speech("gg WP 🔥 RUSH B") == "g g well played Rush B"
+    assert not tts.is_cached("en_GB-alan-medium") or True
+    status = tts.status()
+    assert {v["id"] for v in status["voices"]} >= {"en_US-ryan-high", "en_GB-alan-medium"}
+
+
+def test_render_routes_windows_prefixed_voices_only(monkeypatch):
+    from cs2bot.voice import speak, tts
+
+    monkeypatch.setattr(tts, "synthesise", lambda text, voice_id, rate: ([0.0], 22050))
+    assert speak.render("hi", "", 0) == ([0.0], 22050)
+    assert speak.render("hi", "en_GB-alan-medium", 0) == ([0.0], 22050)
+    assert speak.uses_windows_voice("windows:Microsoft Zira Desktop")

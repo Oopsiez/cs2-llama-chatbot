@@ -29,9 +29,9 @@ from ..parser import parse_chat_line
 from ..persona import PRESETS, build_system_prompt
 from ..rules import should_reply
 from ..snitch import where
-from ..voice import cable
+from ..voice import cable, tts
 from ..voice.audio import output_devices
-from ..voice.speak import installed_voices
+from ..voice.speak import installed_voices, play, render
 
 STATIC_DIR = Path(__file__).parent / "static"
 # Long enough for the browser to receive the answer before the process goes away.
@@ -287,8 +287,33 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     @app.get("/api/voice/voices")
     async def voice_voices() -> dict[str, Any]:
-        """The Windows voices the bot can talk with."""
-        return {"voices": await asyncio.to_thread(installed_voices)}
+        """The natural (Piper) voices and the Windows voices the bot can talk with."""
+        return {"voices": await asyncio.to_thread(installed_voices), **tts.status()}
+
+    @app.post("/api/voice/voices/fetch")
+    async def voice_fetch(payload: dict[str, Any]) -> dict[str, Any]:
+        """Download a Piper voice now instead of on the first reply."""
+        voice_id = str(payload.get("voice") or tts.DEFAULT_VOICE)
+        if tts.find(voice_id) is None:
+            return {"ok": False, "detail": f"unknown voice {voice_id}", **tts.status()}
+        try:
+            await asyncio.to_thread(tts.download, voice_id)
+        except OSError as exc:
+            return {"ok": False, "detail": f"download failed: {exc}", **tts.status()}
+        return {"ok": True, "detail": f"{voice_id} ready", **tts.status()}
+
+    @app.post("/api/voice/preview")
+    async def voice_preview(payload: dict[str, Any]) -> dict[str, Any]:
+        """Play a line on the default speakers - no push-to-talk, no cable - to audition a voice."""
+        text = str(payload.get("text") or "rotate B now, they are all on A").strip()
+        voice_id = str(payload.get("voice") or engine.config.voice.speak_voice)
+        rate = int(payload.get("rate") or engine.config.voice.speak_rate)
+        try:
+            samples, rate_hz = await asyncio.to_thread(render, text, voice_id, rate)
+            await asyncio.to_thread(play, samples, rate_hz, "")
+        except Exception as exc:
+            return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+        return {"ok": True, "detail": f"played {len(samples) / rate_hz:.1f}s"}
 
     @app.post("/api/voice/speak")
     async def voice_speak(payload: dict[str, Any]) -> dict[str, Any]:

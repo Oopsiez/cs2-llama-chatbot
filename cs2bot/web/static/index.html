@@ -436,7 +436,9 @@
           <select id="voice-speak-device"></select>
         </label>
         <label>Push-to-talk key <input type="text" id="voice-talk-key" maxlength="1" style="max-width:80px" /></label>
-        <label>Voice <select id="voice-speak-voice"><option value="">Windows default</option></select></label>
+        <label>Voice <span class="hint">natural voices download once (60-115 MB)</span>
+          <select id="voice-speak-voice"></select>
+        </label>
         <label>Speed <span class="hint">-10 slow … 10 fast</span>
           <input type="number" id="voice-speak-rate" min="-10" max="10" step="1" />
         </label>
@@ -444,6 +446,7 @@
       <div class="actions">
         <button class="action primary" id="voice-cable-install">Install the virtual microphone (VB-Cable)</button>
         <button class="action" id="voice-cable-use">Use CABLE Input</button>
+        <button class="action" id="voice-preview">Preview voice on my speakers</button>
         <button class="action" id="voice-speak-test">Say "mic check" now</button>
       </div>
       <div class="result" id="voice-cable-status">—</div>

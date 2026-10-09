@@ -19,7 +19,14 @@ NAME = "CS2 Chatbot"
 # Voice comms: native libraries and data files PyInstaller cannot infer from the imports.
 # `soundcard` reads C headers shipped beside it, `faster_whisper` carries the voice-detection
 # model, and `ctranslate2`/`onnxruntime` are DLLs loaded by name at runtime.
-VOICE_PACKAGES = ("soundcard", "faster_whisper", "ctranslate2", "onnxruntime", "av")
+VOICE_PACKAGES = (
+    "soundcard",
+    "faster_whisper",
+    "ctranslate2",
+    "onnxruntime",
+    "av",
+    "piper",  # natural voices; --collect-all brings espeak-ng-data and the phonemiser .pyd along
+)
 
 
 def installed(package: str) -> bool:

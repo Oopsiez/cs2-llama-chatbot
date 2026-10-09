@@ -523,6 +523,19 @@ function bindActions() {
     await renderVoice();
     $("voice-cable-status").textContent = "playing into CABLE Input - now set CS2's microphone to CABLE Output and save";
   });
+  $("voice-preview").addEventListener("click", async () => {
+    const voice = $("voice-speak-voice").value;
+    $("voice-speak-output").textContent = "fetching the voice if needed, then playing on your speakers…";
+    const body = await (
+      await fetch("/api/voice/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voice, rate: Number($("voice-speak-rate").value || 0) }),
+      })
+    ).json();
+    $("voice-speak-output").textContent = body.detail;
+    await renderVoice();
+  });
   $("voice-speak-test").addEventListener("click", async () => {
     $("voice-speak-output").textContent = "speaking…";
     const response = await fetch("/api/voice/speak", {
@@ -674,10 +687,20 @@ async function renderVoice() {
       .join("");
   out.value = config.voice.speak_device;
   const voices = $("voice-speak-voice");
+  const tts = body.status.tts || { voices: [] };
+  const natural = tts.voices
+    .map((v) => {
+      const note = v.ready ? "" : v.downloading ? " (downloading…)" : ` (${v.size_mb} MB download)`;
+      return `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`;
+    })
+    .join("");
+  const windows = (body.voices || [])
+    .map((v) => `<option value="windows:${escapeHtml(v)}">${escapeHtml(v)} (Windows, robotic)</option>`)
+    .join("");
   voices.innerHTML =
-    '<option value="">Windows default</option>' +
-    (body.voices || []).map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
-  voices.value = config.voice.speak_voice;
+    `<optgroup label="Natural voices">${natural}</optgroup>` +
+    (windows ? `<optgroup label="Windows voices">${windows}</optgroup>` : "");
+  voices.value = config.voice.speak_voice || (tts.voices[0] ? tts.voices[0].id : "");
   const status = body.status;
   fetch("/api/voice/cable")
     .then((r) => r.json())
