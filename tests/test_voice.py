@@ -497,3 +497,11 @@ def test_hearing_cs2_falls_back_to_the_speakers_off_windows(monkeypatch):
     monkeypatch.setattr(audio, "blocks", lambda device_id="", block_seconds=0.05: iter([[0.0]]))
     assert list(audio.capture("", "cs2", notes.append)) == [[0.0]]
     assert notes and notes[0].startswith("hearing the whole PC")
+
+
+def test_the_player_hears_the_bot_too_only_when_it_talks_into_the_cable():
+    from cs2bot.voice import speak
+
+    assert speak.play_targets("cable-input", monitor=True) == ["cable-input", ""]
+    assert speak.play_targets("cable-input", monitor=False) == ["cable-input"]
+    assert speak.play_targets("", monitor=True) == [""]

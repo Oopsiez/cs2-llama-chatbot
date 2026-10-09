@@ -13,6 +13,7 @@ import io
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import wave
 from dataclasses import dataclass, field
@@ -121,14 +122,37 @@ def wav_samples(data: bytes) -> tuple[list[float], int]:
     return mono, rate
 
 
-def play(samples: list[float], rate: int, device_id: str = "") -> None:
-    """Play samples on an output device; blank means the default speakers."""
+def play_targets(device_id: str = "", monitor: bool = False) -> list[str]:
+    """Where a clip goes: the chosen device, plus the default speakers when the player wants
+    to hear it too. Blank already means the default speakers, so it is never played twice."""
+    if device_id and monitor:
+        return [device_id, ""]
+    return [device_id]
+
+
+def play(samples: list[float], rate: int, device_id: str = "", monitor: bool = False) -> None:
+    """Play samples on an output device; blank means the default speakers.
+
+    With `monitor`, the same clip also plays on the default speakers at the same time, so the
+    player hears what the bot is saying into the virtual microphone.
+    """
     import numpy as np
     import soundcard as sc
 
-    with com_apartment():
-        speaker = sc.default_speaker() if not device_id else sc.get_speaker(device_id)
-        speaker.play(np.asarray(samples, dtype="float32"), samplerate=rate)
+    data = np.asarray(samples, dtype="float32")
+
+    def one(target: str) -> None:
+        with com_apartment():
+            speaker = sc.default_speaker() if not target else sc.get_speaker(target)
+            speaker.play(data, samplerate=rate)
+
+    targets = play_targets(device_id, monitor)
+    extra = [threading.Thread(target=one, args=(t,), daemon=True) for t in targets[1:]]
+    for thread in extra:
+        thread.start()
+    one(targets[0])
+    for thread in extra:
+        thread.join()
 
 
 @dataclass
@@ -136,6 +160,7 @@ class Speaker:
     """Talks over push-to-talk: synthesise, hold the key, play into the virtual mic, release."""
 
     device: str = ""
+    monitor: bool = True  # also play on the default speakers so the player hears it
     talk_key: str = "k"
     engine: str = "piper"
     voice: str = ""
@@ -196,7 +221,7 @@ class Speaker:
         samples, rate = render(text, self.voice, self.rate, self.engine)
         with hold(self.talk_key):
             time.sleep(self.lead_seconds)
-            play(samples, rate, self.device)
+            play(samples, rate, self.device, self.monitor)
             time.sleep(0.15)
 
     def status(self) -> dict[str, object]:

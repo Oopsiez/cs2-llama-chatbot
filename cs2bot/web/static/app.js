@@ -131,6 +131,7 @@ const BINDINGS = {
   "voice-device": ["voice.device", "text"],
   "voice-reply-with": ["voice.reply_with", "text"],
   "voice-speak-device": ["voice.speak_device", "text"],
+  "voice-speak-monitor": ["voice.speak_monitor", "bool"],
   "voice-talk-key": ["voice.talk_key", "text"],
   "voice-capture": ["voice.capture", "text"],
   "voice-speak-voice": ["voice.speak_voice", "text"],
