@@ -114,6 +114,7 @@ class Engine:
         self.last_error: str = ""
         self.llm_status: str = "not checked"
         self._backend: LLMBackend | None = None
+        self._speech_backend: LLMBackend | None = None
         self._sender: ChatSender | None = None
         self._tailer: LogTailer | None = None
         self._voice: VoiceListener | None = None
@@ -261,6 +262,31 @@ class Engine:
         return self._backend
 
     @property
+    def speech_backend(self) -> LLMBackend:
+        """The model behind spoken lines: a second Ollama tag if one is set, else the chat model."""
+        llm = self.config.llm
+        if (
+            llm.backend != "ollama"
+            or not llm.speech_ollama_model
+            or llm.speech_ollama_model == llm.ollama_model
+        ):
+            return self.backend
+        if self._speech_backend is None:
+            self._speech_backend = build_backend(llm, ollama_model=llm.speech_ollama_model)
+        return self._speech_backend
+
+    @property
+    def speech_config(self) -> AppConfig:
+        """The settings spoken lines are generated with: the speech persona swapped in if it is separate."""
+        if self.config.speech_same_persona:
+            return self.config
+        return self.config.model_copy(update={"persona": self.config.speech_persona})
+
+    @property
+    def speech_differs(self) -> bool:
+        return self.speech_config is not self.config or self.speech_backend is not self.backend
+
+    @property
     def sender(self) -> ChatSender:
         if self._sender is None:
             self._sender = build_sender(self.config)
@@ -273,7 +299,10 @@ class Engine:
         if config.llm != old.llm:
             if self._backend is not None:
                 await self._backend.aclose()
+            if self._speech_backend is not None:
+                await self._speech_backend.aclose()
             self._backend = None
+            self._speech_backend = None
             self.llm_status = "not checked"
             self.warm_llm()
         if config.game != old.game or config.behavior != old.behavior:
@@ -321,6 +350,8 @@ class Engine:
         self.bus.publish("status", self.status())
         try:
             self.llm_status = await self.backend.warm()
+            if self.speech_backend is not self.backend:
+                self.llm_status += f"; speech: {await self.speech_backend.warm()}"
         except LLMError as exc:
             self.llm_status = f"error: {exc}"
         except Exception as exc:  # a bad model file must not take the loop down
@@ -416,14 +447,18 @@ class Engine:
         self.bus.publish("spoken" if spoken else "error", {"text": text, "detail": detail})
         return spoken, detail
 
-    async def deliver(self, text: str, message: ChatMessage) -> tuple[bool, str]:
-        """Send a reply the way the settings say: typed, spoken, or both."""
+    async def deliver(self, text: str, message: ChatMessage, spoken_text: str = "") -> tuple[bool, str]:
+        """Send a reply the way the settings say: typed, spoken, or both.
+
+        `spoken_text` is what the voice says when it was written separately (speech persona or
+        speech model); blank means it says the typed line.
+        """
         typed, spoken = self._reply_modes(message)
         delivered, detail = (False, "")
         if typed:
             delivered, detail = await self.sender.send(text, team_only=self._team_only(message))
         if spoken:
-            said, said_detail = await self.speak(text)
+            said, said_detail = await self.speak(spoken_text or text)
             delivered = delivered or said
             detail = f"{detail}, {said_detail}".strip(", ") if typed else said_detail
         return delivered, detail
@@ -584,8 +619,12 @@ class Engine:
         else:
             self.last_reply_at = now
         started = time.perf_counter()
+        typed, spoken = self._reply_modes(message)
+        spoken_text = ""
         try:
-            text = await self.generate_reply(message, local_state)
+            text = await self.generate_reply(message, local_state, spoken=spoken and not typed)
+            if typed and spoken and self.speech_differs:
+                spoken_text = await self.generate_reply(message, local_state, spoken=True)
         except LLMError as exc:
             self.last_error = str(exc)
             self.bus.publish("error", {"message": str(exc)})
@@ -601,7 +640,7 @@ class Engine:
         self.echo.remember(text)
         await self._pause_before_sending(text, elapsed=time.perf_counter() - started)
 
-        delivered, detail = await self.deliver(text, message)
+        delivered, detail = await self.deliver(text, message, spoken_text)
         reply = BotReply(
             in_reply_to=message,
             text=text,
@@ -1020,11 +1059,16 @@ class Engine:
             return True
         return bool(message.sender) and self.roster.knows(message.sender)
 
-    async def generate_reply(self, message: ChatMessage, local_state: LifeState) -> str:
-        """Generate a reply, retrying while it echoes something the bot recently said."""
-        behavior = self.config.behavior
+    async def generate_reply(self, message: ChatMessage, local_state: LifeState, spoken: bool = False) -> str:
+        """Generate a reply, retrying while it echoes something the bot recently said.
+
+        `spoken` writes it for the voice: the speech persona and speech model, when those are separate.
+        """
+        config = self.speech_config if spoken else self.config
+        backend = self.speech_backend if spoken else self.backend
+        behavior = config.behavior
         turns = build_turns(
-            self.config,
+            config,
             self.game_state.player,
             local_state,
             message,
@@ -1041,11 +1085,11 @@ class Engine:
             if attempt:
                 # Nudge it out of the groove it just fell into.
                 params = replace(params, temperature=min(1.6, params.temperature + 0.15 * attempt))
-            raw = await self.backend.generate(turns, params)
+            raw = await backend.generate(turns, params)
             text = humanize(
                 raw,
                 literacy=behavior.literacy,
-                max_chars=self.config.persona.max_reply_chars,
+                max_chars=config.persona.max_reply_chars,
                 seed=self._random.randrange(2**32),
             )
             if not behavior.avoid_repeats or not text:

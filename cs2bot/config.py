@@ -53,6 +53,7 @@ class LLMSettings(BaseModel):
     n_threads: int = 0  # 0 -> half the cores, so the game keeps the other half
     request_timeout: float = 30.0
     cpu_only: bool = False  # keep the model off the graphics card entirely (saves VRAM for CS2)
+    speech_ollama_model: str = ""  # Ollama tag used for spoken lines; blank -> the chat model
     warm_on_start: bool = True  # load the model while you are in the menu, not on the first reply
 
 
@@ -310,6 +311,8 @@ class AppConfig(BaseModel):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     persona: PersonaSettings = Field(default_factory=PersonaSettings)
+    speech_same_persona: bool = True  # spoken lines use `persona`; off -> `speech_persona`
+    speech_persona: PersonaSettings = Field(default_factory=PersonaSettings)
     behavior: BehaviorSettings = Field(default_factory=BehaviorSettings)
     teammates: TeammateSettings = Field(default_factory=TeammateSettings)
     dead_alive: DeadAliveSettings = Field(default_factory=DeadAliveSettings)

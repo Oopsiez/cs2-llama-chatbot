@@ -93,6 +93,19 @@
         <button class="action" id="persona-delete">Delete</button>
         <span class="note" id="persona-note"></span>
       </div>
+      <h3>Speech personality</h3>
+      <label class="check">
+        <input type="checkbox" id="speech-same-persona" />
+        <span>Keep speech and chat personalities the same
+          <small>Untick to give the voice its own personality; typed chat keeps the one above.</small></span>
+      </label>
+      <div id="speech-persona-block">
+        <label>Speech persona name<input type="text" id="speech-persona-name" /></label>
+        <label>Who the voice is<textarea id="speech-persona-description" rows="4"></textarea></label>
+        <label>Speech style rules<textarea id="speech-persona-style" rows="2"></textarea></label>
+        <label>Speech custom prompt<textarea id="speech-persona-extra" rows="2"></textarea></label>
+        <label class="check"><input type="checkbox" id="speech-persona-game-aware" /><span>Knows it is in a CS2 match</span></label>
+      </div>
       <h3>Teammates</h3>
       <p class="note">
         People who have spoken in team chat or on voice count as teammates. Decide how the bot
@@ -222,6 +235,12 @@
         <button class="action" id="refresh-models">What can this machine run?</button>
       </div>
       <div id="model-picks" class="picks"></div>
+      <h3>Speech model</h3>
+      <p class="hint">The model that writes what the voice says. Two 8B models do not both fit an 8GB card,
+        so Ollama swaps them in and out - a few seconds extra on each switch. Leave on "same as chat" to avoid that.</p>
+      <label>Spoken lines are written by
+        <select id="speech-model"><option value="">Same as the chat model</option></select>
+      </label>
       <div class="divider"></div>
       <label>Backend
         <select id="llm-backend">

@@ -435,3 +435,21 @@ def test_ollama_gpu_layers_follow_the_placement():
     assert ollama_gpu_layers(LLMSettings(cpu_only=True)) == 0
     assert ollama_gpu_layers(LLMSettings(gpu_auto=False, n_gpu_layers=12)) == 12
     assert ollama_gpu_layers(LLMSettings()) is None
+
+
+def test_speech_persona_and_model_are_separate_only_when_asked():
+    from cs2bot.config import AppConfig, LLMSettings, PersonaSettings
+    from cs2bot.engine import Engine
+
+    config = AppConfig(llm=LLMSettings(backend="ollama", ollama_model="a", speech_ollama_model="b"))
+    engine = Engine(config)
+    assert engine.speech_config is engine.config
+    assert engine.speech_backend is not engine.backend
+    assert engine.speech_backend.model == "b"  # type: ignore[attr-defined]
+
+    config = AppConfig(speech_same_persona=False, speech_persona=PersonaSettings(name="Voice"))
+    engine = Engine(config)
+    assert engine.speech_config.persona.name == "Voice"
+    assert engine.config.persona.name != "Voice"
+    assert engine.speech_backend is engine.backend
+    assert engine.speech_differs

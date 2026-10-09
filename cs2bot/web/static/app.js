@@ -14,6 +14,13 @@ const BINDINGS = {
   "persona-banned": ["persona.banned_words", "list"],
   "persona-maxchars": ["persona.max_reply_chars", "int"],
   "persona-game-aware": ["persona.game_aware", "bool"],
+  "speech-same-persona": ["speech_same_persona", "bool"],
+  "speech-persona-name": ["speech_persona.name", "text"],
+  "speech-persona-description": ["speech_persona.description", "text"],
+  "speech-persona-style": ["speech_persona.style_notes", "text"],
+  "speech-persona-extra": ["speech_persona.extra_instructions", "text"],
+  "speech-persona-game-aware": ["speech_persona.game_aware", "bool"],
+  "speech-model": ["llm.speech_ollama_model", "text"],
   "teammates-stance": ["teammates.stance", "text"],
   "teammates-custom": ["teammates.custom", "text"],
 
@@ -178,11 +185,16 @@ function writeField(el, kind, value) {
 }
 
 function renderConfig() {
+  const speechModel = config.llm.speech_ollama_model;
+  if (speechModel && ![...$("speech-model").options].some((o) => o.value === speechModel)) {
+    $("speech-model").insertAdjacentHTML("beforeend", `<option value="${escapeHtml(speechModel)}">${escapeHtml(speechModel)}</option>`);
+  }
   for (const [id, [path, kind]] of Object.entries(BINDINGS)) {
     const el = $(id);
     if (el) writeField(el, kind, getPath(config, path));
   }
   renderPlacement();
+  $("speech-persona-block").style.display = config.speech_same_persona ? "none" : "";
   $("reply-all").checked = config.behavior.reply_channels.includes("all");
   $("reply-team").checked = config.behavior.reply_channels.includes("team");
   renderDials();
@@ -460,6 +472,9 @@ function bindActions() {
   });
 
   $("refresh-models").addEventListener("click", renderModels);
+  $("speech-same-persona").addEventListener("change", () => {
+    $("speech-persona-block").style.display = $("speech-same-persona").checked ? "none" : "";
+  });
   $("refresh-gpu").addEventListener("click", renderGpu);
 
   $("use-remote").addEventListener("click", async () => {
@@ -831,6 +846,16 @@ async function renderModels() {
     : "no GPU memory reported - the model would run on the CPU";
   const ram = hw.ram_gb ? `${hw.ram_gb}GB system RAM` : "system RAM unknown";
   $("hardware-note").textContent = `${card}\n${ram}`;
+  const chosen = config.llm.speech_ollama_model;
+  $("speech-model").innerHTML =
+    `<option value="">Same as the chat model</option>` +
+    body.models
+      .map((m) => `<option value="${escapeHtml(m.ollama)}">${escapeHtml(m.label)}</option>`)
+      .join("");
+  if (chosen && ![...$("speech-model").options].some((o) => o.value === chosen)) {
+    $("speech-model").insertAdjacentHTML("beforeend", `<option value="${escapeHtml(chosen)}">${escapeHtml(chosen)}</option>`);
+  }
+  $("speech-model").value = chosen;
   $("model-picks").innerHTML = body.models
     .map((model) => {
       const tag = model.key === body.recommended ? " · best fit here" : "";

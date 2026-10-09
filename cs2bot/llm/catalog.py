@@ -93,6 +93,50 @@ CHOICES: tuple[ModelChoice, ...] = (
         ram_gb=16.0,
         note="The default: best banter, says what it is told to. Wants an 8GB card - fine on a 2080 Super.",
     ),
+    ModelChoice(
+        key="lexi-v2-8b",
+        label="Llama 3.1 8B Lexi Uncensored V2 (Q4_K_M)",
+        ollama="hf.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2-GGUF:Q4_K_M",
+        gguf="Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2-GGUF",
+        params="8B",
+        download_gb=4.9,
+        vram_gb=7.0,
+        ram_gb=16.0,
+        note="Uncensored. The newer Lexi: same attitude, follows persona orders more closely.",
+    ),
+    ModelChoice(
+        key="stheno-8b",
+        label="L3 8B Stheno v3.2 (Q4_K_M)",
+        ollama="hf.co/bartowski/L3-8B-Stheno-v3.2-GGUF:Q4_K_M",
+        gguf="bartowski/L3-8B-Stheno-v3.2-GGUF",
+        params="8B",
+        download_gb=4.9,
+        vram_gb=7.0,
+        ram_gb=16.0,
+        note="Uncensored. Most natural spoken-style dialogue of the lot - the pick for the voice.",
+    ),
+    ModelChoice(
+        key="dolphin3-8b",
+        label="Dolphin 3.0 Llama 3.1 8B (Q4_K_M)",
+        ollama="hf.co/dphn/Dolphin3.0-Llama3.1-8B-GGUF:Q4_K_M",
+        gguf="dphn/Dolphin3.0-Llama3.1-8B-GGUF",
+        params="8B",
+        download_gb=4.9,
+        vram_gb=7.0,
+        ram_gb=16.0,
+        note="Uncensored. Chatty and obedient to the system prompt.",
+    ),
+    ModelChoice(
+        key="darkidol-8b",
+        label="DarkIdol Llama 3.1 8B Uncensored 1.2 (Q4_K_M)",
+        ollama="hf.co/bartowski/DarkIdol-Llama-3.1-8B-Instruct-1.2-Uncensored-GGUF:Q4_K_M",
+        gguf="bartowski/DarkIdol-Llama-3.1-8B-Instruct-1.2-Uncensored-GGUF",
+        params="8B",
+        download_gb=4.9,
+        vram_gb=7.0,
+        ram_gb=16.0,
+        note="Uncensored. Roleplay-tuned: stays in character hardest.",
+    ),
 )
 
 FITS, TIGHT, CPU_ONLY, TOO_BIG, UNKNOWN = "fits", "tight", "cpu only", "too big", "unknown"
@@ -115,10 +159,11 @@ def verdict(choice: ModelChoice, hardware: Hardware) -> tuple[str, str]:
 
 def recommended(hardware: Hardware) -> str:
     """The biggest model this machine can hold on the GPU, or the smallest one otherwise."""
-    for choice in reversed(CHOICES):
-        if verdict(choice, hardware)[0] == FITS:
-            return choice.key
-    return CHOICES[0].key
+    best: ModelChoice | None = None
+    for choice in CHOICES:
+        if verdict(choice, hardware)[0] == FITS and (best is None or choice.vram_gb > best.vram_gb):
+            best = choice  # a tie keeps the earlier one, so the default wins over its alternatives
+    return (best or CHOICES[0]).key
 
 
 def survey(hardware: Hardware) -> list[dict[str, str | float]]:
