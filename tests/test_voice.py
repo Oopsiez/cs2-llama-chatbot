@@ -587,11 +587,11 @@ def test_hearing_one_program_switches_to_it_the_moment_it_starts(monkeypatch):
 
     stream = audio.capture("", "cs2", notes.append, "cs2.exe")
     assert next(stream) == [0.0]  # speakers while the game is not running
-    assert notes[-1].startswith("hearing the whole PC: cs2.exe is not running")
+    assert notes[-1].startswith("hearing the whole PC via the default speakers: cs2.exe is not running")
     assert next(stream) == [1.0]  # the game appeared on the re-check
     assert notes[-1] == "hearing cs2.exe only"
     assert next(stream) == [0.0]  # and back to the speakers when its stream ended
-    assert notes[-1] == "hearing the whole PC: cs2.exe stopped"
+    assert notes[-1] == "hearing the whole PC via the default speakers: cs2.exe stopped"
 
 
 def test_kokoro_offers_every_english_voice_in_quality_tiers():
@@ -690,9 +690,10 @@ def test_whole_pc_capture_tries_to_leave_the_bot_out(monkeypatch):
     monkeypatch.setattr(process_loopback, "unavailable", lambda: "")
     monkeypatch.setattr(process_loopback, "blocks_except_me", lambda: iter([[0.5]]))
     monkeypatch.setattr(audio, "blocks", lambda device_id="": iter([[0.1]]))
+    monkeypatch.setattr(audio, "device_name", lambda device_id: "Headset (Realtek)")
     assert list(audio.capture(scope="pc", on_note=notes.append)) == [[0.5], [0.1]]
     assert notes[0] == "hearing the whole PC except the bot's own voice"
-    assert notes[1].startswith("hearing the whole PC: ")
+    assert notes[1].startswith("hearing the whole PC via Headset (Realtek): ")
 
 
 def test_leaving_the_bot_out_needs_windows():

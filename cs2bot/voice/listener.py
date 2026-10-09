@@ -33,6 +33,7 @@ class Utterance:
     text: str
     seconds: float
     heard_at: float = field(default_factory=time.time)
+    source: str = ""  # what was being captured when it was heard (the listener's note)
 
 
 BlockSource = Callable[[], Iterator[list[float]]]
@@ -193,7 +194,14 @@ class VoiceListener:
             self.last_text = text
             self.last_heard_at = time.time()
             self.last_audio = list(samples)
-            run.heard.put(Utterance(text=text, seconds=len(samples) / audio.SAMPLE_RATE, heard_at=ended_at))
+            run.heard.put(
+                Utterance(
+                    text=text,
+                    seconds=len(samples) / audio.SAMPLE_RATE,
+                    heard_at=ended_at,
+                    source=self.note,
+                )
+            )
 
     def _model(self) -> Transcriber:
         if self._transcriber is None:

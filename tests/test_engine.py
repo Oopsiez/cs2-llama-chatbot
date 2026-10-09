@@ -283,7 +283,10 @@ def build_voice_engine(**overrides) -> Engine:
 @pytest.mark.asyncio
 async def test_a_transcript_is_answered_in_team_chat():
     engine = build_voice_engine()
-    reply = await engine.handle_voice("they are pushing b, we need help")
+    notes: list[str] = []
+    engine.log_note = notes.append  # type: ignore[method-assign]
+    reply = await engine.handle_voice("they are pushing b, we need help", "hearing cs2.exe only")
+    assert notes[0] == "heard [cs2.exe only]: they are pushing b, we need help"
     assert reply is not None and reply.delivered
     assert engine._sender.sent[-1][1] is True  # team_only
 

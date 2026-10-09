@@ -553,7 +553,7 @@ class Engine:
                 self.log_note(f"ignored my own voice: {utterance.text}")
                 self.bus.publish("skipped", {"sender": "voice", "reason": "that was the bot's own voice"})
                 continue
-            await self.handle_voice(utterance.text)
+            await self.handle_voice(utterance.text, utterance.source)
 
     @property
     def listens_to_voice(self) -> bool:
@@ -588,7 +588,7 @@ class Engine:
             self.pull_status = f"error: {exc}"
         self.bus.publish("status", self.status())
 
-    async def handle_voice(self, text: str) -> BotReply | None:
+    async def handle_voice(self, text: str, source: str = "") -> BotReply | None:
         """Treat a transcript as if it had been typed in team chat.
 
         Everything downstream - persona, strats, orders, novelty - is the same machinery the
@@ -596,7 +596,8 @@ class Engine:
         answer in all chat would be talking to the wrong five people.
         """
         text = " ".join(text.split())
-        self.log_note(f"heard: {text}")
+        where = source.removeprefix("hearing ").strip()
+        self.log_note(f"heard [{where}]: {text}" if where else f"heard: {text}")
         if len(text.split()) < self.config.voice.min_words:
             return None
         return await self.handle_message(

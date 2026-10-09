@@ -34,6 +34,8 @@ class _Recorder(Protocol):
 
 
 class _Microphone(Protocol):
+    name: str
+
     def recorder(self, samplerate: int, channels: int) -> AbstractContextManager[_Recorder]: ...
 
 
@@ -88,6 +90,14 @@ def output_devices_report() -> tuple[list[Device], str]:
     if not devices:
         return [], note or "Windows reports no output devices"
     return devices, note
+
+
+def device_name(device_id: str) -> str:
+    """The speaker the listener records, by name; 'the default speakers' if that cannot be read."""
+    try:
+        return str(_microphone(device_id).name)
+    except Exception:
+        return "the default speakers"
 
 
 def _microphone(device_id: str) -> _Microphone:
@@ -146,6 +156,7 @@ def capture(
     from . import process_loopback
 
     reason = process_loopback.unavailable()
+    speakers = f"the whole PC via {device_name(device_id)}"
     if scope != "cs2":
         if not reason:
             note("hearing the whole PC except the bot's own voice")
@@ -153,11 +164,11 @@ def capture(
                 yield from process_loopback.blocks_except_me()
             except Exception as exc:
                 reason = f"could not leave out the bot's own voice: {exc}"
-        note(f"hearing the whole PC: {reason}")
+        note(f"hearing {speakers}: {reason}")
         yield from blocks(device_id)
         return
     if reason:
-        note(f"hearing the whole PC: {reason}")
+        note(f"hearing {speakers}: {reason}")
         yield from blocks(device_id)
         return
     while True:
@@ -171,7 +182,7 @@ def capture(
                 reason = f"{process} stopped"
         else:
             reason = f"{process} is not running - listening to the speakers until it is"
-        note(f"hearing the whole PC: {reason}")
+        note(f"hearing {speakers}: {reason}")
         yield from speakers_until(device_id, lambda: bool(process_loopback.find_process(process)))
 
 
