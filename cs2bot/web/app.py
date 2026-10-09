@@ -365,10 +365,25 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     @app.post("/api/voice/engines/install")
     async def voice_engine_install(payload: dict[str, Any]) -> dict[str, Any]:
-        """Download one of the Hugging Face voice engines now instead of on the first line."""
-        from ..voice import engines
+        """Download a voice engine (or a Piper voice): nothing is fetched on the first line any more."""
+        from ..voice import engines, kokoro, tts
 
-        found = engines.find(str(payload.get("engine") or ""))
+        wanted = str(payload.get("engine") or "")
+        if wanted == "kokoro":
+            try:
+                await asyncio.to_thread(kokoro.download)
+            except Exception as exc:
+                return {"ok": False, "detail": f"download failed: {exc}", "engines": engines.status()}
+            return {"ok": True, "detail": "Kokoro installed", "engines": engines.status()}
+        if wanted == "piper":
+            voice = tts.find(str(payload.get("voice") or "")) or tts.find(tts.DEFAULT_VOICE)
+            assert voice is not None
+            try:
+                await asyncio.to_thread(tts.download, voice.id)
+            except Exception as exc:
+                return {"ok": False, "detail": f"download failed: {exc}", "engines": engines.status()}
+            return {"ok": True, "detail": f"Piper voice {voice.id} installed", "engines": engines.status()}
+        found = engines.find(wanted)
         if found is None:
             return {"ok": False, "detail": "unknown voice engine", "engines": engines.status()}
         if engines.downloading.get(found.id):

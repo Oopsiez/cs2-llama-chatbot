@@ -160,7 +160,7 @@ def for_speech(text: str) -> str:
 
 
 def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple[list[float], int]:
-    """Mono float samples and sample rate for `text`, downloading the voice on first use.
+    """Mono float samples and sample rate for `text`; the voice must be installed first.
 
     Each line gets a little random variation in pace and prosody so twenty replies do not come
     out with the exact same cadence - the thing that gives synthetic speech away first.
@@ -170,7 +170,7 @@ def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple
     voice = find(voice_id) or find(DEFAULT_VOICE)
     assert voice is not None
     if not is_cached(voice.id):
-        download(voice.id)
+        raise RuntimeError(f"Piper voice {voice.id} is not installed - press Install on the Speech tab")
     with _lock:
         model = _loaded.get(voice.id)
         if model is None:

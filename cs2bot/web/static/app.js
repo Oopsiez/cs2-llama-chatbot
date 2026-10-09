@@ -658,7 +658,7 @@ function bindActions() {
       await fetch("/api/voice/engines/install", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ engine: id }),
+        body: JSON.stringify({ engine: id, voice: $("voice-speak-voice").value }),
       })
     ).json();
     $("voice-engine-install").disabled = false;
@@ -689,6 +689,7 @@ function bindActions() {
     if (url) sendClone({ url });
   });
   $("voice-clone-last").addEventListener("click", () => sendClone({ source: "last" }));
+  $("voice-speak-voice").addEventListener("change", () => renderVoice());
   $("voice-speak-engine").addEventListener("change", async () => {
     config.voice.speak_engine = $("voice-speak-engine").value;
     config.voice.speak_voice = "";
@@ -905,18 +906,21 @@ function renderEngineInstall(engine, status) {
   const button = $("voice-engine-install");
   const note = $("voice-engine-note");
   const kokoro = status.kokoro || {};
+  const wording = (ready, downloading, size) =>
+    ready ? "installed" : downloading ? "downloading…" : `not installed - ${size} MB, press Install`;
   if (engine === "kokoro") {
     button.hidden = kokoro.ready;
-    note.textContent = kokoro.ready ? "installed" : kokoro.downloading ? "downloading…" : `${kokoro.size_mb} MB, once`;
+    note.textContent = wording(kokoro.ready, kokoro.downloading, kokoro.size_mb);
+  } else if (engine === "piper") {
+    const voice = ((status.tts || {}).voices || []).find((v) => v.id === $("voice-speak-voice").value);
+    button.hidden = !voice || voice.ready;
+    note.textContent = voice ? wording(voice.ready, voice.downloading, voice.size_mb) : "";
+  } else if (engine === "windows") {
+    button.hidden = true;
+    note.textContent = "installed (part of Windows)";
   } else if (hf) {
     button.hidden = hf.ready;
-    note.textContent = hf.error
-      ? `install failed: ${hf.error}`
-      : hf.ready
-        ? "installed"
-        : hf.downloading
-          ? "downloading…"
-          : `${hf.size_mb} MB, once`;
+    note.textContent = hf.error ? `install failed: ${hf.error}` : wording(hf.ready, hf.downloading, hf.size_mb);
   } else {
     button.hidden = true;
     note.textContent = "";
@@ -962,19 +966,30 @@ async function renderVoice() {
   if (body.devices_error) $("voice-speak-output").textContent = `no output devices listed: ${body.devices_error}`;
   const voices = $("voice-speak-voice");
   const engine = config.voice.speak_engine || "kokoro";
-  $("voice-speak-engine").value = engine;
   const tts = body.status.tts || { voices: [] };
   const kokoro = body.status.kokoro || { voices: [] };
+  const engineReady = {
+    kokoro: kokoro.ready,
+    piper: tts.voices.some((v) => v.ready),
+    windows: true,
+    ...Object.fromEntries((body.status.engines || []).map((e) => [e.id, e.ready])),
+  };
+  for (const option of $("voice-speak-engine").options) {
+    option.textContent = `${option.textContent.replace(/ \[(installed|not installed)\]$/, "")} [${
+      engineReady[option.value] ? "installed" : "not installed"
+    }]`;
+  }
+  $("voice-speak-engine").value = engine;
   let options = "";
   if (engine === "piper")
     options = tts.voices
       .map((v) => {
-        const note = v.ready ? "" : v.downloading ? " (downloading…)" : ` (${v.size_mb} MB download)`;
+        const note = v.ready ? "" : v.downloading ? " (downloading…)" : ` (not installed, ${v.size_mb} MB)`;
         return `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`;
       })
       .join("");
   else if (engine === "kokoro") {
-    const note = kokoro.ready ? "" : kokoro.downloading ? " (downloading…)" : ` (${kokoro.size_mb} MB download, once)`;
+    const note = kokoro.ready ? "" : kokoro.downloading ? " (downloading…)" : " (not installed)";
     const tiers = [["best", "Best - most human"], ["better", "Better"], ["good", "Good"]];
     options = tiers
       .map(

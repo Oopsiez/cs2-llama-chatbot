@@ -727,3 +727,20 @@ def test_chatterbox_prompt_keeps_the_tokenizers_end_markers(monkeypatch):
     assert engine is not None
     monkeypatch.setitem(engines._sessions, "chatterbox/tokenizer", Tok())
     assert engines.text_ids(engine, "push A") == [1, 2, 3, 50256, 50256]
+
+
+def test_nothing_downloads_on_the_first_line(monkeypatch):
+    from cs2bot.voice import engines, kokoro, tts
+
+    for module in (engines, kokoro, tts):
+        monkeypatch.setattr(module, "download", lambda *a, **k: pytest.fail("downloaded on first use"))
+    monkeypatch.setattr(kokoro, "is_cached", lambda: False)
+    with pytest.raises(RuntimeError, match="press Install"):
+        kokoro.synthesise("hi")
+    monkeypatch.setattr(tts, "is_cached", lambda voice_id: False)
+    with pytest.raises(RuntimeError, match="press Install"):
+        tts.synthesise("hi")
+    monkeypatch.setattr(engines, "runtime_missing", lambda: "")
+    monkeypatch.setattr(engines, "is_cached", lambda engine: False)
+    with pytest.raises(RuntimeError, match="press Install"):
+        engines.synthesise("kitten", "hi")

@@ -199,7 +199,7 @@ def _style(engine: Engine, voice: str, dim: int) -> np.ndarray[Any, Any]:
 
 
 def synthesise(engine_id: str, text: str, voice: str = "", rate: int = 0) -> tuple[list[float], int]:
-    """Mono samples + rate from one of the Hugging Face engines; downloads it on first use."""
+    """Mono samples + rate from one of the Hugging Face engines; it must be installed first."""
     engine = find(engine_id)
     if engine is None:
         raise ValueError(f"unknown voice engine {engine_id}")
@@ -207,7 +207,8 @@ def synthesise(engine_id: str, text: str, voice: str = "", rate: int = 0) -> tup
     if missing:
         raise RuntimeError(missing)
     if not is_cached(engine):
-        download(engine)
+        name = engine.label.split(" - ")[0]
+        raise RuntimeError(f"{name} is not installed - press Install on the Speech tab")
     spoken = for_speech(text)
     with _lock:
         if engine.id == "supertonic":

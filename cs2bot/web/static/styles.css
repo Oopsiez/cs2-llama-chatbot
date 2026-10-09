@@ -165,6 +165,7 @@ input[type="text"], input[type="number"], select, textarea {
 textarea { resize: vertical; min-height: 68px; font-family: var(--mono); font-size: 12.5px; }
 input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
 
+[hidden] { display: none !important; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 
