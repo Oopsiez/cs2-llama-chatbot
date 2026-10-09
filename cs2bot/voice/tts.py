@@ -118,9 +118,17 @@ _EMOJI = re.compile(r"[\U0001F000-\U0001FFFF\u2600-\u27BF]")
 _SHOUT = re.compile(r"\b([A-Z]{2,})\b")
 
 
+_WRITTEN = re.compile(r"\*[^*]*\*|\([^)]*\)|^\s*[-*\u2022]\s+|\s+[-*\u2022]\s+(?=\w)", re.M)
+
+
 def for_speech(text: str) -> str:
     """Make chat text sound spoken: no emoji, no 'gg' spelled out as a word, no shouting caps."""
     text = _EMOJI.sub("", text)
+    text = _WRITTEN.sub("", text)
+    text = re.sub(r"^\s*(?:as an? (?:ai|teammate|language model)[^,.!]*[,.!]\s*)", "", text, flags=re.I)
+    text = re.sub(
+        r"\s*(?:let me know if[^.!?]*|hope (?:this|that) helps[^.!?]*)[.!?]?\s*$", "", text, flags=re.I
+    )
     text = re.sub(r"\s+", " ", text).strip()
     spoken = {
         "gg": "g g",

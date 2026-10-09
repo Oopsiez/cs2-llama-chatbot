@@ -194,6 +194,17 @@ _VOICE_NOTE = (
 )
 
 
+# Spoken lines go through a text-to-speech voice, so anything that reads like writing - lists,
+# emoji, "As an AI", tidy full sentences - sounds like a robot reading an essay.
+_SPOKEN_NOTE = (
+    "You are talking out loud on voice comms, not writing. Say it the way a real player would "
+    "say it mid-game: casual, contractions, short clauses, maybe a filler word, trailing off is "
+    "fine. No lists, no emoji, no quotes, no stage directions, no names at the start, no "
+    "'As an AI' or 'As your teammate', never explain yourself, never offer more help. "
+    "One or two spoken sentences at most."
+)
+
+
 def game_context(
     player: LocalPlayer,
     local_state: LifeState,
@@ -321,10 +332,13 @@ def build_system_prompt(
             "Offer a useful pointer even when nobody asked for one, based on what you can see "
             "in the chat and the game context."
         )
-    lines.append(
-        "Reply with the chat message only: no quotes, no name prefix, no narration, "
-        f"and {length_rule(persona.max_reply_chars)}."
-    )
+    if persona.max_reply_chars <= 0:
+        lines.append(_SPOKEN_NOTE)
+    else:
+        lines.append(
+            "Reply with the chat message only: no quotes, no name prefix, no narration, "
+            f"and {length_rule(persona.max_reply_chars)}."
+        )
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
     if aware:

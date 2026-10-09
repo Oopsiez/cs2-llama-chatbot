@@ -613,9 +613,9 @@ def test_hugging_face_engines_are_listed_with_voices_and_sizes():
 
 
 def test_clone_saves_a_trimmed_mono_reference(tmp_path, monkeypatch):
-    from cs2bot.voice import clone, tts
+    from cs2bot.voice import clone
 
-    monkeypatch.setattr(tts, "cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(clone, "cache_dir", lambda: tmp_path)
     assert clone.info()["ready"] is False
     assert clone.reference() is None
     import math
@@ -647,3 +647,10 @@ def test_clone_decodes_a_wav_upload(tmp_path, monkeypatch):
         handle.writeframes(pcm.tobytes())
     samples, rate = clone.decode(buffer.getvalue(), "clip.wav")
     assert rate == 8000 and len(samples) == 8000 and samples[0] == 0.0
+
+
+def test_for_speech_drops_written_filler():
+    from cs2bot.voice.tts import for_speech
+
+    assert for_speech("As an AI teammate, rotate B now. Let me know if you need more!") == "rotate B now."
+    assert for_speech("*sighs* push A (quietly) - go go") == "push A go go"

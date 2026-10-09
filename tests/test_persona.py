@@ -161,3 +161,13 @@ def test_unprompted_lines_are_asked_for_in_the_live_persona():
     turns = build_initiative_turns(config, LocalPlayer(), LifeState.ALIVE, "round_start", [])
     assert "friendly operator" in turns[0].content
     assert "new round" in turns[-1].content and "your team" in turns[-1].content
+
+
+def test_spoken_lines_get_the_talking_directive_instead_of_the_typed_one():
+    config = AppConfig()
+    config.persona.max_reply_chars = 0
+    spoken = prompt(config)
+    assert "talking out loud" in spoken and "chat message only" not in spoken
+    config.persona.max_reply_chars = 120
+    typed = prompt(config)
+    assert "chat message only" in typed and "talking out loud" not in typed
