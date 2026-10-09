@@ -182,10 +182,10 @@ def _session(engine: Engine, name: str) -> object:
 
 
 def _tokenizer(engine: Engine) -> object:
-    from tokenizers import Tokenizer
-
     key = f"{engine.id}/tokenizer"
     if key not in _sessions:
+        from tokenizers import Tokenizer
+
         _sessions[key] = Tokenizer.from_file(str(folder(engine) / "tokenizer.json"))
     return _sessions[key]
 
