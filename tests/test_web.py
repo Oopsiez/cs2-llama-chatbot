@@ -83,9 +83,7 @@ def test_parse_endpoint_reports_dead_players(client):
 
 
 def test_simulate_answers_from_either_side_of_the_grave(client):
-    dead_view = client.post(
-        "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "dead"}
-    ).json()
+    dead_view = client.post("/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "dead"}).json()
     assert dead_view["would_reply"] is True
 
     dead_sender = client.post(
@@ -94,9 +92,7 @@ def test_simulate_answers_from_either_side_of_the_grave(client):
     assert dead_sender["message"]["sender_state"] == "dead"
     assert dead_sender["would_reply"] is True
 
-    alive_view = client.post(
-        "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}
-    ).json()
+    alive_view = client.post("/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}).json()
     assert alive_view["would_reply"] is True
     assert alive_view["reply"]
 
@@ -104,8 +100,7 @@ def test_simulate_answers_from_either_side_of_the_grave(client):
 def test_gsi_endpoint_updates_local_state(client):
     payload = {
         "provider": {"steamid": "76561198000000000"},
-        "player": {"steamid": "76561198000000000", "name": "me", "team": "CT",
-                   "state": {"health": 0}},
+        "player": {"steamid": "76561198000000000", "name": "me", "team": "CT", "state": {"health": 0}},
         "map": {"name": "de_mirage", "phase": "live", "mode": "competitive"},
         "round": {"phase": "live"},
     }
@@ -168,6 +163,7 @@ def test_persona_save_and_delete(client):
     assert client.delete("/api/personas/Test Guy").status_code == 200
     assert client.get("/api/personas").json()["saved"] == {}
 
+
 def test_a_custom_prompt_survives_a_save_and_reload(client):
     persona = client.get("/api/personas").json()["current"]
     persona["extra_instructions"] = "you only speak in questions"
@@ -182,9 +178,9 @@ def test_custom_prompt_reaches_the_model(client):
     config["persona"]["extra_instructions"] = "you only speak in questions"
     assert client.put("/api/config", json=config).status_code == 200
 
-    prompt = client.post(
-        "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}
-    ).json()["prompt"]
+    prompt = client.post("/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}).json()[
+        "prompt"
+    ]
     assert "you only speak in questions" in prompt
 
 
@@ -225,9 +221,7 @@ def test_recording_and_deleting_a_callout(client):
         },
     )
     body = client.post("/api/callouts", json={"name": "banana"}).json()
-    assert body["callouts"] == [
-        {"name": "banana", "x": 100.0, "y": 200.0, "z": 30.0, "radius": 400.0}
-    ]
+    assert body["callouts"] == [{"name": "banana", "x": 100.0, "y": 200.0, "z": 30.0, "radius": 400.0}]
 
     listed = client.get("/api/callouts").json()
     assert listed["callout"] == "banana"
@@ -240,7 +234,7 @@ def test_recording_and_deleting_a_callout(client):
 
 def test_voice_tab_says_whether_it_can_listen_here(client):
     body = client.get("/api/voice").json()
-    assert set(body) == {"status", "devices", "settings"}
+    assert set(body) == {"status", "devices", "settings", "voices"}
     assert body["settings"]["enabled"] is False
     assert isinstance(body["status"]["supported"], bool)
     assert isinstance(body["devices"], list)

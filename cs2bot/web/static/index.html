@@ -189,6 +189,20 @@
         <label class="check"><input type="checkbox" id="reply-all" /><span>Reply in all chat</span></label>
         <label class="check"><input type="checkbox" id="reply-team" /><span>Reply in team chat</span></label>
       </div>
+      <div class="divider"></div>
+      <h3>Start conversations</h3>
+      <label class="check"><input type="checkbox" id="initiative-enabled" /><span>Talk on its own, without being spoken to
+        <small>A comment at round start, a word after dying, something when it goes quiet - in the current persona.</small></span></label>
+      <div class="grid">
+        <label>Where <select id="initiative-channel"><option value="team">Team chat</option><option value="all">All chat</option></select></label>
+        <label>At least this many seconds apart <input type="number" id="initiative-gap" min="10" step="5" /></label>
+        <label>How often it takes the chance <span class="hint">0-1</span><input type="number" id="initiative-chance" min="0" max="1" step="0.1" /></label>
+        <label>Speak when quiet for (seconds) <span class="hint">0 = never</span><input type="number" id="initiative-quiet" min="0" step="10" /></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="initiative-round" /><span>At round start</span></label>
+        <label class="check"><input type="checkbox" id="initiative-death" /><span>After it dies</span></label>
+      </div>
     </div>
 
     <div class="panel" data-panel="gpu">
@@ -406,6 +420,32 @@
         <label class="check"><input type="checkbox" id="voice-obey" /><span>Obey spoken orders
           <small>"strat?" or "bot quiet" said out loud counts the same as typed.</small></span></label>
       </div>
+      <h3>Talk back</h3>
+      <p class="hint">The bot can speak with the Windows voice into a virtual microphone while holding your push-to-talk key.
+        One-time setup: install <a href="https://vb-audio.com/Cable/" target="_blank" rel="noreferrer">VB-Audio Cable</a>,
+        pick <b>CABLE Input</b> below, and in CS2 → Settings → Audio set the microphone to <b>CABLE Output</b> with push-to-talk on.</p>
+      <div class="grid">
+        <label>Respond with <span class="hint">all-chat replies are always typed</span>
+          <select id="voice-reply-with">
+            <option value="text">Text (team chat)</option>
+            <option value="voice">Voice (spoken)</option>
+            <option value="all">All - text and voice</option>
+          </select>
+        </label>
+        <label>Play into <span class="hint">the virtual microphone</span>
+          <select id="voice-speak-device"></select>
+        </label>
+        <label>Push-to-talk key <input type="text" id="voice-talk-key" maxlength="1" style="max-width:80px" /></label>
+        <label>Voice <select id="voice-speak-voice"><option value="">Windows default</option></select></label>
+        <label>Speed <span class="hint">-10 slow … 10 fast</span>
+          <input type="number" id="voice-speak-rate" min="-10" max="10" step="1" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="action" id="voice-speak-test">Say "mic check" now</button>
+      </div>
+      <div class="result" id="voice-speak-output">—</div>
+      <h3>Try it</h3>
       <div class="actions">
         <input type="text" id="voice-say" placeholder="strat?" style="max-width:260px" />
         <button class="action primary" id="voice-test">Pretend somebody said this</button>

@@ -15,16 +15,19 @@ from cs2bot.persona import (
 
 
 def message(**kwargs) -> ChatMessage:
-    base = {"raw": "raw", "sender": "enemy", "text": "ez", "channel": ChatChannel.ALL,
-            "sender_state": LifeState.ALIVE}
+    base = {
+        "raw": "raw",
+        "sender": "enemy",
+        "text": "ez",
+        "channel": ChatChannel.ALL,
+        "sender_state": LifeState.ALIVE,
+    }
     base.update(kwargs)
     return ChatMessage(**base)
 
 
 def prompt(config: AppConfig, recent: list[str] | None = None) -> str:
-    return build_system_prompt(
-        config, LocalPlayer(), LifeState.ALIVE, message(), "noodle", recent
-    )
+    return build_system_prompt(config, LocalPlayer(), LifeState.ALIVE, message(), "noodle", recent)
 
 
 def test_new_presets_are_selectable():
@@ -83,9 +86,7 @@ def test_dead_state_guidance_can_be_switched_off():
 
 def test_turns_carry_the_recent_replies_into_the_system_turn():
     config = AppConfig()
-    turns = build_turns(
-        config, LocalPlayer(), LifeState.ALIVE, message(), [], "noodle", ["nice shot"]
-    )
+    turns = build_turns(config, LocalPlayer(), LifeState.ALIVE, message(), [], "noodle", ["nice shot"])
     assert turns[0].role == "system" and "nice shot" in turns[0].content
     assert turns[-1].content == "enemy: ez"
 
@@ -147,3 +148,16 @@ def test_a_persona_is_written_from_an_order():
     assert made.description.startswith("You are a friendly operator who never swears.")
     assert made.name == "a friendly operator who"
     assert made.game_aware is False and made.dead_notes == ""
+
+
+def test_unprompted_lines_are_asked_for_in_the_live_persona():
+    from cs2bot.config import AppConfig
+    from cs2bot.gamestate import LocalPlayer
+    from cs2bot.models import LifeState
+    from cs2bot.persona import build_initiative_turns, persona_from_order
+
+    config = AppConfig()
+    config.persona = persona_from_order("you are now a friendly operator", config.persona)
+    turns = build_initiative_turns(config, LocalPlayer(), LifeState.ALIVE, "round_start", [])
+    assert "friendly operator" in turns[0].content
+    assert "new round" in turns[-1].content and "your team" in turns[-1].content

@@ -93,6 +93,13 @@ const BINDINGS = {
   "snitch-bomb": ["snitch.reveal_bomb", "bool"],
 
   "reveal-enabled": ["reveal.enabled", "bool"],
+  "initiative-enabled": ["initiative.enabled", "bool"],
+  "initiative-channel": ["initiative.channel", "text"],
+  "initiative-gap": ["initiative.min_gap_seconds", "number"],
+  "initiative-chance": ["initiative.chance", "number"],
+  "initiative-quiet": ["initiative.when_quiet_seconds", "number"],
+  "initiative-round": ["initiative.on_round_start", "bool"],
+  "initiative-death": ["initiative.on_death", "bool"],
   "reveal-message": ["reveal.message", "text"],
   "reveal-channel": ["reveal.channel", "text"],
   "reveal-mode": ["reveal.mode", "text"],
@@ -114,6 +121,11 @@ const BINDINGS = {
 
   "voice-enabled": ["voice.enabled", "bool"],
   "voice-device": ["voice.device", "text"],
+  "voice-reply-with": ["voice.reply_with", "text"],
+  "voice-speak-device": ["voice.speak_device", "text"],
+  "voice-talk-key": ["voice.talk_key", "text"],
+  "voice-speak-voice": ["voice.speak_voice", "text"],
+  "voice-speak-rate": ["voice.speak_rate", "number"],
   "voice-model": ["voice.model", "text"],
   "voice-answer": ["voice.answer", "text"],
   "voice-triggers": ["voice.trigger_words", "list"],
@@ -496,6 +508,18 @@ function bindActions() {
       : `heard "${body.heard}" — said nothing back`;
   });
 
+  $("voice-speak-test").addEventListener("click", async () => {
+    $("voice-speak-output").textContent = "speaking…";
+    const response = await fetch("/api/voice/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "mic check, this is the bot" }),
+    });
+    const body = await response.json();
+    $("voice-speak-output").textContent = body.spoken
+      ? "spoken - did your team hear it?"
+      : `could not speak: ${body.detail}`;
+  });
   $("voice-restart").addEventListener("click", async () => {
     await saveConfig();
     await fetch("/api/voice/restart", { method: "POST" });
@@ -627,7 +651,24 @@ async function renderVoice() {
       .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`)
       .join("");
   select.value = config.voice.device;
+  const out = $("voice-speak-device");
+  out.innerHTML =
+    '<option value="">default speakers (your team will not hear it)</option>' +
+    body.devices
+      .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`)
+      .join("");
+  out.value = config.voice.speak_device;
+  const voices = $("voice-speak-voice");
+  voices.innerHTML =
+    '<option value="">Windows default</option>' +
+    (body.voices || []).map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  voices.value = config.voice.speak_voice;
   const status = body.status;
+  if (status.speak_error) $("voice-speak-output").textContent = `could not speak: ${status.speak_error}`;
+  else if (!status.speak_supported)
+    $("voice-speak-output").textContent = `cannot talk here: ${status.speak_unsupported_reason}`;
+  else if (status.said)
+    $("voice-speak-output").textContent = `said ${status.said} line${status.said === 1 ? "" : "s"}, last: "${status.last_said}"`;
   const lines = [];
   if (status.error) lines.push(`stopped: ${status.error}`);
   else if (!status.supported) lines.push(`cannot listen here: ${status.unsupported_reason}`);

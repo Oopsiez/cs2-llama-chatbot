@@ -24,8 +24,13 @@ def build_engine(**overrides) -> Engine:
 
 
 def chat(**kwargs) -> ChatMessage:
-    base = {"raw": "raw", "sender": "enemy", "text": "ez", "channel": ChatChannel.ALL,
-            "sender_state": LifeState.ALIVE}
+    base = {
+        "raw": "raw",
+        "sender": "enemy",
+        "text": "ez",
+        "channel": ChatChannel.ALL,
+        "sender_state": LifeState.ALIVE,
+    }
     base.update(kwargs)
     return ChatMessage(**base)
 
@@ -422,9 +427,7 @@ async def test_a_saved_persona_can_be_asked_for_by_name(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_asking_for_the_personalities_lists_them_without_changing_anything(
-    tmp_path, monkeypatch
-):
+async def test_asking_for_the_personalities_lists_them_without_changing_anything(tmp_path, monkeypatch):
     monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
     engine = build_engine()
     before = engine.config.persona.name
@@ -506,3 +509,59 @@ async def test_a_player_can_rewrite_the_personality_in_their_own_words(tmp_path,
     reply = await engine.handle_message(chat(sender="Gavin", text="you are now a friendly operator"))
     assert reply is not None
     assert "friendly operator" in engine.config.persona.description
+
+
+@pytest.mark.asyncio
+async def test_reply_with_picks_text_voice_or_both(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    said: list[str] = []
+
+    async def fake_say(text):
+        said.append(text)
+        return True, "spoken"
+
+    monkeypatch.setattr(engine.speaker, "say", fake_say)
+    engine.config.behavior.cooldown_seconds = 0
+
+    engine.config.voice.reply_with = "voice"
+    assert await engine.handle_message(chat(sender="Gavin", text="what do we do now?")) is not None
+    assert said == [] and len(engine._sender.sent) == 1  # all chat is always typed
+
+    engine.last_reply_at = 0
+    await engine.handle_message(chat(sender="Gavin", text="rotate?", channel=ChatChannel.TEAM))
+    assert len(said) == 1 and len(engine._sender.sent) == 1
+
+    engine.config.voice.reply_with = "all"
+    engine.last_reply_at = 0
+    await engine.handle_message(chat(sender="Gavin", text="where now?", channel=ChatChannel.TEAM))
+    assert len(said) == 2 and len(engine._sender.sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_the_bot_starts_a_conversation_when_it_goes_quiet(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.initiative.enabled = True
+    engine.config.initiative.chance = 1.0
+    engine.config.initiative.when_quiet_seconds = 1.0
+    engine.config.initiative.on_round_start = False
+    engine.config.initiative.on_death = False
+    engine._last_activity_at -= 5
+    await engine.maybe_initiate()
+    assert len(engine._sender.sent) == 1 and engine._sender.sent[-1][1] is True
+    assert engine.history[-1].is_self
+    # The gap stops it from doing it again straight away.
+    engine._last_activity_at -= 5
+    await engine.maybe_initiate()
+    assert len(engine._sender.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_bot_stays_silent_on_its_own_unless_told_to(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.initiative.when_quiet_seconds = 1.0
+    engine._last_activity_at -= 5
+    await engine.maybe_initiate()
+    assert not engine._sender.sent

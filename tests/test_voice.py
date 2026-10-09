@@ -1,6 +1,8 @@
 import threading
 import time
 
+import pytest
+
 from cs2bot.config import AppConfig
 from cs2bot.models import ChatChannel, ChatMessage, MessageSource
 from cs2bot.voice import audio, transcribe
@@ -296,8 +298,11 @@ def test_a_message_is_typed_chat_unless_it_says_otherwise():
     assert typed.source is MessageSource.CHAT
     assert not typed.is_voice
     spoken = ChatMessage(
-        raw="r", sender="voice", text="70 ramp",
-        channel=ChatChannel.TEAM, source=MessageSource.VOICE,
+        raw="r",
+        sender="voice",
+        text="70 ramp",
+        channel=ChatChannel.TEAM,
+        source=MessageSource.VOICE,
     )
     assert spoken.is_voice
     assert spoken.model_dump(mode="json")["source"] == "voice"
@@ -332,3 +337,29 @@ def test_com_apartment_is_a_no_op_off_windows():
 
     with com_apartment():
         pass
+
+
+def test_wav_samples_are_mono_floats():
+    import io
+    import wave
+
+    from cs2bot.voice.speak import wav_samples
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(22050)
+        handle.writeframes(b"\x00\x40\x00\x40\x00\xc0\x00\xc0")
+    samples, rate = wav_samples(buf.getvalue())
+    assert rate == 22050 and samples == [0.5, -0.5]
+
+
+@pytest.mark.asyncio
+async def test_speaking_off_windows_fails_softly():
+    from cs2bot.voice.speak import Speaker
+
+    speaker = Speaker()
+    spoken, detail = await speaker.say("hello")
+    assert not spoken and "Windows" in detail
+    assert speaker.status()["speak_supported"] is False

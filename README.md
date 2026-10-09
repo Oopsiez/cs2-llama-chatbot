@@ -157,6 +157,18 @@ text-to-speech and no virtual microphone, and your own microphone is never opene
 - **Pick what it answers.** *Everything it hears* (the default), *Only questions*, or *Only
   speech with a trigger word* such as "bot". Questions are answered even during the cooldown;
   everything else follows the reply-chance and wait-between-answers settings.
+- **Starting conversations (optional).** *Talk on its own* on the Behaviour tab makes the bot chime
+  in unprompted - at round start, after it dies, or when nobody has said anything for a while -
+  in whatever persona it is currently playing, with a minimum gap between lines and a chance per
+  occasion so it never monologues. It goes out by text, voice or both like any other team reply.
+- **Talking back (optional).** *Respond with* on the Voice tab picks how team replies go out:
+  text (typed in team chat), voice (spoken), or all (both); all-chat replies are always typed.
+  Spoken replies use the Windows speech engine played into a virtual microphone while the bot
+  holds your push-to-talk key. One-time setup: install [VB-Audio Cable](https://vb-audio.com/Cable/)
+  (free), choose *CABLE Input* as the device the bot plays into, and in CS2 → Settings → Audio set
+  the microphone to *CABLE Output* with push-to-talk on the same key as the panel's *Push-to-talk
+  key*. "Say mic check now" proves the chain before a match. Nothing is injected into the game:
+  it is a real key press and a real microphone, just one only the bot talks into.
 - **Radio commands are ignored.** "Enemy spotted", "Need backup", "Affirmative" and the rest of
   the radio and ping wheels are played through the speakers and printed in the log as `(RADIO)`
   lines; the bot recognises them (`cs2bot/radio.py`) and does not answer them, typed or heard.

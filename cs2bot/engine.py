@@ -26,6 +26,7 @@ from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
 from .persona import (
+    build_initiative_turns,
     build_reveal_turns,
     build_strategy_turns,
     build_turns,
@@ -39,6 +40,7 @@ from .snitch import announcement, is_request, where
 from .voice import VoiceListener, model_is_cached, whisper_missing
 from .voice.audio import SAMPLE_RATE, loopback_missing
 from .voice.segment import Segmenter
+from .voice.speak import Speaker
 
 POLL_INTERVAL = 0.25
 # Reading the message and deciding what to say, before any typing time.
@@ -100,6 +102,10 @@ class Engine:
         self.recent_strats: list[str] = []
         self._quiet_until = float("-inf")
         self._round_started_at = float("-inf")
+        self._last_initiative_at = float("-inf")
+        self._initiative_round: tuple[str, int] | None = None
+        self._was_dead = False
+        self._last_activity_at = time.monotonic()
         self._round_marker: tuple[str, int] = ("", 0)
         self._called_for: tuple[str, int] | None = None
         self.recent_lines: deque[dict[str, Any]] = deque(maxlen=RAW_LINE_MEMORY)
@@ -111,6 +117,7 @@ class Engine:
         self._sender: ChatSender | None = None
         self._tailer: LogTailer | None = None
         self._voice: VoiceListener | None = None
+        self._speaker: Speaker | None = None
         self.last_voice_reply_at = float("-inf")
         self._task: asyncio.Task[None] | None = None
         self._warm_task: asyncio.Task[None] | None = None
@@ -373,9 +380,52 @@ class Engine:
         await self._maybe_ask_for_name()
         await self.maybe_call_strategy()
         await self.maybe_announce()
+        await self.maybe_initiate()
         await self.maybe_reveal()
 
     # ---- voice comms ------------------------------------------------------------
+
+    @property
+    def speaker(self) -> Speaker:
+        settings = self.config.voice
+        if self._speaker is None:
+            self._speaker = Speaker()
+        self._speaker.device = settings.speak_device
+        self._speaker.talk_key = settings.talk_key
+        self._speaker.voice = settings.speak_voice
+        self._speaker.rate = settings.speak_rate
+        return self._speaker
+
+    def _reply_modes(self, message: ChatMessage) -> tuple[bool, bool]:
+        """`(typed, spoken)` for a reply, per the Voice tab's reply-with setting.
+
+        All-chat replies are always typed: the other team cannot hear team voice.
+        """
+        if not self._team_only(message):
+            return True, False
+        mode = self.config.voice.reply_with
+        if mode == "voice":
+            return False, True
+        if mode == "all":
+            return True, True
+        return True, False
+
+    async def speak(self, text: str) -> tuple[bool, str]:
+        spoken, detail = await self.speaker.say(text)
+        self.bus.publish("spoken" if spoken else "error", {"text": text, "detail": detail})
+        return spoken, detail
+
+    async def deliver(self, text: str, message: ChatMessage) -> tuple[bool, str]:
+        """Send a reply the way the settings say: typed, spoken, or both."""
+        typed, spoken = self._reply_modes(message)
+        delivered, detail = (False, "")
+        if typed:
+            delivered, detail = await self.sender.send(text, team_only=self._team_only(message))
+        if spoken:
+            said, said_detail = await self.speak(text)
+            delivered = delivered or said
+            detail = f"{detail}, {said_detail}".strip(", ") if typed else said_detail
+        return delivered, detail
 
     @property
     def voice(self) -> VoiceListener:
@@ -440,6 +490,7 @@ class Engine:
         if self._voice is not None:
             status.update(self._voice.status())
             status["enabled"] = settings.enabled
+        status.update(self.speaker.status())
         return status
 
     def _cooldown_for(self, message: ChatMessage) -> tuple[float, float]:
@@ -451,6 +502,7 @@ class Engine:
     # ---- message handling -------------------------------------------------------
 
     async def handle_message(self, message: ChatMessage) -> BotReply | None:
+        self._last_activity_at = time.monotonic()
         message = self.annotate(self.flag_own_echo(self.track_state(message)))
         self.history.append(message)
         del self.history[:-50]
@@ -531,7 +583,7 @@ class Engine:
         self.echo.remember(text)
         await self._pause_before_sending(text, elapsed=time.perf_counter() - started)
 
-        delivered, detail = await self.sender.send(text, team_only=self._team_only(message))
+        delivered, detail = await self.deliver(text, message)
         reply = BotReply(
             in_reply_to=message,
             text=text,
@@ -806,6 +858,82 @@ class Engine:
         delivered, detail = await self.sender.send(text, team_only=settings.channel == "team")
         self.last_spoke_at = time.time()
         self.bus.publish("snitch", {"text": text, "delivered": delivered, "reason": detail})
+
+    # ---- starting conversations ---------------------------------------------------
+
+    def _initiative_occasion(self) -> str:
+        """Which occasion, if any, is worth speaking up for right now."""
+        settings = self.config.initiative
+        now = time.monotonic()
+        local_state = self.game_state.local_state(self.config.dead_alive.assume_alive_without_gsi)
+        dead = local_state is LifeState.DEAD
+        died = dead and not self._was_dead
+        self._was_dead = dead
+        marker = self._round_marker
+        fresh_round = self.in_round_start and marker != self._initiative_round
+        if fresh_round:
+            self._initiative_round = marker
+        if now - self._last_initiative_at < settings.min_gap_seconds:
+            return ""
+        if settings.on_death and died:
+            return "death"
+        if settings.on_round_start and fresh_round:
+            return "round_start"
+        if settings.when_quiet_seconds > 0 and now - self._last_activity_at >= settings.when_quiet_seconds:
+            return "quiet"
+        return ""
+
+    async def maybe_initiate(self) -> None:
+        """Chime in unprompted, when the settings allow and the moment calls for it."""
+        settings = self.config.initiative
+        if not (self.config.enabled and settings.enabled) or self.quiet or self.llm_loading:
+            return
+        if self.game_state.player.is_warmup or self.game_state.player.map_phase == "gameover":
+            return
+        occasion = self._initiative_occasion()
+        if not occasion:
+            return
+        self._last_initiative_at = time.monotonic()  # a passed-up chance still waits the gap
+        if self._random.random() > settings.chance:
+            return
+        local_state = self.game_state.local_state(self.config.dead_alive.assume_alive_without_gsi)
+        turns = build_initiative_turns(
+            self.config,
+            self.game_state.player,
+            local_state,
+            occasion,
+            self.history,
+            self.own_name,
+            self.recent_replies,
+        )
+        try:
+            raw = await self.backend.generate(turns, self._sampling_params())
+        except LLMError as exc:
+            self.last_error = str(exc)
+            self.bus.publish("error", {"message": str(exc)})
+            return
+        text = humanize(
+            raw,
+            literacy=self.config.behavior.literacy,
+            max_chars=self.config.persona.max_reply_chars,
+            seed=self._random.randrange(2**32),
+        )
+        if not text or (
+            self.config.behavior.avoid_repeats
+            and is_repetitive(text, self.recent_replies, self.config.behavior.repeat_similarity)
+        ):
+            return
+        channel = ChatChannel.TEAM if settings.channel == "team" else ChatChannel.ALL
+        own = ChatMessage(raw="", sender=self.own_name or "me", text=text, channel=channel, is_self=True)
+        self._remember_reply(text)
+        self.echo.remember(text)
+        delivered, detail = await self.deliver(text, own)
+        self.last_spoke_at = time.time()
+        self._last_activity_at = time.monotonic()
+        self.history.append(own)
+        self.bus.publish(
+            "initiative", {"text": text, "occasion": occasion, "delivered": delivered, "reason": detail}
+        )
 
     async def maybe_reveal(self) -> None:
         """Own up on the end-of-match scoreboard, once.

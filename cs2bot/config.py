@@ -105,9 +105,7 @@ class BehaviorSettings(BaseModel):
     repeat_retries: int = 2
     reply_probability: float = 1.0
     cooldown_seconds: float = 3.0
-    reply_channels: list[ChatChannel] = Field(
-        default_factory=lambda: [ChatChannel.ALL, ChatChannel.TEAM]
-    )
+    reply_channels: list[ChatChannel] = Field(default_factory=lambda: [ChatChannel.ALL, ChatChannel.TEAM])
     history_turns: int = 6
     trigger_words: list[str] = Field(default_factory=list)  # empty -> reply to everything
     ignore_players: list[str] = Field(default_factory=list)
@@ -233,9 +231,36 @@ class VoiceSettings(BaseModel):
     # How loud speech has to be before it is transcribed at all. Raise it if gunfire is being
     # sent to the model, lower it if a quiet teammate is being missed.
     noise_floor: float = 0.006
+    # Talking back over voice. The bot speaks with the Windows speech engine into a virtual
+    # microphone (VB-Audio Cable: it plays into "CABLE Input", CS2's microphone is set to
+    # "CABLE Output") while holding the push-to-talk key, so nothing touches the game.
+    # How team replies go out: "text" (typed in team chat), "voice" (spoken), or "all" (both).
+    # All-chat replies are always typed - the other team cannot hear team voice.
+    reply_with: str = "text"
+    speak_device: str = ""  # the output device to play into - pick the CABLE Input
+    talk_key: str = "k"  # CS2's push-to-talk key
+    speak_voice: str = ""  # a Windows voice name; blank -> the default
+    speak_rate: int = 1  # -10 (slow) .. 10 (fast)
 
 
 PROJECT_URL = "https://github.com/Oopsiez/cs2-llama-chatbot"
+
+
+class InitiativeSettings(BaseModel):
+    """Starting conversations instead of only answering them.
+
+    A real teammate chimes in on their own: a comment at the start of a round, a word after
+    dying, something to fill a quiet stretch. Each occasion is a chance, not a certainty, and
+    the gap between unprompted lines is enforced so it never turns into a monologue.
+    """
+
+    enabled: bool = False
+    channel: str = "team"  # "team" or "all"
+    min_gap_seconds: float = 90.0  # at least this long between unprompted lines
+    chance: float = 0.6  # 0..1, how often an occasion is actually taken
+    on_round_start: bool = True
+    on_death: bool = True
+    when_quiet_seconds: float = 120.0  # speak when nobody has said anything for this long; 0 = never
 
 
 class RevealSettings(BaseModel):
@@ -289,6 +314,7 @@ class AppConfig(BaseModel):
     strategy: StrategySettings = Field(default_factory=StrategySettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     reveal: RevealSettings = Field(default_factory=RevealSettings)
+    initiative: InitiativeSettings = Field(default_factory=InitiativeSettings)
     callouts: CalloutBook = Field(default_factory=CalloutBook)
     gsi: GSISettings = Field(default_factory=GSISettings)
     web: WebSettings = Field(default_factory=WebSettings)

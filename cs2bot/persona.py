@@ -387,6 +387,52 @@ def build_reveal_turns(config: AppConfig) -> list[ChatTurn]:
     ]
 
 
+OCCASIONS = {
+    "round_start": "A new round is starting and nobody has said anything yet.",
+    "death": "You just died this round.",
+    "quiet": "Nobody has said anything for a while.",
+}
+
+
+def build_initiative_turns(
+    config: AppConfig,
+    player: LocalPlayer,
+    local_state: LifeState,
+    occasion: str,
+    history: list[ChatMessage],
+    own_name: str = "",
+    recent_replies: list[str] | None = None,
+) -> list[ChatTurn]:
+    """Ask the model to say something unprompted, in the persona it has been using all along.
+
+    The system prompt is the normal one, so a persona order given in chat ("you are now a
+    friendly operator") shapes what it volunteers just as much as what it answers.
+    """
+    channel = ChatChannel.TEAM if config.initiative.channel == "team" else ChatChannel.ALL
+    anchor = history[-1] if history else ChatMessage(raw="", sender="", text="", channel=channel)
+    anchor = anchor.model_copy(update={"channel": channel, "addressed_to_me": False, "mention_reason": ""})
+    system = build_system_prompt(
+        config, player, local_state, anchor, own_name, recent_replies, is_teammate=True
+    )
+    turns = [ChatTurn(role="system", content=system)]
+    for message in history[-config.behavior.history_turns :]:
+        role = "assistant" if message.is_self else "user"
+        content = message.text if message.is_self else f"{message.sender}: {message.text}"
+        turns.append(ChatTurn(role=role, content=content))
+    where = "your team" if channel is ChatChannel.TEAM else "everyone in the server"
+    turns.append(
+        ChatTurn(
+            role="user",
+            content=(
+                f"({OCCASIONS.get(occasion, OCCASIONS['quiet'])} Say one short thing to {where} on "
+                "your own - a comment, a question, banter - the way a real player would start "
+                "talking. Stay in character. Reply with the chat message only.)"
+            ),
+        )
+    )
+    return turns
+
+
 def build_strategy_turns(
     config: AppConfig,
     player: LocalPlayer,

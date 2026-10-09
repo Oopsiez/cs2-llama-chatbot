@@ -30,6 +30,7 @@ from ..persona import PRESETS, build_system_prompt
 from ..rules import should_reply
 from ..snitch import where
 from ..voice.audio import output_devices
+from ..voice.speak import installed_voices
 
 STATIC_DIR = Path(__file__).parent / "static"
 # Long enough for the browser to receive the answer before the process goes away.
@@ -268,7 +269,20 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "status": engine.voice_status(),
             "devices": output_devices(),
             "settings": engine.config.voice.model_dump(mode="json"),
+            "voices": await asyncio.to_thread(installed_voices),
         }
+
+    @app.get("/api/voice/voices")
+    async def voice_voices() -> dict[str, Any]:
+        """The Windows voices the bot can talk with."""
+        return {"voices": await asyncio.to_thread(installed_voices)}
+
+    @app.post("/api/voice/speak")
+    async def voice_speak(payload: dict[str, Any]) -> dict[str, Any]:
+        """Say a line over push-to-talk now - the test for the virtual-microphone setup."""
+        text = str(payload.get("text") or "mic check, this is the bot").strip()
+        spoken, detail = await engine.speak(text)
+        return {"spoken": spoken, "detail": detail, "status": engine.speaker.status()}
 
     @app.post("/api/voice/restart")
     async def voice_restart() -> dict[str, Any]:
@@ -384,11 +398,16 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         await ws.accept()
         queue = engine.bus.subscribe()
         try:
-            await ws.send_json({"kind": "snapshot", "data": {
-                "status": engine.status(),
-                "config": engine.config.model_dump(mode="json"),
-                "events": engine.bus.history(),
-            }})
+            await ws.send_json(
+                {
+                    "kind": "snapshot",
+                    "data": {
+                        "status": engine.status(),
+                        "config": engine.config.model_dump(mode="json"),
+                        "events": engine.bus.history(),
+                    },
+                }
+            )
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=5.0)
