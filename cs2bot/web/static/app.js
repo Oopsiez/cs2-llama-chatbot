@@ -1,4 +1,13 @@
 const $ = (id) => document.getElementById(id);
+const LOCAL_OLLAMA = "http://127.0.0.1:11434";
+function isRemote(url) {
+  try {
+    const host = new URL(url).hostname;
+    return !["127.0.0.1", "localhost", "::1", "0.0.0.0", ""].includes(host);
+  } catch (_) {
+    return false;
+  }
+}
 
 let config = null;
 let presets = {};
@@ -197,6 +206,9 @@ function renderConfig() {
   }
   renderPlacement();
   $("speech-persona-block").style.display = config.speech_same_persona ? "none" : "";
+  const remote = isRemote(config.llm.ollama_url);
+  $("use-server").checked = remote;
+  $("server-block").style.display = remote ? "" : "none";
   $("reply-all").checked = config.behavior.reply_channels.includes("all");
   $("reply-team").checked = config.behavior.reply_channels.includes("team");
   renderDials();
@@ -480,6 +492,8 @@ function bindActions() {
   $("refresh-gpu").addEventListener("click", renderGpu);
 
   $("use-remote").addEventListener("click", async () => {
+    $("use-server").checked = true;
+    $("server-block").style.display = "";
     let host = $("remote-host").value.trim();
     if (!host) return;
     if (!/^https?:\/\//.test(host)) host = `http://${host}`;
@@ -611,11 +625,21 @@ function bindActions() {
     $("update-server").hidden = !(data.behind && !server.updating && !server.error);
   }
   $("test-server").addEventListener("click", async () => {
-    $("llm-note").textContent = "testing the server…";
+    $("server-test-note").textContent = "testing the server…";
     await saveConfig();
     const response = await fetch("/api/llm/check", { method: "POST" });
-    $("llm-note").textContent = (await response.json()).status;
+    $("server-test-note").textContent = (await response.json()).status;
     await checkServerVersion();
+  });
+  $("use-server").addEventListener("change", async () => {
+    const on = $("use-server").checked;
+    $("server-block").style.display = on ? "" : "none";
+    if (!on) {
+      config.llm.ollama_url = LOCAL_OLLAMA;
+      $("ollama-url").value = LOCAL_OLLAMA;
+      $("server-test-note").textContent = "back to this PC";
+      await saveConfig();
+    }
   });
   $("update-server").addEventListener("click", async () => {
     $("server-version").textContent = "asking the server to update…";

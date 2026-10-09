@@ -168,8 +168,35 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 
-.check { display: flex; gap: 9px; align-items: flex-start; color: var(--text); font-size: 13px; }
-.check input { margin-top: 3px; }
+.check { display: flex; gap: 10px; align-items: flex-start; color: var(--text); font-size: 13px; }
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 1px 0 0;
+  border-radius: 10px;
+  border: 1px solid var(--accent-dim);
+  background: #1b1710;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s, background 0.15s;
+}
+input[type="checkbox"]:checked { background: #1f3a28; border-color: #2c5539; }
+input[type="checkbox"]:checked::after { transform: translateX(16px); background: var(--ok); }
+input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .check small { display: block; color: var(--muted); font-size: 11.5px; }
 
 input[type="range"] { width: 100%; accent-color: var(--accent); }

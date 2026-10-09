@@ -35,6 +35,7 @@
       <button class="tab" role="tab" data-tab="persona" aria-selected="true">Personality</button>
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
       <button class="tab" role="tab" data-tab="model">Model</button>
+      <button class="tab" role="tab" data-tab="server">Server</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
       <button class="tab" role="tab" data-tab="strats">Strats</button>
       <button class="tab" role="tab" data-tab="voice">Listening</button>
@@ -262,36 +263,9 @@
         <label>Request timeout (s)<input type="number" id="request_timeout" min="1" step="1" /></label>
       </div>
       <div class="divider"></div>
-      <h3>Use a server on my network</h3>
-      <p class="hint">Run <b>CS2 Chatbot Server Setup.exe</b> on the other PC (it installs Ollama, opens the firewall on your
-        private network and pulls the model), then paste the address it prints here. Nothing runs on this PC's GPU.</p>
-      <div class="actions">
-        <input type="text" id="remote-host" placeholder="http://192.168.1.50:11434" style="max-width:280px" />
-        <button class="action primary" id="use-remote">Use and test this server</button>
-        <span class="note" id="remote-note"></span>
-      </div>
-      <div class="row">
-        <label>Ollama URL
-          <span class="hint">Remote is fine: http://gpu-box:11434 or a proxy over https.</span>
-          <input type="text" id="ollama-url" />
-        </label>
-        <label>Ollama model<input type="text" id="ollama-model" /></label>
-      </div>
-      <div class="row">
-        <label>Ollama API key <span class="hint">optional, sent as a bearer token</span>
-          <input type="password" id="ollama-key" />
-        </label>
-        <label class="check"><input type="checkbox" id="ollama-verify" /><span>Verify TLS certificate
-          <small>Turn off only for a self-signed certificate on your own server.</small></span></label>
-      </div>
       <div class="actions">
         <button class="action primary" id="check-llm">Check model</button>
-        <button class="action" id="test-server">Test server</button>
         <span class="note" id="llm-note"></span>
-      </div>
-      <div class="actions">
-        <span class="note" id="server-version"></span>
-        <button class="action" id="update-server" hidden>Update server</button>
       </div>
       <div class="divider"></div>
       <h3>Where it runs</h3>
@@ -317,10 +291,46 @@
       </div>
       <h4>Models loaded in Ollama</h4>
       <div id="gpu-models" class="picks"></div>
-      <h4>Processes using the GPU</h4>
-      <div id="gpu-processes" class="picks"></div>
+      <h4 hidden>Processes using the GPU</h4>
+      <div id="gpu-processes" class="picks" hidden></div>
     </div>
 
+    <div class="panel" data-panel="server">
+      <label class="check"><input type="checkbox" id="use-server" /><span>Run the model on a server on my network
+        <small>Off = the model runs on this PC. On = this PC only types and talks; a server on your network does the thinking.</small></span></label>
+      <div id="server-block">
+      <h3>Use a server on my network</h3>
+      <p class="hint">Run <b>CS2 Chatbot Server Setup.exe</b> on the other PC (it installs Ollama, opens the firewall on your
+        private network and pulls the model), then paste the address it prints here. Nothing runs on this PC's GPU.</p>
+      <div class="actions">
+        <input type="text" id="remote-host" placeholder="http://192.168.1.50:11434" style="max-width:280px" />
+        <button class="action primary" id="use-remote">Use this server</button>
+        <span class="note" id="remote-note"></span>
+      </div>
+      <div class="row">
+        <label>Ollama URL
+          <span class="hint">Remote is fine: http://gpu-box:11434 or a proxy over https.</span>
+          <input type="text" id="ollama-url" />
+        </label>
+        <label>Ollama model<input type="text" id="ollama-model" /></label>
+      </div>
+      <div class="row">
+        <label>Ollama API key <span class="hint">optional, sent as a bearer token</span>
+          <input type="password" id="ollama-key" />
+        </label>
+        <label class="check"><input type="checkbox" id="ollama-verify" /><span>Verify TLS certificate
+          <small>Turn off only for a self-signed certificate on your own server.</small></span></label>
+      </div>
+      <div class="actions">
+        <button class="action primary" id="test-server">Test server</button>
+        <span class="note" id="server-test-note"></span>
+      </div>
+      <div class="actions">
+        <span class="note" id="server-version"></span>
+        <button class="action" id="update-server" hidden>Update server</button>
+      </div>
+      </div>
+    </div>
     <div class="panel" data-panel="deadalive">
       <p class="note">
         CS2 tags a dead player's chat with <span class="mono">[DEAD]</span>. The bot reads that tag,
