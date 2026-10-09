@@ -265,6 +265,9 @@ and prints the address to use. On the gaming PC, Model tab → *Use a server on 
 that address. Uninstalling the server package removes the firewall rule and puts Ollama back to
 localhost only. Ollama's tray app starts with Windows, so the server comes back by itself after a
 reboot.
+
+The server installer also puts **CS2 Chatbot Server** in the Start menu: a small window with an on/off switch for the AI models, the address the gaming PC should use (and the port, which updates the firewall rule), and who is connected right now.
+
 ## Is this a cheat?
 
 **No, and deliberately so.** The bot never touches the game's memory or process. It reads a log file

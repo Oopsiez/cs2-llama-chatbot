@@ -33,11 +33,24 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 Source: "server\install.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "server\uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "server\panel.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion
+
+[Icons]
+Name: "{autoprograms}\{#AppName}"; Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\panel.ps1"""; \
+  Comment: "Switch the AI models on or off and see who is connected"
+Name: "{autodesktop}\{#AppName}"; Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\panel.ps1"""; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Put a CS2 Chatbot Server shortcut on the desktop"; Flags: unchecked
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -NoExit -File ""{app}\install.ps1"""; \
   Description: "Install Ollama, open the firewall and pull the model"; Flags: postinstall runascurrentuser waituntilterminated
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\panel.ps1"""; \
+  Description: "Open the server window"; Flags: postinstall nowait runascurrentuser
 
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall.ps1"""; \
