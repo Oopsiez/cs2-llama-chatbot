@@ -332,6 +332,7 @@ class FakeListener:
     def __init__(self, text: str) -> None:
         self.waiting = [Utterance(text=text, seconds=1.0)]
         self.started = False
+        self.own_voice_ignored = 0
 
     def start(self) -> None:
         self.started = True

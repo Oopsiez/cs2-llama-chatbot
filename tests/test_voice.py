@@ -654,3 +654,28 @@ def test_for_speech_drops_written_filler():
 
     assert for_speech("As an AI teammate, rotate B now. Let me know if you need more!") == "rotate B now."
     assert for_speech("*sighs* push A (quietly) - go go") == "push A go go"
+
+
+def test_speaker_knows_when_it_was_talking():
+    from cs2bot.voice.speak import Speaker
+
+    s = Speaker()
+    assert not s.was_talking(0.0, 5.0, now=5.0)
+    s.talk_started_at, s.last_spoke_at = 100.0, 103.0
+    assert s.was_talking(102.0, 104.0, now=104.0)
+    assert s.was_talking(104.0, 104.9, now=104.9)  # inside the grace after the clip
+    assert not s.was_talking(90.0, 99.0, now=99.0)
+    assert not s.was_talking(106.0, 108.0, now=108.0)
+    s.talk_started_at = 110.0  # talking right now, no end yet
+    assert s.was_talking(111.0, 112.0, now=112.0)
+
+
+def test_listener_drops_the_bots_own_voice_before_transcribing():
+    listener = VoiceListener(
+        transcriber=FakeTranscriber(), source=lambda: iter(()), gate=lambda s, e: e > 100.0
+    )
+    listener._offer(listener._run, [0.1] * 16000, ended_at=50.0)
+    listener._offer(listener._run, [0.1] * 16000, ended_at=150.0)
+    assert listener._run.pending.qsize() == 1 and listener.own_voice_ignored == 1
+    samples, ended_at = listener._run.pending.get_nowait()
+    assert ended_at == 50.0 and len(samples) == 16000

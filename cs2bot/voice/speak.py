@@ -265,6 +265,14 @@ class Speaker:
     def talking(self) -> bool:
         return self.talk_started_at > self.last_spoke_at
 
+    def was_talking(self, started: float, ended: float, now: float | None = None) -> bool:
+        """Whether the bot's clip was playing (or had just finished) anywhere in `started..ended`."""
+        if not self.talk_started_at:
+            return False
+        now = time.time() if now is None else now
+        end = (now if self.talking else self.last_spoke_at) + self.echo_grace_seconds
+        return started <= end and ended >= self.talk_started_at
+
     def heard_itself(
         self, text: str, heard_at: float, seconds: float = 0.0, now: float | None = None
     ) -> bool:

@@ -121,6 +121,7 @@ class Engine:
         self._tailer: LogTailer | None = None
         self.log_source = ""  # "cs2" once console.log is being read, "fallback" for the bot's own log
         self._voice: VoiceListener | None = None
+        self._own_voice_logged = 0
         self._speaker: Speaker | None = None
         self.last_voice_reply_at = float("-inf")
         self._task: asyncio.Task[None] | None = None
@@ -532,6 +533,7 @@ class Engine:
                 process=settings.capture_process,
                 model_name=settings.model,
                 segmenter=Segmenter(SAMPLE_RATE, floor=settings.noise_floor),
+                gate=self.speaker.was_talking,
             )
         return self._voice
 
@@ -542,8 +544,13 @@ class Engine:
                 self._voice.stop()
             return
         self.voice.start()
+        ignored = self.voice.own_voice_ignored
+        if ignored != self._own_voice_logged:
+            self.log_note(f"ignored my own voice ({ignored - self._own_voice_logged}x)")
+            self._own_voice_logged = ignored
         for utterance in self.voice.drain():
             if self.speaker.heard_itself(utterance.text, utterance.heard_at, utterance.seconds):
+                self.log_note(f"ignored my own voice: {utterance.text}")
                 self.bus.publish("skipped", {"sender": "voice", "reason": "that was the bot's own voice"})
                 continue
             await self.handle_voice(utterance.text)
