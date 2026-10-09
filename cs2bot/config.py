@@ -223,7 +223,7 @@ class VoiceSettings(BaseModel):
     one of the words get an answer, which is how you stop it replying to every callout.
     """
 
-    enabled: bool = False
+    enabled: bool = True
     device: str = ""  # blank -> the default speakers
     # What it listens to: "cs2" - only the game's own audio (Windows 10 2004+; falls back to the
     # speakers when it cannot), or "pc" - everything the speakers play.

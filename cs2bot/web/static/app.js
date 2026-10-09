@@ -146,6 +146,8 @@ const BINDINGS = {
   "voice-speak-monitor": ["voice.speak_monitor", "bool"],
   "voice-talk-key": ["voice.talk_key", "text"],
   "voice-capture": ["voice.capture", "text"],
+  "voice-enabled": ["voice.enabled", "bool"],
+  "voice-enabled-speech": ["voice.enabled", "bool"],
   "voice-speak-voice": ["voice.speak_voice", "text"],
   "voice-speak-rate": ["voice.speak_rate", "number"],
   "voice-model": ["voice.model", "text"],
@@ -265,6 +267,8 @@ function bindInputs() {
     if (!el) continue;
     el.addEventListener("input", () => {
       setPath(config, path, readField(el, kind));
+      for (const [other, [otherPath]] of Object.entries(BINDINGS))
+        if (other !== id && otherPath === path && $(other)) writeField($(other), kind, readField(el, kind));
       if (["iq", "literacy", "reply-delay", "humanized-typing"].includes(id)) renderDials();
       scheduleSave();
     });
@@ -317,7 +321,7 @@ function bindTabs() {
       document.querySelectorAll(".panel").forEach((panel) => {
         panel.dataset.active = String(panel.dataset.panel === tab.dataset.tab);
       });
-      if (tab.dataset.tab === "voice") renderVoice();
+      if (tab.dataset.tab === "speech") renderVoice();
       if (tab.dataset.tab === "advanced") renderGpu();
     });
   });

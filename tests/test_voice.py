@@ -313,7 +313,7 @@ def test_no_speakers_means_no_devices_to_choose_from(monkeypatch):
 
 def test_a_config_written_before_voice_existed_still_loads():
     config = AppConfig.model_validate({"enabled": True, "behavior": {"cooldown_seconds": 3}})
-    assert config.voice.enabled is False
+    assert config.voice.enabled is True
     assert config.voice.model == "small.en"
 
 

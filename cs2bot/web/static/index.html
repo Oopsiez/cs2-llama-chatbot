@@ -39,7 +39,6 @@
       <button class="tab" role="tab" data-tab="advanced">Advanced</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
       <button class="tab" role="tab" data-tab="strats">Strats</button>
-      <button class="tab" role="tab" data-tab="voice">Listening</button>
       <button class="tab" role="tab" data-tab="speech">Speech</button>
       <button class="tab" role="tab" data-tab="game">Game</button>
       <button class="tab" role="tab" data-tab="test">Test</button>
@@ -53,6 +52,8 @@
           <option value="both">Both text and voice</option>
         </select>
       </label>
+      <label class="check"><input type="checkbox" id="voice-enabled" /><span>Listen to voice comms
+        <small>Hears the team over voice (through your speakers) and answers in team chat.</small></span></label>
       <label>Preset
         <select id="preset"></select>
       </label>
@@ -444,7 +445,10 @@
       </p></details>
     </div>
 
-    <div class="panel" data-panel="voice">
+    <div class="panel" data-panel="speech">
+      <label class="check"><input type="checkbox" id="voice-enabled-speech" /><span>Listen to voice comms
+        <small>Hears the team over voice (through your speakers) and answers in team chat.</small></span></label>
+      <h3>Listening</h3>
       <details class="help"><summary title="What this does">?</summary><p class="note">
         The bot listens to what your speakers are playing and transcribes it with a local Whisper
         model, so it hears the same voice comms you do without touching the game or your
@@ -453,7 +457,6 @@
         <strong>Answers always go to team chat</strong>, because voice comms are team-only.
       </p></details>
       <div class="result" id="voice-status">—</div>
-      <p class="hint">Listening is switched on by <b>Respond to</b> on the Personality tab (voice or both). The speech model is downloaded once, the first time it listens.</p>
       <div class="row">
         <label>Hear
           <select id="voice-capture">
@@ -507,9 +510,8 @@
         <button class="action" id="voice-restart">Restart listening</button>
       </div>
       <div class="result" id="voice-output">—</div>
-    </div>
-
-    <div class="panel" data-panel="speech">
+      <div class="divider"></div>
+      <h3>Speaking</h3>
       <details class="help"><summary title="What this does">?</summary><p class="note">How the bot talks back over team voice. Switch engines any time; each voice is fetched the first time it is used.</p>
       <p class="hint">The bot speaks with a natural voice into a virtual microphone while holding your push-to-talk key.
         One-time setup: install <a href="https://vb-audio.com/Cable/" target="_blank" rel="noreferrer">VB-Audio Cable</a>,

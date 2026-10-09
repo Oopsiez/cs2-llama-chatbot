@@ -235,7 +235,7 @@ def test_recording_and_deleting_a_callout(client):
 def test_voice_tab_says_whether_it_can_listen_here(client):
     body = client.get("/api/voice").json()
     assert set(body) == {"status", "devices", "devices_error", "settings", "voices"}
-    assert body["settings"]["enabled"] is False
+    assert body["settings"]["enabled"] is True
     assert isinstance(body["status"]["supported"], bool)
     assert isinstance(body["devices"], list)
 

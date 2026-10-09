@@ -521,8 +521,9 @@ class Engine:
 
     @property
     def listens_to_voice(self) -> bool:
-        """Voice comms are heard when *Respond to* includes voice (the old Voice-tab tick still counts)."""
-        return self.config.respond_to in ("voice", "both") or self.config.voice.enabled
+        """Voice comms are heard when the *Listen to voice comms* switch is on and *Respond to*
+        includes voice."""
+        return self.config.voice.enabled and self.config.respond_to in ("voice", "both")
 
     @property
     def answers_text(self) -> bool:
