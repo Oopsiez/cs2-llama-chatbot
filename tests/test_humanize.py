@@ -49,3 +49,12 @@ def test_no_cap_means_no_cap():
     text = " ".join(["word"] * 60)
     assert humanize(text, literacy=100, max_chars=0) == text
     assert len(humanize(text, literacy=100, max_chars=0).split()) == 60
+
+
+def test_the_bots_own_name_is_stripped_off_the_front_of_a_reply():
+    from cs2bot.humanize import humanize
+
+    assert humanize("Big Dog 99: push b now", literacy=100, max_chars=0, name="Big Dog 99") == "push b now"
+    assert humanize("[big dog 99] - rotate", literacy=100, max_chars=0, name="Big Dog 99") == "rotate"
+    kept = humanize("heads up: they are b", literacy=100, max_chars=0, name="Big Dog 99")
+    assert kept == "heads up: they are b"

@@ -42,7 +42,7 @@ def gpu_layers_for(settings: LLMSettings, hardware: Hardware) -> int:
     return -1 if size_gb + GGUF_OVERHEAD_GB <= hardware.vram_for_model_gb else 0
 
 
-def build_backend(settings: LLMSettings, ollama_model: str = "") -> LLMBackend:
+def build_backend(settings: LLMSettings, ollama_model: str = "", seed: int | None = None) -> LLMBackend:
     """The configured backend; `ollama_model` swaps in another Ollama tag (the speech model)."""
     if settings.backend == "llama_cpp":
         return LlamaCppBackend(
@@ -62,7 +62,7 @@ def build_backend(settings: LLMSettings, ollama_model: str = "") -> LLMBackend:
             num_gpu=ollama_gpu_layers(settings),
         )
     if settings.backend == "mock":
-        return MockBackend()
+        return MockBackend(seed=seed)
     raise LLMError(f"Unknown LLM backend: {settings.backend}")
 
 

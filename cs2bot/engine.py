@@ -264,7 +264,7 @@ class Engine:
     @property
     def backend(self) -> LLMBackend:
         if self._backend is None:
-            self._backend = build_backend(self.config.llm)
+            self._backend = build_backend(self.config.llm, seed=self._random.randrange(2**32))
         return self._backend
 
     @property
@@ -278,7 +278,9 @@ class Engine:
         ):
             return self.backend
         if self._speech_backend is None:
-            self._speech_backend = build_backend(llm, ollama_model=llm.speech_ollama_model)
+            self._speech_backend = build_backend(
+                llm, ollama_model=llm.speech_ollama_model, seed=self._random.randrange(2**32)
+            )
         return self._speech_backend
 
     @property
@@ -974,6 +976,7 @@ class Engine:
                 literacy=self.config.behavior.literacy,
                 max_chars=self.config.persona.max_reply_chars,
                 seed=self._random.randrange(2**32),
+                name=self.own_name,
             )
             for line in raw.splitlines()
             if line.strip()
@@ -1081,6 +1084,7 @@ class Engine:
             literacy=self.config.behavior.literacy,
             max_chars=self.config.persona.max_reply_chars,
             seed=self._random.randrange(2**32),
+            name=self.own_name,
         )
         if not text or (
             self.config.behavior.avoid_repeats
@@ -1143,6 +1147,7 @@ class Engine:
                     literacy=self.config.behavior.literacy,
                     max_chars=max(40, self.config.persona.max_reply_chars - len(settings.link) - 1),
                     seed=self._random.randrange(2**32),
+                    name=self.own_name,
                 )
                 or written
             )
@@ -1201,6 +1206,7 @@ class Engine:
                 literacy=behavior.literacy,
                 max_chars=config.persona.max_reply_chars,
                 seed=self._random.randrange(2**32),
+                name=self.own_name,
             )
             if not behavior.avoid_repeats or not text:
                 return text
