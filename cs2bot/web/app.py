@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .. import RELEASE, gpu, server_update
 from ..callouts import DEFAULT_RADIUS, Callout
 from ..config import AppConfig, PersonaSettings, config_path, load_config, save_config
 from ..elevate import relaunch_as_admin
@@ -21,14 +22,17 @@ from ..gamestate import gsi_endpoint, inspect_gsi_cfg, install_gsi_cfg
 from ..hardware import CS2_VRAM_RESERVE_GB, probe
 from ..identity import detect_name_from_line
 from ..llm import BACKENDS
-from ..llm.catalog import recommended, survey
+from ..llm.catalog import CHOICES, recommended, survey
 from ..models import LifeState
 from ..output import keyboard
 from ..parser import parse_chat_line
 from ..persona import PRESETS, build_system_prompt
 from ..rules import should_reply
 from ..snitch import where
-from ..voice.audio import output_devices
+from ..voice import cable, process_loopback, tts
+from ..voice.audio import output_devices_report
+from ..voice.binds import detect_voice_key
+from ..voice.speak import installed_voices, play, render
 
 STATIC_DIR = Path(__file__).parent / "static"
 # Long enough for the browser to receive the answer before the process goes away.
@@ -52,6 +56,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     async def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> FileResponse:
+        return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
+
     @app.get("/api/status")
     async def status() -> dict[str, Any]:
         return engine.status()
@@ -62,6 +70,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return {
             "path": engine.config.game.console_log_path,
             "attached": engine.log_attached,
+            "source": engine.log_source,
+            "reading": engine.log_reading,
+            "reason": engine.log_reason(),
             "lines_seen": engine.lines_seen,
             "lines": list(engine.recent_lines),
             **engine.log_file_state(),
@@ -82,6 +93,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             config = AppConfig.model_validate(payload)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # Saved personas are only ever changed through /api/personas, so a settings save that
+        # left the panel before a persona was saved cannot wipe it.
+        config = config.model_copy(update={"saved_personas": engine.config.saved_personas})
         await engine.apply_config(config)
         return engine.config.model_dump(mode="json")
 
@@ -90,6 +104,25 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         config = engine.config.model_copy(update={"enabled": bool(payload.get("enabled"))})
         await engine.apply_config(config)
         return engine.status()
+
+    @app.get("/api/catalog")
+    async def list_catalog() -> dict[str, Any]:
+        """The model picker's choices without probing the hardware."""
+        return {
+        "models": [
+            {"label": c.label, "ollama": c.ollama, "speech_tier": c.speech_tier} for c in CHOICES
+        ]
+    }
+
+    @app.post("/api/llm/pull")
+    async def pull_model(payload: dict[str, Any]) -> dict[str, Any]:
+        tag = str(payload.get("model") or "").strip()
+        if not tag:
+            return {"status": "error: no model named"}
+        if engine.config.llm.backend != "ollama":
+            llm = engine.config.llm.model_copy(update={"backend": "ollama"})
+            await engine.apply_config(engine.config.model_copy(update={"llm": llm}))
+        return {"status": engine.pull_model(tag)}
 
     @app.get("/api/models")
     async def list_models() -> dict[str, Any]:
@@ -109,6 +142,45 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.post("/api/llm/check")
     async def llm_check() -> dict[str, str]:
         return {"status": await engine.check_llm()}
+
+    @app.get("/api/server/version")
+    async def server_version_report() -> dict[str, Any]:
+        """What the LAN server's update agent says is installed there, against this client."""
+        server = await server_update.server_version(engine.config.llm.ollama_url)
+        return {
+            "client": RELEASE,
+            "server": server,
+            "behind": server_update.behind(str(server.get("version", "")), RELEASE),
+        }
+
+    @app.get("/api/updates")
+    async def updates_report() -> dict[str, Any]:
+        """Client, server and newest GitHub release side by side - polled by the panel."""
+        server = await server_update.server_version(engine.config.llm.ollama_url)
+        latest = await server_update.latest_release()
+        return server_update.update_report(RELEASE, server, latest)
+
+    @app.post("/api/server/update")
+    async def server_update_request() -> dict[str, Any]:
+        return await server_update.request_update(engine.config.llm.ollama_url, RELEASE)
+
+    @app.get("/api/gpu")
+    async def gpu_report() -> dict[str, Any]:
+        llm = engine.config.llm
+        return await gpu.report(llm.ollama_url, llm.ollama_api_key, llm.ollama_verify_tls)
+
+    @app.post("/api/gpu/kill")
+    async def gpu_kill(body: dict[str, int]) -> dict[str, Any]:
+        ok, detail = gpu.kill(int(body.get("pid", 0)))
+        return {"ok": ok, "detail": detail}
+
+    @app.post("/api/gpu/unload")
+    async def gpu_unload(body: dict[str, str]) -> dict[str, Any]:
+        llm = engine.config.llm
+        ok, detail = await gpu.unload_model(
+            llm.ollama_url, body.get("model", ""), llm.ollama_api_key, llm.ollama_verify_tls
+        )
+        return {"ok": ok, "detail": detail}
 
     @app.get("/api/personas")
     async def list_personas() -> dict[str, Any]:
@@ -241,11 +313,150 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.get("/api/voice")
     async def voice_status() -> dict[str, Any]:
         """Whether the bot can hear voice comms here, and what it last heard."""
+        devices, devices_error = await asyncio.to_thread(output_devices_report)
         return {
             "status": engine.voice_status(),
-            "devices": output_devices(),
+            "devices": devices,
+            "devices_error": devices_error,
             "settings": engine.config.voice.model_dump(mode="json"),
+            "voices": await asyncio.to_thread(installed_voices),
+            "apps": await asyncio.to_thread(process_loopback.running_apps),
         }
+
+    @app.get("/api/voice/apps")
+    async def voice_apps() -> dict[str, Any]:
+        """Programs the bot could listen to on their own (the ones with a window right now)."""
+        return {"apps": await asyncio.to_thread(process_loopback.running_apps)}
+
+    @app.get("/api/voice/talk-key")
+    async def voice_talk_key() -> dict[str, Any]:
+        """CS2's own push-to-talk bind, read from Steam's userdata."""
+        key, where = await asyncio.to_thread(detect_voice_key, engine.config.game.cfg_dir)
+        return {"key": key, "where": where}
+
+    @app.get("/api/voice/cable")
+    async def voice_cable() -> dict[str, Any]:
+        """Whether the virtual microphone driver is installed."""
+        return await asyncio.to_thread(cable.driver_status)
+
+    @app.post("/api/voice/cable/install")
+    async def voice_cable_install() -> dict[str, Any]:
+        """Download VB-Audio Cable and run its installer (UAC prompt follows)."""
+        ok, detail = await asyncio.to_thread(cable.install_cable)
+        status = await asyncio.to_thread(cable.driver_status)
+        return {"ok": ok, "detail": detail, **status}
+
+    @app.get("/api/voice/voices")
+    async def voice_voices() -> dict[str, Any]:
+        """The natural (Piper) voices and the Windows voices the bot can talk with."""
+        return {"voices": await asyncio.to_thread(installed_voices), **tts.status()}
+
+    @app.post("/api/voice/voices/fetch")
+    async def voice_fetch(payload: dict[str, Any]) -> dict[str, Any]:
+        """Download a Piper voice now instead of on the first reply."""
+        voice_id = str(payload.get("voice") or tts.DEFAULT_VOICE)
+        if tts.find(voice_id) is None:
+            return {"ok": False, "detail": f"unknown voice {voice_id}", **tts.status()}
+        try:
+            await asyncio.to_thread(tts.download, voice_id)
+        except OSError as exc:
+            return {"ok": False, "detail": f"download failed: {exc}", **tts.status()}
+        return {"ok": True, "detail": f"{voice_id} ready", **tts.status()}
+
+    @app.post("/api/voice/engines/install")
+    async def voice_engine_install(payload: dict[str, Any]) -> dict[str, Any]:
+        """Download a voice engine (or a Piper voice): nothing is fetched on the first line any more."""
+        from ..voice import engines, kokoro, tts
+
+        wanted = str(payload.get("engine") or "")
+        if wanted == "kokoro":
+            try:
+                await asyncio.to_thread(kokoro.download)
+            except Exception as exc:
+                return {"ok": False, "detail": f"download failed: {exc}", "engines": engines.status()}
+            return {"ok": True, "detail": "Kokoro installed", "engines": engines.status()}
+        if wanted == "piper":
+            voice = tts.find(str(payload.get("voice") or "")) or tts.find(tts.DEFAULT_VOICE)
+            assert voice is not None
+            try:
+                await asyncio.to_thread(tts.download, voice.id)
+            except Exception as exc:
+                return {"ok": False, "detail": f"download failed: {exc}", "engines": engines.status()}
+            return {"ok": True, "detail": f"Piper voice {voice.id} installed", "engines": engines.status()}
+        found = engines.find(wanted)
+        if found is None:
+            return {"ok": False, "detail": "unknown voice engine", "engines": engines.status()}
+        if engines.downloading.get(found.id):
+            return {"ok": True, "detail": "already downloading", "engines": engines.status()}
+        try:
+            await asyncio.to_thread(engines.download, found)
+        except Exception as exc:
+            return {"ok": False, "detail": f"download failed: {exc}", "engines": engines.status()}
+        return {"ok": True, "detail": f"{found.label.split(' - ')[0]} installed", "engines": engines.status()}
+
+    @app.post("/api/voice/clone")
+    async def voice_clone(payload: dict[str, Any]) -> dict[str, Any]:
+        """Set the voice Chatterbox imitates: {source: "last"} | {url} | {file: base64, name}."""
+        import base64
+
+        from ..voice import clone
+        from ..voice import listener as listener_mod
+
+        try:
+            if payload.get("source") == "last":
+                listener = engine.listener
+                samples = listener.last_audio if listener else []
+                if not samples or listener is None:
+                    return {"ok": False, "detail": "nothing heard yet - start the bot, let a teammate talk"}
+                seconds = len(samples) / 16000
+                if seconds < clone.MIN_SECONDS:
+                    return {
+                        "ok": False,
+                        "detail": f"only {seconds:.1f} s of speech heard so far - let them talk a bit more"
+                        f" (clips build up to {listener_mod.CLONE_BUFFER_SECONDS:g} s), then press again",
+                        **clone.info(),
+                    }
+                result = await asyncio.to_thread(
+                    clone.save, samples, 16000, f"last voice heard: {listener.last_text[:60]}"
+                )
+            elif payload.get("url"):
+                url = str(payload["url"]).strip()
+                samples, rate = await asyncio.to_thread(clone.fetch, url)
+                result = await asyncio.to_thread(clone.save, samples, rate, url)
+            elif payload.get("file"):
+                name = str(payload.get("name") or "upload")
+                data = base64.b64decode(str(payload["file"]).split(",", 1)[-1])
+                samples, rate = await asyncio.to_thread(clone.decode, data, name)
+                result = await asyncio.to_thread(clone.save, samples, rate, name)
+            else:
+                return {"ok": False, "detail": "send a file, a URL or source=last"}
+        except (ValueError, OSError) as exc:
+            return {"ok": False, "detail": str(exc), **clone.info()}
+        detail = f"voice clip saved ({result['seconds']} s)"
+        if result["short"]:
+            detail += f" - short; {clone.GOOD_SECONDS:g}+ s gives a much cleaner clone"
+        return {"ok": True, "detail": detail, **result}
+
+    @app.post("/api/voice/preview")
+    async def voice_preview(payload: dict[str, Any]) -> dict[str, Any]:
+        """Play a line on the default speakers - no push-to-talk, no cable - to audition a voice."""
+        text = str(payload.get("text") or "rotate B now, they are all on A").strip()
+        voice_id = str(payload.get("voice") or engine.config.voice.speak_voice)
+        rate = int(payload.get("rate") or engine.config.voice.speak_rate)
+        tts_engine = str(payload.get("engine") or engine.config.voice.speak_engine)
+        try:
+            samples, rate_hz = await asyncio.to_thread(render, text, voice_id, rate, tts_engine)
+            await asyncio.to_thread(play, samples, rate_hz, "")
+        except Exception as exc:
+            return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+        return {"ok": True, "detail": f"played {len(samples) / rate_hz:.1f}s"}
+
+    @app.post("/api/voice/speak")
+    async def voice_speak(payload: dict[str, Any]) -> dict[str, Any]:
+        """Say a line over push-to-talk now - the test for the virtual-microphone setup."""
+        text = str(payload.get("text") or "mic check, this is the bot").strip()
+        spoken, detail = await engine.speak(text)
+        return {"spoken": spoken, "detail": detail, "status": engine.speaker.status()}
 
     @app.post("/api/voice/restart")
     async def voice_restart() -> dict[str, Any]:
@@ -361,11 +572,16 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         await ws.accept()
         queue = engine.bus.subscribe()
         try:
-            await ws.send_json({"kind": "snapshot", "data": {
-                "status": engine.status(),
-                "config": engine.config.model_dump(mode="json"),
-                "events": engine.bus.history(),
-            }})
+            await ws.send_json(
+                {
+                    "kind": "snapshot",
+                    "data": {
+                        "status": engine.status(),
+                        "config": engine.config.model_dump(mode="json"),
+                        "events": engine.bus.history(),
+                    },
+                }
+            )
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=5.0)

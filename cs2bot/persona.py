@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from .config import AppConfig, PersonaSettings
+from .config import AppConfig, PersonaSettings, TeammateSettings
 from .humanize import game_iq_directive, literacy_directive
 from .llm.base import ChatTurn
 from .models import ChatChannel, ChatMessage, LifeState, LocalPlayer
@@ -13,6 +13,16 @@ from .playbook import Strategy, assign, map_label
 from .snitch import is_request, prompt_note
 
 PRESETS: dict[str, PersonaSettings] = {
+    "Clean slate": PersonaSettings(
+        name="Clean slate",
+        description=(
+            "You are a person chatting in a group text chat. You have no particular persona: "
+            "talk naturally, in your own voice, about whatever people bring up."
+        ),
+        style_notes="Keep it short, like real chat. No emoji spam. No asterisk roleplay actions.",
+        dead_notes="",
+        game_aware=False,
+    ),
     "Cheeky Teammate": PersonaSettings(
         name="Cheeky Teammate",
         description=(
@@ -83,8 +93,7 @@ PRESETS: dict[str, PersonaSettings] = {
     "Deadpan Bot": PersonaSettings(
         name="Deadpan Bot",
         description=(
-            "You are a Counter-Strike 2 player who answers everything with dry, deadpan "
-            "one-liners."
+            "You are a Counter-Strike 2 player who answers everything with dry, deadpan one-liners."
         ),
         style_notes="Minimal words. No exclamation marks. Never explain the joke.",
         dead_notes="Being dead has not changed your tone in the slightest.",
@@ -93,6 +102,10 @@ PRESETS: dict[str, PersonaSettings] = {
 
 # Nobody types "Angry and Toxic" in the middle of a round; they type "toxic".
 _NICKNAMES = {
+    "clean": "Clean slate",
+    "blank": "Clean slate",
+    "plain": "Clean slate",
+    "default": "Clean slate",
     "toxic": "Angry and Toxic",
     "angry": "Angry and Toxic",
     "mad": "Angry and Toxic",
@@ -116,6 +129,34 @@ _NICKNAMES = {
 def persona_choices(saved: Mapping[str, PersonaSettings]) -> dict[str, PersonaSettings]:
     """Every persona that can be asked for by name: the built-in ones and the saved ones."""
     return {**PRESETS, **saved}
+
+
+def persona_from_order(order: str, current: PersonaSettings) -> PersonaSettings:
+    """A persona written on the spot from what a player said the bot now is.
+
+    "a friendly operator who never swears" becomes the whole description; the style and game
+    awareness of the persona being replaced are kept, so an order changes who the bot is, not
+    whether it knows it is in a match.
+    """
+    text = " ".join(order.split()).strip(" .!")
+    for lead in ("you are now ", "you're now ", "you are ", "you're ", "now "):
+        if text.casefold().startswith(lead):
+            text = text[len(lead) :]
+            break
+    lowered = text.casefold()
+    if lowered.startswith("talk like "):
+        description = f"You {text}. Stay in that voice for everything you say."
+    else:
+        description = f"You are {text}. Stay fully in that character for everything you say."
+    name = " ".join(text.split()[:4]).strip(" ,.")
+    return current.model_copy(
+        update={
+            "name": name[:40] or "As ordered",
+            "description": description,
+            "dead_notes": current.dead_notes if current.game_aware else "",
+            "extra_instructions": "",
+        }
+    )
 
 
 def find_persona(wanted: str, saved: Mapping[str, PersonaSettings]) -> PersonaSettings | None:
@@ -153,6 +194,20 @@ _VOICE_NOTE = (
 )
 
 
+# Spoken lines go through a text-to-speech voice, so anything that reads like writing - lists,
+# emoji, "As an AI", tidy full sentences - sounds like a robot reading an essay.
+_SPOKEN_NOTE = (
+    "You are talking out loud on voice comms, not writing. Say it the way a real player would "
+    "say it mid-game: casual, contractions, short clauses, maybe a filler word, trailing off is "
+    "fine. No lists, no emoji, no quotes, no stage directions, no names at the start, no "
+    "'As an AI' or 'As your teammate', never explain yourself, never offer more help. "
+    "One or two spoken sentences at most. Sound like these (do not copy them): "
+    "'yeah yeah he's long, I got him' / 'nah stay, don't peek that, we got time' / "
+    "'oof... okay okay, save, we go next' / 'he's one, he's lit, push push' / "
+    "'ha, that was so lucky, I'm not even gonna lie'."
+)
+
+
 def game_context(
     player: LocalPlayer,
     local_state: LifeState,
@@ -181,9 +236,7 @@ def game_context(
     if incoming.is_voice:
         bits.append(f"a {sender_state} teammate said this over voice comms")
     else:
-        bits.append(
-            f"{incoming.sender} is {sender_state} and wrote in {_CHANNEL_LABEL[incoming.channel]}"
-        )
+        bits.append(f"{incoming.sender} is {sender_state} and wrote in {_CHANNEL_LABEL[incoming.channel]}")
     return "; ".join(bits)
 
 
@@ -222,6 +275,24 @@ def state_note(local_state: LifeState, incoming: ChatMessage) -> str | None:
     return None
 
 
+_NICE_NOTE = (
+    "{who} is on YOUR team. Whatever your persona is like to everyone else, be friendly and "
+    "supportive to your own teammates: no insults, no blame, back them up."
+)
+
+
+def teammate_note(settings: TeammateSettings, incoming: ChatMessage, is_teammate: bool) -> str | None:
+    """How to treat the sender when they are on the bot's own team."""
+    if not is_teammate:
+        return None
+    who = "the person on voice" if incoming.is_voice else incoming.sender
+    if settings.stance == "nice":
+        return _NICE_NOTE.format(who=who)
+    if settings.stance == "custom" and settings.custom.strip():
+        return f"{who} is on YOUR team. {settings.custom.strip()}"
+    return None
+
+
 def _address_note(incoming: ChatMessage, own_name: str) -> str | None:
     if not incoming.addressed_to_me:
         return None
@@ -240,43 +311,66 @@ def build_system_prompt(
     incoming: ChatMessage,
     own_name: str = "",
     recent_replies: list[str] | None = None,
+    is_teammate: bool = False,
 ) -> str:
     persona = config.persona
+    aware = persona.game_aware
     lines = [persona.description.strip()]
     if persona.style_notes.strip():
         lines.append(persona.style_notes.strip())
     if persona.extra_instructions.strip():
         lines.append(persona.extra_instructions.strip())
-    if config.dead_alive.use_dead_persona and local_state is LifeState.DEAD and persona.dead_notes.strip():
+    if (
+        aware
+        and config.dead_alive.use_dead_persona
+        and local_state is LifeState.DEAD
+        and persona.dead_notes.strip()
+    ):
         lines.append(persona.dead_notes.strip())
     lines.append(literacy_directive(config.behavior.literacy))
-    lines.append(game_iq_directive(config.behavior.intelligence))
-    if config.behavior.unprompted_advice:
+    if aware:
+        lines.append(game_iq_directive(config.behavior.intelligence))
+    if aware and config.behavior.unprompted_advice:
         lines.append(
             "Offer a useful pointer even when nobody asked for one, based on what you can see "
             "in the chat and the game context."
         )
-    lines.append(
-        "Reply with the chat message only: no quotes, no name prefix, no narration, "
-        f"and at most {persona.max_reply_chars} characters."
-    )
+    if persona.max_reply_chars <= 0:
+        lines.append(_SPOKEN_NOTE)
+    else:
+        lines.append(
+            "Reply with the chat message only: no quotes, no name prefix, no narration, "
+            f"and {length_rule(persona.max_reply_chars)}."
+        )
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
-    lines.append("Live game context - " + game_context(player, local_state, incoming, own_name))
-    if config.dead_alive.adapt_replies:
-        state = state_note(local_state, incoming)
-        if state:
-            lines.append(state)
+    if aware:
+        lines.append("Live game context - " + game_context(player, local_state, incoming, own_name))
+        if config.behavior.game_mode and player.match_situation:
+            lines.append("Match situation - " + player.match_situation + ".")
+        if config.dead_alive.adapt_replies:
+            state = state_note(local_state, incoming)
+            if state:
+                lines.append(state)
+    elif own_name:
+        lines.append(f"Your name in the chat is {own_name}; {incoming.sender} wrote the message.")
+    team = teammate_note(config.teammates, incoming, is_teammate)
+    if team:
+        lines.append(team)
     note = _address_note(incoming, own_name)
     if note:
         lines.append(note)
-    if incoming.is_voice:
+    if incoming.is_voice and aware:
         lines.append(_VOICE_NOTE)
-    snitch = prompt_note(
-        config.snitch,
-        player,
-        config.callouts,
-        asked=is_request(incoming.text, config.snitch.request_phrases),
+    snitch = (
+        prompt_note(
+            config.snitch,
+            player,
+            config.callouts,
+            asked=is_request(incoming.text, config.snitch.request_phrases),
+        )
+        if aware
+        else None
     )
     if snitch:
         lines.append(snitch)
@@ -304,12 +398,67 @@ def build_reveal_turns(config: AppConfig) -> list[ChatTurn]:
     # The link is appended afterwards, so the model must not invent one of its own.
     lines.append(
         "Reply with the chat message only: no quotes, no name prefix, no narration, no links, "
-        f"and at most {max(40, persona.max_reply_chars - len(config.reveal.link) - 2)} characters."
+        f"and {length_rule(persona.max_reply_chars, reserve=len(config.reveal.link) + 2)}."
     )
     return [
         ChatTurn(role="system", content="\n".join(lines)),
         ChatTurn(role="user", content=config.reveal.instructions.strip()),
     ]
+
+
+OCCASIONS = {
+    "round_start": "A new round is starting and nobody has said anything yet.",
+    "death": "You just died this round.",
+    "quiet": "Nobody has said anything for a while.",
+    "match_start": "The match has just started - first round.",
+    "match_point": "It is match point - the next round can decide the whole match.",
+}
+
+
+def build_initiative_turns(
+    config: AppConfig,
+    player: LocalPlayer,
+    local_state: LifeState,
+    occasion: str,
+    history: list[ChatMessage],
+    own_name: str = "",
+    recent_replies: list[str] | None = None,
+) -> list[ChatTurn]:
+    """Ask the model to say something unprompted, in the persona it has been using all along.
+
+    The system prompt is the normal one, so a persona order given in chat ("you are now a
+    friendly operator") shapes what it volunteers just as much as what it answers.
+    """
+    channel = ChatChannel.TEAM if config.initiative.channel == "team" else ChatChannel.ALL
+    anchor = history[-1] if history else ChatMessage(raw="", sender="", text="", channel=channel)
+    anchor = anchor.model_copy(update={"channel": channel, "addressed_to_me": False, "mention_reason": ""})
+    system = build_system_prompt(
+        config, player, local_state, anchor, own_name, recent_replies, is_teammate=True
+    )
+    turns = [ChatTurn(role="system", content=system)]
+    for message in history[-config.behavior.history_turns :]:
+        role = "assistant" if message.is_self else "user"
+        content = message.text if message.is_self else f"{message.sender}: {message.text}"
+        turns.append(ChatTurn(role=role, content=content))
+    where = "your team" if channel is ChatChannel.TEAM else "everyone in the server"
+    turns.append(
+        ChatTurn(
+            role="user",
+            content=(
+                f"({OCCASIONS.get(occasion, OCCASIONS['quiet'])} Say one short thing to {where} on "
+                "your own - a comment, a question, banter - the way a real player would start "
+                "talking. Stay in character. Reply with the chat message only.)"
+            ),
+        )
+    )
+    return turns
+
+
+def length_rule(max_chars: int, reserve: int = 0) -> str:
+    """The length clause of the prompt; 0 means spoken, where a sentence or two reads naturally."""
+    if max_chars <= 0:
+        return "a sentence or two, like somebody talking on voice"
+    return f"at most {max(40, max_chars - reserve) if reserve else max_chars} characters"
 
 
 def build_strategy_turns(
@@ -348,7 +497,7 @@ def build_strategy_turns(
     lines.append("; ".join(where_bits))
     lines.append(
         "Reply with the chat lines only, separated by newlines: no numbering, no quotes, no name "
-        f"prefix, no narration, and at most {persona.max_reply_chars} characters per line."
+        f"prefix, no narration, and {length_rule(persona.max_reply_chars)} per line."
     )
     if persona.banned_words:
         lines.append("Never use these words: " + ", ".join(persona.banned_words) + ".")
@@ -359,7 +508,7 @@ def build_strategy_turns(
         ChatTurn(
             role="user",
             content=(
-                f"{ask}The call is \"{strategy.name}\":\n{numbered}"
+                f'{ask}The call is "{strategy.name}":\n{numbered}'
                 + (f"\n(why: {strategy.detail})" if strategy.detail else "")
             ),
         ),
@@ -374,10 +523,9 @@ def build_turns(
     history: list[ChatMessage],
     own_name: str = "",
     recent_replies: list[str] | None = None,
+    is_teammate: bool = False,
 ) -> list[ChatTurn]:
-    system = build_system_prompt(
-        config, player, local_state, incoming, own_name, recent_replies
-    )
+    system = build_system_prompt(config, player, local_state, incoming, own_name, recent_replies, is_teammate)
     turns = [ChatTurn(role="system", content=system)]
     for message in history[-config.behavior.history_turns :]:
         role = "assistant" if message.is_self else "user"

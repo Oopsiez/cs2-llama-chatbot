@@ -4,17 +4,17 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CS2 Chatbot</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
 <header>
-  <div class="brand">CS2 <span>Chatbot</span> <small id="version"></small></div>
+  <div class="brand">CS2 <span>Chatbot</span> <small id="version"></small> <span class="badge warn" id="update-badge" hidden></span></div>
   <div class="status-strip">
     <span class="pill" id="pill-state">state: unknown</span>
     <span class="pill" id="pill-gsi">gsi: waiting</span>
     <span class="pill" id="pill-log">log: detached</span>
     <span class="pill" id="pill-llm">llm: not checked</span>
-    <span class="pill" id="pill-sender">output: -</span>
     <span class="pill" id="pill-name">you: unknown</span>
     <button class="toggle" id="toggle" data-on="false">Start bot</button>
   </div>
@@ -31,18 +31,43 @@
 
   <section class="card">
     <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="general">General</button>
       <button class="tab" role="tab" data-tab="persona" aria-selected="true">Personality</button>
       <button class="tab" role="tab" data-tab="brain">Intelligence</button>
-      <button class="tab" role="tab" data-tab="model">Model</button>
+      
+      <button class="tab" role="tab" data-tab="advanced">Advanced</button>
+      <button class="tab" role="tab" data-tab="server">Server</button>
       <button class="tab" role="tab" data-tab="deadalive">Dead / alive</button>
       <button class="tab" role="tab" data-tab="strats">Strats</button>
-      <button class="tab" role="tab" data-tab="voice">Voice</button>
-      <button class="tab" role="tab" data-tab="snitch">Snitch</button>
+      <button class="tab" role="tab" data-tab="speech">Speech</button>
       <button class="tab" role="tab" data-tab="game">Game</button>
       <button class="tab" role="tab" data-tab="test">Test</button>
     </div>
 
     <div class="panel" data-panel="persona" data-active="true">
+      <label>Respond to <span class="hint">what the bot listens and answers to</span>
+        <select id="respond-to">
+          <option value="text">Text chat only</option>
+          <option value="voice">Voice comms only (text bot off)</option>
+          <option value="both">Both text and voice</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="voice-enabled" /><span>Listen to voice comms <span class="tip" title="Hears the team over voice (through your speakers) and answers in team chat.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="obey-orders" /><span>Obey orders <span class="tip" title="&quot;strat?&quot;, &quot;bot quiet&quot;, &quot;bot talk&quot; and persona changes from players count as orders.">?</span></span></label>
+      <details class="options" id="obey-options"><summary>Options</summary>
+        <div class="row">
+          <label>Take orders from
+            <select id="orders-listen">
+              <option value="team">team chat only</option>
+              <option value="all">all chat only</option>
+              <option value="both">both</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="orders-persona" /><span>Let players change the personality</span></label>
+        </div>
+      </details>
+      <label class="check"><input type="checkbox" id="initiative-on" /><span>Start conversations on its own <span class="tip" title="Chimes in unprompted at round start, after dying or when it has been quiet - how often and where is set under Behaviour.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="game-mode" /><span>Game mode <span class="tip" title="Reads the score from CS2 so the bot knows when the match has just started, is close, or is at match point - and talks accordingly.">?</span></span></label>
       <label>Preset
         <select id="preset"></select>
       </label>
@@ -60,6 +85,10 @@
         <span class="hint">Added to the prompt only while the bot is dead.</span>
         <textarea id="persona-dead" rows="2"></textarea>
       </label>
+      <label class="check">
+        <input type="checkbox" id="persona-game-aware" />
+        <span>Knows it is in a CS2 match (map, round, dead/alive). Untick for a clean slate that just chats.</span>
+      </label>
       <label>Custom prompt
         <span class="hint">Typed mid-match and appended to the prompt word for word. Takes effect
           on the next reply - no restart, no reload.</span>
@@ -76,17 +105,74 @@
       <div class="actions">
         <input type="text" id="persona-save-name" placeholder="save as…" style="max-width:200px" />
         <button class="action primary" id="persona-save">Save persona</button>
-        <select id="persona-saved" style="max-width:200px"></select>
-        <button class="action" id="persona-load">Load</button>
-        <button class="action" id="persona-delete">Delete</button>
+        <button class="action" id="persona-delete">Delete this persona</button> <span class="tip" title="Saved personas appear in the Preset list under 'Your personas'. Pick one there, edit it, and Save persona again to update it. Delete removes the saved persona currently picked in the Preset list.">?</span>
         <span class="note" id="persona-note"></span>
+      </div>
+      <h3>Speech personality</h3>
+      <label class="check">
+        <input type="checkbox" id="speech-same-persona" />
+        <span>Keep speech and chat personalities the same <span class="tip" title="Untick to give the voice its own personality; typed chat keeps the one above.">?</span></span>
+      </label>
+      <div id="speech-persona-block">
+        <label>Speech persona name<input type="text" id="speech-persona-name" /></label>
+        <label>Who the voice is<textarea id="speech-persona-description" rows="4"></textarea></label>
+        <label>Speech style rules<textarea id="speech-persona-style" rows="2"></textarea></label>
+        <label>Speech custom prompt<textarea id="speech-persona-extra" rows="2"></textarea></label>
+        <label class="check"><input type="checkbox" id="speech-persona-game-aware" /><span>Knows it is in a CS2 match</span></label>
+      </div>
+      <h3>Teammates</h3>
+      <details class="help"><summary title="What this does">?</summary><p class="note">
+        People who have spoken in team chat or on voice count as teammates. Decide how the bot
+        treats them, separately from how the persona treats everyone else.
+      </p></details>
+      <label>
+        <span>Towards teammates</span>
+        <select id="teammates-stance">
+          <option value="same">Same as everyone else</option>
+          <option value="nice">Always friendly, whatever the persona</option>
+          <option value="custom">Custom instructions</option>
+        </select>
+      </label>
+      <label>
+        <span>Custom instructions for teammates</span>
+        <textarea id="teammates-custom" rows="2" placeholder="e.g. hype them up after every kill, never blame them for a lost round"></textarea>
+      </label>
+      <div class="actions">
       </div>
     </div>
 
+    <div class="panel" data-panel="general">
+      <h3>Game state</h3>
+      <div class="result" id="gamestate-line">game state: unknown</div>
+      <div class="divider"></div>
+      <h3>Chat</h3>
+      <div class="row">
+        <label>Personality <span class="tip" title="Who the bot is right now - the built-in presets and the personas you saved. Edit the details on the Personality tab.">?</span>
+          <select id="persona-pick"></select>
+        </label>
+        <label>Chat key <span class="tip" title="The key CS2 has bound to exec message.cfg - the bot presses it to send each line. Same setting as Bind key on the Game tab.">?</span>
+          <input type="text" id="bind-key-general" maxlength="12" style="max-width:100px" />
+        </label>
+      </div>
+      <div class="divider"></div>
+      <h3>Models</h3>
+      <label class="check"><input type="checkbox" id="chat-enabled" /><span>Chat model <span class="tip" title="Writes the typed replies. Off = nothing is typed into team chat.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="speech-enabled" /><span>Speech model <span class="tip" title="Writes the spoken lines. Off = the bot does not talk over voice.">?</span></span></label>
+      <div class="row">
+        <label>Chat model <span class="tip" title="Writes the typed replies. The same list, with what this machine can run, is on the Advanced tab.">?</span>
+          <select id="chat-model"></select>
+        </label>
+        <label>Speech model <span class="tip" title="Writes what the voice says, grouped by how natural the banter sounds. Two 8B models do not both fit an 8GB card, so Ollama swaps them - a few seconds per switch; 'Same as the chat model' avoids that.">?</span>
+          <select id="speech-model"><option value="">Same as the chat model</option></select>
+        </label>
+      </div>
+      <div class="actions"><button class="action" id="pull-speech-model">Install the speech model</button></div>
+      <div class="result" id="pull-note">—</div>
+    </div>
     <div class="panel" data-panel="brain">
       <div class="dial">
         <div class="dial-head">
-          <strong>Literacy</strong>
+          <strong>Literacy <span class="hint">typed and spoken - natural dumbness to full correctness</span></strong>
           <span class="dial-value" id="literacy-value">60</span>
         </div>
         <input type="range" id="literacy" min="0" max="100" step="1" />
@@ -100,15 +186,13 @@
         <input type="range" id="iq" min="0" max="100" step="1" />
         <div class="dial-desc" id="iq-desc"></div>
       </div>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         The two are independent: low literacy with high game IQ is a smart player who types like a
         goblin, and the reverse is a well-spoken fool.
-      </p>
+      </p></details>
       <label class="check">
         <input type="checkbox" id="auto-sampling" />
-        <span>Derive sampling from the dials
-          <small>Low game IQ raises temperature, low literacy shortens replies; typos and chat
-          abbreviations are applied after generation.</small>
+        <span>Derive sampling from the dials <span class="tip" title="Low game IQ raises temperature, low literacy shortens replies; typos and chat abbreviations are applied after generation.">?</span>
         </span>
       </label>
       <div class="row-3">
@@ -133,8 +217,7 @@
       </div>
       <label>Ignore players (comma separated)<input type="text" id="ignore_players" /></label>
       <div class="row">
-        <label class="check"><input type="checkbox" id="addressed-always" /><span>Always answer when someone talks to you
-          <small>Skips trigger words, cooldown and the probability roll.</small></span></label>
+        <label class="check"><input type="checkbox" id="addressed-always" /><span>Always answer when someone talks to you <span class="tip" title="Skips trigger words, cooldown and the probability roll.">?</span></span></label>
         <label class="check"><input type="checkbox" id="addressed-only" /><span>Only answer when someone talks to you</span></label>
       </div>
       <div class="divider"></div>
@@ -146,14 +229,10 @@
         <input type="range" id="reply-delay" min="0" max="15" step="0.5" />
         <div class="dial-desc">How long it waits before the reply appears in chat.</div>
       </div>
-      <label class="check"><input type="checkbox" id="humanized-typing" /><span>Use humanized typing speed instead
-        <small>Ignores the slider: waits to "read" the message, then takes as long as typing the
-        reply would at the speed set on the CS2 tab.</small></span></label>
+      <label class="check"><input type="checkbox" id="humanized-typing" /><span>Use humanized typing speed instead <span class="tip" title="Ignores the slider: waits to &quot;read&quot; the message, then takes as long as typing the reply would at the speed set on the CS2 tab.">?</span></span></label>
       <div class="divider"></div>
-      <label class="check"><input type="checkbox" id="unprompted" /><span>Give advice unprompted
-        <small>Volunteers a pointer instead of only answering what was said.</small></span></label>
-      <label class="check"><input type="checkbox" id="avoid-repeats" /><span>Do not repeat itself
-        <small>Rejects a reply that is too close to a recent one and generates again.</small></span></label>
+      <label class="check"><input type="checkbox" id="unprompted" /><span>Give advice unprompted <span class="tip" title="Volunteers a pointer instead of only answering what was said.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="avoid-repeats" /><span>Do not repeat itself <span class="tip" title="Rejects a reply that is too close to a recent one and generates again.">?</span></span></label>
       <div class="row-3">
         <label>Lines remembered<input type="number" id="repeat-memory" min="0" max="40" step="1" /></label>
         <label>Similarity limit <span class="hint">0-1</span><input type="number" id="repeat-similarity" min="0" max="1" step="0.05" /></label>
@@ -164,20 +243,33 @@
         <label class="check"><input type="checkbox" id="reply-all" /><span>Reply in all chat</span></label>
         <label class="check"><input type="checkbox" id="reply-team" /><span>Reply in team chat</span></label>
       </div>
+      <div class="divider"></div>
+      <h3>Start conversations</h3>
+      <label class="check"><input type="checkbox" id="initiative-enabled" /><span>Talk on its own, without being spoken to <span class="tip" title="A comment at round start, a word after dying, something when it goes quiet - in the current persona.">?</span></span></label>
+      <div class="grid">
+        <label>Where <select id="initiative-channel"><option value="team">Team chat</option><option value="all">All chat</option></select></label>
+        <label>At least this many seconds apart <input type="number" id="initiative-gap" min="10" step="5" /></label>
+        <label>How often it takes the chance <span class="hint">0-1</span><input type="number" id="initiative-chance" min="0" max="1" step="0.1" /></label>
+        <label>Speak when quiet for (seconds) <span class="hint">0 = never</span><input type="number" id="initiative-quiet" min="0" step="10" /></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="initiative-round" /><span>At round start</span></label>
+        <label class="check"><input type="checkbox" id="initiative-death" /><span>After it dies</span></label>
+      </div>
     </div>
 
-    <div class="panel" data-panel="model">
-      <p class="note">
+    <div class="panel" data-panel="advanced">
+      <h3>Model</h3>
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         The model runs on <em>your</em> machine, next to CS2, so it is competing with the game for
         memory. A 1-3B model answers chat perfectly well and runs on a 4GB card - or on no GPU at
         all. Bigger is funnier, not necessary.
-      </p>
+      </p></details>
       <div class="result" id="hardware-note">—</div>
       <div class="actions">
-        <button class="action" id="refresh-models">What can this machine run?</button>
+        <button class="action" id="refresh-models">Model compatibility</button>
       </div>
       <div id="model-picks" class="picks"></div>
-      <div class="divider"></div>
       <label>Backend
         <select id="llm-backend">
           <option value="llama_cpp">llama.cpp (local GGUF)</option>
@@ -191,13 +283,59 @@
       </label>
       <div class="row">
         <label>Context size<input type="number" id="n_ctx" min="512" step="512" /></label>
-        <label>GPU layers <span class="hint">-1 = all</span><input type="number" id="n_gpu_layers" min="-1" /></label>
+        <label>GPU layers <span class="hint">set by "Where it runs" below</span><input type="number" id="n_gpu_layers" min="-1" readonly /></label>
       </div>
       <div class="row">
         <label>Threads <span class="hint">0 = auto</span><input type="number" id="n_threads" min="0" /></label>
         <label>Request timeout (s)<input type="number" id="request_timeout" min="1" step="1" /></label>
       </div>
       <div class="divider"></div>
+      <div class="actions">
+        <button class="action primary" id="check-llm">Check model</button>
+        <span class="note" id="llm-note"></span>
+      </div>
+      <div class="divider"></div>
+      <h3>Where it runs</h3>
+      <div class="row">
+        <label>Chat model on
+          <select id="llm-placement">
+            <option value="gpu">GPU - fastest, uses VRAM next to CS2</option>
+            <option value="split">Split - some layers on the GPU, the rest on the CPU</option>
+            <option value="cpu">CPU only - no VRAM at all</option>
+          </select>
+        </label>
+        <label id="split-layers-label">Layers on the GPU <span class="hint">an 8B model has 32; fewer = less VRAM, slower</span>
+          <input type="number" id="split-layers" min="1" max="80" step="1" />
+        </label>
+      </div>
+      <p class="hint">Speech-to-text (Whisper) and the Piper/Kokoro voices always run on the CPU, so on <b>CPU only</b> the card is CS2's alone.
+        A 12-core CPU answers with a 3-8B model in a few seconds.</p>
+      <h3>On the graphics card now</h3>
+      <p class="hint">Ollama keeps a model loaded for a while after use, and other assistants that start with Windows can hold gigabytes - unload or end them before a match.</p>
+      <div class="result" id="gpu-note">—</div>
+      <div class="actions">
+        <button class="action" id="refresh-gpu">Refresh</button>
+      </div>
+      <h4>Models loaded in Ollama</h4>
+      <div id="gpu-models" class="picks"></div>
+      <h4 hidden>Processes using the GPU</h4>
+      <div id="gpu-processes" class="picks" hidden></div>
+      <label>Console log check (seconds)
+        <input type="number" id="poll-seconds" min="0.1" max="5" step="0.1" />
+        <span class="hint">How often new chat lines are read from console.log. 0.5 is plenty; GSI state is pushed by CS2 and is not polled.</span>
+      </label>
+    </div>
+    <div class="panel" data-panel="server">
+
+      <label class="check"><input type="checkbox" id="use-server" /><span>Run the model on a server on my network <span class="tip" title="Off = the model runs on this PC. On = this PC only types and talks; a server on your network does the thinking.">?</span></span></label>
+      <div id="server-block">
+      <details class="help"><summary title="What this does">?</summary><p class="note">Run <b>CS2 Chatbot Server Setup.exe</b> on the other PC (it installs Ollama, opens the firewall on your
+        private network and pulls the model), then paste the address it prints here. Nothing runs on this PC's GPU.</p></details>
+      <div class="actions">
+        <input type="text" id="remote-host" placeholder="http://192.168.1.50:11434" style="max-width:280px" />
+        <button class="action primary" id="use-remote">Use this server</button>
+        <span class="note" id="remote-note"></span>
+      </div>
       <div class="row">
         <label>Ollama URL
           <span class="hint">Remote is fine: http://gpu-box:11434 or a proxy over https.</span>
@@ -209,33 +347,35 @@
         <label>Ollama API key <span class="hint">optional, sent as a bearer token</span>
           <input type="password" id="ollama-key" />
         </label>
-        <label class="check"><input type="checkbox" id="ollama-verify" /><span>Verify TLS certificate
-          <small>Turn off only for a self-signed certificate on your own server.</small></span></label>
+        <label class="check"><input type="checkbox" id="ollama-verify" /><span>Verify TLS certificate <span class="tip" title="Turn off only for a self-signed certificate on your own server.">?</span></span></label>
       </div>
       <div class="actions">
-        <button class="action primary" id="check-llm">Check model</button>
-        <span class="note" id="llm-note"></span>
+        <button class="action primary" id="test-server">Test server</button>
+        <span class="note" id="server-test-note"></span>
+      </div>
+      <div class="actions">
+        <button class="action" id="check-updates">Check for updates</button>
+        <button class="action primary" id="update-server" hidden>Update server</button>
+        <span class="tip" title="Client, server and the newest GitHub release are compared when the panel opens, every 4 hours, and when you press Check for updates. A red badge in the header stays on while the server is behind this client; Update server tells the server's agent to download and install this client's version.">?</span>
+      </div>
+      <div class="result" id="server-version">—</div>
       </div>
     </div>
-
     <div class="panel" data-panel="deadalive">
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         CS2 tags a dead player's chat with <span class="mono">[DEAD]</span>. The bot reads that tag,
         pairs it with your own alive/dead state from GSI, and writes a different kind of reply for
         each combination - it does not filter anything out.
-      </p>
-      <label class="check"><input type="checkbox" id="da-adapt" /><span>Adapt replies to who is dead
-        <small>Tells the model whether the sender is dead, and whether you are.</small></span></label>
-      <label class="check"><input type="checkbox" id="da-track" /><span>Remember who died this round
-        <small>Only the first line is tagged; later untagged lines from the same player still count as dead.</small></span></label>
+      </p></details>
+      <label class="check"><input type="checkbox" id="da-adapt" /><span>Adapt replies to who is dead <span class="tip" title="Tells the model whether the sender is dead, and whether you are.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="da-track" /><span>Remember who died this round <span class="tip" title="Only the first line is tagged; later untagged lines from the same player still count as dead.">?</span></span></label>
       <label class="check"><input type="checkbox" id="da-persona" /><span>Use the "when dead" persona while dead</span></label>
       <label class="check"><input type="checkbox" id="da-assume" /><span>Assume alive when GSI is not connected</span></label>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         Only for servers that split the chat so the living cannot see dead chat. Leave off when
         everyone sees everything.
-      </p>
-      <label class="check"><input type="checkbox" id="da-enforce" /><span>Skip messages the bot could not have seen
-        <small>Turns the rules below on.</small></span></label>
+      </p></details>
+      <label class="check"><input type="checkbox" id="da-enforce" /><span>Skip messages the bot could not have seen <span class="tip" title="Turns the rules below on.">?</span></span></label>
       <label class="check"><input type="checkbox" id="da-reply-when-dead" /><span>Keep replying while dead</span></label>
       <label class="check"><input type="checkbox" id="da-dead-when-alive" /><span>Answer dead players while alive</span></label>
       <label class="check"><input type="checkbox" id="da-alive-when-dead" /><span>Answer living players while dead</span></label>
@@ -244,13 +384,12 @@
     </div>
 
     <div class="panel" data-panel="strats">
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         Real calls for the Premier / FACEIT pool - Mirage, Inferno, Dust 2, Anubis, Ancient, Nuke
         and Cache - picked for the map and side Game State Integration reports. The tactics come
         from the playbook, not from the model: the model only says them in the bot's voice.
-      </p>
-      <label class="check"><input type="checkbox" id="strat-enabled" /><span>Call strats
-        <small>Answers "strat?" with a call for the map and side you are on.</small></span></label>
+      </p></details>
+      <label class="check"><input type="checkbox" id="strat-enabled" /><span>Call strats <span class="tip" title="Answers &quot;strat?&quot; with a call for the map and side you are on.">?</span></span></label>
       <label class="check"><input type="checkbox" id="strat-asked" /><span>Answer when somebody asks for a strat</span></label>
       <div class="row">
         <label>Take orders from
@@ -271,8 +410,7 @@
       <label>Ask phrases (comma separated) <span class="hint">also works as !strat, and !strat b picks the site</span>
         <input type="text" id="strat-phrases" />
       </label>
-      <label class="check"><input type="checkbox" id="strat-every-round" /><span>Call a strat every round without being asked
-        <small>One line in freezetime. Needs GSI for the round phase.</small></span></label>
+      <label class="check"><input type="checkbox" id="strat-every-round" /><span>Call a strat every round without being asked <span class="tip" title="One line in freezetime. Needs GSI for the round phase.">?</span></span></label>
       <div class="row">
         <label class="check"><input type="checkbox" id="strat-round-start" /><span>Only answer at the start of a round</span></label>
         <label>Round start lasts (seconds)
@@ -280,16 +418,14 @@
         </label>
       </div>
       <div class="row">
-        <label class="check"><input type="checkbox" id="strat-in-character" /><span>Say it in the persona's voice
-          <small>Off sends the playbook lines as written.</small></span></label>
+        <label class="check"><input type="checkbox" id="strat-in-character" /><span>Say it in the persona's voice <span class="tip" title="Off sends the playbook lines as written.">?</span></span></label>
         <label>Chat lines per strat
           <input type="number" id="strat-max-lines" min="1" max="8" step="1" />
           <span class="hint">A call is a header plus one line per player, so six says all of it.</span>
         </label>
       </div>
       <div class="row">
-        <label class="check"><input type="checkbox" id="strat-name-players" /><span>Give the jobs to teammates by name
-          <small>Names come from whoever talks in team chat; the rest are called P2, P3.</small></span></label>
+        <label class="check"><input type="checkbox" id="strat-name-players" /><span>Give the jobs to teammates by name <span class="tip" title="Names come from whoever talks in team chat; the rest are called P2, P3.">?</span></span></label>
       </div>
       <div class="row">
         <label>Side to call for without GSI
@@ -306,76 +442,169 @@
         </label>
       </div>
       <div class="row">
-        <label class="check"><input type="checkbox" id="strat-persona-cmd" /><span>Let players pick the personality in chat</span></label>
+        <label class="check"><input type="checkbox" id="strat-persona-cmd" /><span>Let players control the personality in chat <span class="hint">!persona coach, or "you are now a friendly operator"</span></span></label>
       </div>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         <code>!persona toxic</code>, <code>!persona coach</code>, <code>bot be the therapist</code> - saved
         personas count too, and <code>!persona</code> on its own lists them. Orders are taken from the
         chat chosen above.
-      </p>
+      </p></details>
     </div>
 
-    <div class="panel" data-panel="voice">
-      <p class="note">
+    <div class="panel" data-panel="speech">
+      <label class="check"><input type="checkbox" id="voice-enabled-speech" /><span>Listen to voice comms <span class="tip" title="Hears the team over voice (through your speakers) and answers in team chat.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="obey-orders-speech" /><span>Obey orders <span class="tip" title="&quot;strat?&quot;, &quot;bot quiet&quot;, &quot;bot talk&quot; and persona changes from players count as orders.">?</span></span></label>
+      <details class="options" id="obey-options-speech"><summary>Options</summary>
+        <label>Answer <span class="hint">questions always get an answer, even mid-cooldown</span>
+          <select id="voice-answer">
+            <option value="everything">Everything it hears</option>
+            <option value="questions">Only questions</option>
+            <option value="triggers">Only speech with a trigger word</option>
+          </select>
+        </label>
+        <label>Trigger words (comma separated) <span class="hint">used by the trigger-word mode only</span>
+          <input type="text" id="voice-triggers" />
+        </label>
+        <div class="row">
+          <label>Wait between answers (seconds)
+            <input type="number" id="voice-cooldown" min="0" step="1" />
+          </label>
+          <label>Ignore speech shorter than (words)
+            <input type="number" id="voice-min-words" min="1" step="1" />
+          </label>
+        </div>
+      </details>
+      <label class="check"><input type="checkbox" id="initiative-on-speech" /><span>Start conversations on its own <span class="tip" title="Chimes in unprompted at round start, after dying or when it has been quiet - how often and where is set under Behaviour.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="game-mode-speech" /><span>Game mode <span class="tip" title="Reads the score from CS2 so the bot knows when the match has just started, is close, or is at match point - and talks accordingly.">?</span></span></label>
+      <h3>Listening</h3>
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         The bot listens to what your speakers are playing and transcribes it with a local Whisper
         model, so it hears the same voice comms you do without touching the game or your
         microphone. It hears <em>all</em> of the game - gunfire included - and the mix carries no
         names, so transcripts are rougher than chat and nobody is quoted by name.
         <strong>Answers always go to team chat</strong>, because voice comms are team-only.
-      </p>
+      </p></details>
       <div class="result" id="voice-status">—</div>
-      <label class="check"><input type="checkbox" id="voice-enabled" /><span>Listen to voice comms
-        <small>The speech model is downloaded once, the first time it listens.</small></span></label>
       <div class="row">
+        <label>Hear
+          <select id="voice-capture">
+            <option value="pc">Everything the PC hears</option>
+            <option value="cs2">Only the program picked below</option>
+          </select>
+          <span class="hint" id="voice-capture-note"></span>
+        </label>
+        <label>Program to hear <span class="tip" title="Which program's audio the bot listens to (Windows 10 2004 or newer). It switches to the program the moment it starts and listens to the speakers until then; the status line above says what it is hearing right now.">?</span>
+          <select id="voice-capture-app"></select>
+        </label>
         <label>Listen to
           <select id="voice-device"></select>
-          <span class="hint">The speakers CS2 plays through.</span>
+          <span class="hint">The speakers CS2 plays through (used when hearing everything, or until CS2 starts).</span>
         </label>
         <label>Speech model
           <select id="voice-model">
             <option value="tiny.en">tiny.en - fastest, roughest (~75 MB)</option>
             <option value="base.en">base.en - quick (~150 MB)</option>
             <option value="small.en">small.en - recommended (~500 MB)</option>
-            <option value="medium.en">medium.en - best, needs a strong CPU (~1.5 GB)</option>
+            <option value="medium.en">medium.en - accurate, needs a strong CPU (~1.5 GB)</option>
+            <option value="distil-large-v3">distil-large-v3 - best for English, GPU recommended (~1.5 GB)</option>
+            <option value="large-v3-turbo">large-v3-turbo - top accuracy, GPU (~1.6 GB)</option>
           </select>
-        </label>
-      </div>
-      <label>Only answer speech containing (comma separated) <span class="hint">empty answers everything it hears - a talkative lobby will spam chat</span>
-        <input type="text" id="voice-triggers" />
-      </label>
-      <div class="row">
-        <label>Wait between answers (seconds)
-          <input type="number" id="voice-cooldown" min="0" step="1" />
-        </label>
-        <label>Ignore speech shorter than (words)
-          <input type="number" id="voice-min-words" min="1" step="1" />
         </label>
       </div>
       <div class="row">
         <label>Noise gate <span class="hint">raise it if gunfire is being transcribed, lower it if a quiet teammate is missed</span>
           <input type="number" id="voice-floor" min="0" max="0.2" step="0.001" />
         </label>
-        <label class="check"><input type="checkbox" id="voice-obey" /><span>Obey spoken orders
-          <small>"strat?" or "bot quiet" said out loud counts the same as typed.</small></span></label>
       </div>
+      <h3>Try it</h3>
       <div class="actions">
         <input type="text" id="voice-say" placeholder="strat?" style="max-width:260px" />
         <button class="action primary" id="voice-test">Pretend somebody said this</button>
         <button class="action" id="voice-restart">Restart listening</button>
       </div>
       <div class="result" id="voice-output">—</div>
+      <div class="divider"></div>
+      <h3>Speaking</h3>
+      <details class="help"><summary title="What this does">?</summary><p class="note">How the bot talks back over team voice. Switch engines any time; each one shows whether it is installed, and nothing downloads until you press Install.</p>
+      <p class="hint">The bot speaks with a natural voice into a virtual microphone while holding your push-to-talk key.
+        One-time setup: install <a href="https://vb-audio.com/Cable/" target="_blank" rel="noreferrer">VB-Audio Cable</a>,
+        pick <b>CABLE Input</b> below, and in CS2 → Settings → Audio set the microphone to <b>CABLE Output</b> with push-to-talk on.</p></details>
+      <div class="grid">
+        <label>Respond with <span class="hint">all-chat replies are always typed</span>
+          <select id="voice-reply-with">
+            <option value="text">Text (team chat)</option>
+            <option value="voice">Voice (spoken)</option>
+            <option value="all">All - text and voice</option>
+          </select>
+        </label>
+        <label>Play into <span class="hint">the virtual microphone</span>
+          <select id="voice-speak-device"></select>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="voice-speak-monitor" />
+          <span>Let me hear it too <span class="tip" title="Each line also plays on your own speakers/headset, not just into the virtual mic.">?</span></span>
+        </label>
+        <label>Also play on <span class="tip" title="Where 'Let me hear it too' plays. Pick your real speakers/headset - if Windows' default output is CABLE Input, 'default speakers' would be the virtual mic itself and you would hear nothing.">?</span>
+          <select id="voice-monitor-device"></select>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="voice-resample-48k" />
+          <span>Resample to 48 kHz <span class="tip" title="Converts every line to 48 kHz before it reaches the virtual mic, which stops the wavy sound in CS2/Discord. Off by default because some headset drivers play 48 kHz back as silence; turn it on only if CS2/Discord hear the voice wavy.">?</span></span>
+        </label>
+        <label>Push-to-talk key
+          <span style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="voice-talk-key" maxlength="12" style="max-width:100px" />
+            <button class="action" id="voice-talk-key-detect" type="button">Detect from CS2</button>
+          </span>
+          <span class="hint" id="voice-talk-key-note">Type it, or detect it from CS2's own keybinds (+voicerecord).</span>
+        </label>
+        <label>Voice engine
+          <select id="voice-speak-engine">
+            <option value="kokoro">Kokoro - most human, 28 voices, 1-3 s per line (340 MB once)</option>
+            <option value="chatterbox">Chatterbox-Turbo - most realistic, clones a voice (1.1 GB)</option>
+            <option value="supertonic">Supertonic 2 - fast, 10 voices (260 MB)</option>
+            <option value="kitten">Kitten TTS - tiny, 8 voices (25 MB)</option>
+            <option value="piper">Piper - natural, instant, CPU (60-115 MB per voice)</option>
+            <option value="windows">Windows voice - robotic, nothing to download</option>
+          </select>
+          <span class="hint" id="voice-engine-note"></span>
+          <button class="action" id="voice-engine-install" type="button" hidden>Install this engine</button>
+        </label>
+        <label>Voice <span class="hint">downloaded once, on first use</span>
+          <select id="voice-speak-voice"></select>
+        </label>
+        <label>Speed <span class="hint">-10 slow … 10 fast</span>
+          <input type="number" id="voice-speak-rate" min="-10" max="10" step="1" />
+        </label>
+      </div>
+      <div class="row" id="voice-clone-row" hidden>
+        <label>Voice to clone <span class="tip" title="Chatterbox imitates whoever is in this clip: 3-12 seconds of one person talking. Upload a file, paste a link to audio/video (direct link, or YouTube if yt-dlp is installed), or take the last teammate the bot heard.">?</span>
+          <span class="inline">
+            <input type="file" id="voice-clone-file" accept="audio/*,video/*" />
+            <input type="text" id="voice-clone-url" placeholder="https://… link to a clip" />
+            <button class="action" id="voice-clone-url-go" type="button">Use link</button>
+            <button class="action" id="voice-clone-last" type="button">Clone the last voice I heard</button>
+          </span>
+          <span class="hint" id="voice-clone-note">no clip yet</span>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="action primary" id="voice-cable-install">Install the virtual microphone (VB-Cable)</button>
+        <button class="action" id="voice-cable-use">Use CABLE Input</button>
+        <button class="action" id="voice-preview">Preview voice on my speakers</button>
+        <button class="action" id="voice-speak-test">Say "mic check" now</button>
+      </div>
+      <div class="result" id="voice-cable-status">—</div>
+      <div class="result" id="voice-speak-output">—</div>
     </div>
-
     <div class="panel" data-panel="snitch">
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         The bot gives away <strong>your own</strong> position - the only thing CS2's Game State
         Integration reports while you are playing. Nothing here reads game memory and nothing here
         can see the enemy.
-      </p>
-      <label class="check"><input type="checkbox" id="snitch-enabled" /><span>Snitch on me
-        <small>The bot knows where you are and will say so.</small></span></label>
-      <label class="check"><input type="checkbox" id="snitch-asked" /><span>Answer when somebody asks where you are
-        <small>Bypasses the cooldown, the same way being named does.</small></span></label>
+      </p></details>
+      <label class="check"><input type="checkbox" id="snitch-enabled" /><span>Snitch on me <span class="tip" title="The bot knows where you are and will say so.">?</span></span></label>
+      <label class="check"><input type="checkbox" id="snitch-asked" /><span>Answer when somebody asks where you are <span class="tip" title="Bypasses the cooldown, the same way being named does.">?</span></span></label>
       <label>Ask phrases (comma separated)<input type="text" id="snitch-phrases" /></label>
       <div class="row">
         <label>Announce every (seconds) <span class="hint">0 = never</span>
@@ -399,8 +628,7 @@
       </div>
       <div class="divider"></div>
       <h3>End of match</h3>
-      <label class="check"><input type="checkbox" id="reveal-enabled" /><span>Own up when the match ends
-        <small>One line on the final scoreboard, once per match. Untick to never reveal itself.</small></span></label>
+      <label class="check"><input type="checkbox" id="reveal-enabled" /><span>Own up when the match ends <span class="tip" title="One line on the final scoreboard, once per match. Untick to never reveal itself.">?</span></span></label>
       <div class="row">
         <label>How it signs off
           <select id="reveal-mode">
@@ -426,11 +654,11 @@
       </label>
       <div class="divider"></div>
       <h3>Callouts</h3>
-      <p class="note">
+      <details class="help"><summary title="What this does">?</summary><p class="note">
         GSI reports coordinates, not callout names, so you teach it: stand somewhere in game, type
         the name and record it. Anything within ~400 units of a recorded point resolves to that
         name. If CS2 is not reporting a position, the bot falls back to health and bomb state.
-      </p>
+      </p></details>
       <div class="actions">
         <input type="text" id="callout-name" placeholder="banana" style="max-width:200px" />
         <button class="action primary" id="callout-add">Record where I am standing</button>

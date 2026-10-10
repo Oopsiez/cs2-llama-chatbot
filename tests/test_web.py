@@ -83,9 +83,7 @@ def test_parse_endpoint_reports_dead_players(client):
 
 
 def test_simulate_answers_from_either_side_of_the_grave(client):
-    dead_view = client.post(
-        "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "dead"}
-    ).json()
+    dead_view = client.post("/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "dead"}).json()
     assert dead_view["would_reply"] is True
 
     dead_sender = client.post(
@@ -94,9 +92,7 @@ def test_simulate_answers_from_either_side_of_the_grave(client):
     assert dead_sender["message"]["sender_state"] == "dead"
     assert dead_sender["would_reply"] is True
 
-    alive_view = client.post(
-        "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}
-    ).json()
+    alive_view = client.post("/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}).json()
     assert alive_view["would_reply"] is True
     assert alive_view["reply"]
 
@@ -104,8 +100,7 @@ def test_simulate_answers_from_either_side_of_the_grave(client):
 def test_gsi_endpoint_updates_local_state(client):
     payload = {
         "provider": {"steamid": "76561198000000000"},
-        "player": {"steamid": "76561198000000000", "name": "me", "team": "CT",
-                   "state": {"health": 0}},
+        "player": {"steamid": "76561198000000000", "name": "me", "team": "CT", "state": {"health": 0}},
         "map": {"name": "de_mirage", "phase": "live", "mode": "competitive"},
         "round": {"phase": "live"},
     }
@@ -168,6 +163,7 @@ def test_persona_save_and_delete(client):
     assert client.delete("/api/personas/Test Guy").status_code == 200
     assert client.get("/api/personas").json()["saved"] == {}
 
+
 def test_a_custom_prompt_survives_a_save_and_reload(client):
     persona = client.get("/api/personas").json()["current"]
     persona["extra_instructions"] = "you only speak in questions"
@@ -182,9 +178,9 @@ def test_custom_prompt_reaches_the_model(client):
     config["persona"]["extra_instructions"] = "you only speak in questions"
     assert client.put("/api/config", json=config).status_code == 200
 
-    prompt = client.post(
-        "/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}
-    ).json()["prompt"]
+    prompt = client.post("/api/simulate", json={"line": "[ALL] enemy: ez", "local_state": "alive"}).json()[
+        "prompt"
+    ]
     assert "you only speak in questions" in prompt
 
 
@@ -225,9 +221,7 @@ def test_recording_and_deleting_a_callout(client):
         },
     )
     body = client.post("/api/callouts", json={"name": "banana"}).json()
-    assert body["callouts"] == [
-        {"name": "banana", "x": 100.0, "y": 200.0, "z": 30.0, "radius": 400.0}
-    ]
+    assert body["callouts"] == [{"name": "banana", "x": 100.0, "y": 200.0, "z": 30.0, "radius": 400.0}]
 
     listed = client.get("/api/callouts").json()
     assert listed["callout"] == "banana"
@@ -240,8 +234,8 @@ def test_recording_and_deleting_a_callout(client):
 
 def test_voice_tab_says_whether_it_can_listen_here(client):
     body = client.get("/api/voice").json()
-    assert set(body) == {"status", "devices", "settings"}
-    assert body["settings"]["enabled"] is False
+    assert set(body) == {"status", "devices", "devices_error", "settings", "voices", "apps"}
+    assert body["settings"]["enabled"] is True
     assert isinstance(body["status"]["supported"], bool)
     assert isinstance(body["devices"], list)
 
@@ -266,3 +260,63 @@ def test_the_panel_says_what_this_machine_can_run(client):
     first = body["models"][0]
     assert {"label", "verdict", "vram_gb", "ram_gb", "ollama"} <= set(first)
     assert "ram_gb" in body["hardware"]
+
+
+def test_the_browser_gets_a_favicon_instead_of_a_404(client):
+    assert client.get("/favicon.ico").status_code == 200
+
+
+def test_a_settings_save_cannot_wipe_a_saved_persona(client):
+    config = client.get("/api/config").json()["config"]
+    persona = dict(config["persona"], name="Grumpy")
+    assert client.post("/api/personas", json={"name": "Grumpy", "persona": persona}).status_code == 200
+    assert client.put("/api/config", json=config).status_code == 200  # stale body, no saved_personas
+    assert "Grumpy" in client.get("/api/personas").json()["saved"]
+    assert "Grumpy" in client.get("/api/config").json()["config"]["saved_personas"]
+
+
+def test_the_app_picker_always_offers_cs2(client):
+    assert "cs2.exe" in client.get("/api/voice/apps").json()["apps"]
+
+
+def test_installing_a_model_switches_the_panel_to_ollama_instead_of_refusing(client):
+    config = client.get("/api/config").json()["config"]
+    config["llm"]["backend"] = "mock"
+    assert client.put("/api/config", json=config).status_code == 200
+    status = client.post("/api/llm/pull", json={"model": "x:latest"}).json()["status"]
+    assert "only installed through Ollama" not in status
+    assert client.get("/api/config").json()["config"]["llm"]["backend"] == "ollama"
+
+
+def test_spoken_lines_have_no_length_cap_by_default():
+    from cs2bot.config import AppConfig
+    from cs2bot.llm.base import SamplingParams
+    from cs2bot.persona import length_rule
+
+    assert AppConfig().speech_max_reply_chars == 0
+    assert "at most" not in length_rule(0)
+    assert "<|im_end|>" in SamplingParams().stop
+
+
+def test_a_fresh_install_runs_ollama_on_this_pc():
+    from cs2bot.config import AppConfig
+
+    llm = AppConfig().llm
+    assert llm.backend == "ollama"
+    assert llm.ollama_url == "http://127.0.0.1:11434"
+
+
+def test_the_bots_own_log_is_read_until_cs2_writes_one(client):
+    deadline = time.monotonic() + 5
+    while client.engine.log_source != "fallback" and time.monotonic() < deadline:
+        time.sleep(0.05)
+    status = client.get("/api/status").json()
+    assert status["log_source"] == "fallback"
+    assert "console.log" in status["log_reason"]
+    client.engine.log_note("heard: rush b")
+    while client.engine.lines_seen < 1 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    body = client.get("/api/log").json()
+    assert body["source"] == "fallback"
+    assert body["lines"][0]["chat"] is False
+    assert body["lines"][0]["line"].endswith("heard: rush b")

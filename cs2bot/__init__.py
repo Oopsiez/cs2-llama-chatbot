@@ -2,4 +2,9 @@
 
 # Keep in step with `version` in pyproject.toml and the tag the release workflow builds from;
 # tests/test_version.py fails if they drift.
-__version__ = "1.8.0"
+__version__ = "1.10.28"
+
+try:
+    from ._release import RELEASE  # written by the release workflow from the git tag
+except ImportError:  # a source checkout or a local build
+    RELEASE = f"v{__version__}"

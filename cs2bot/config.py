@@ -20,6 +20,7 @@ class GameSettings(BaseModel):
     """Where CS2 lives and how we type into it."""
 
     console_log_path: str = ""
+    poll_seconds: float = 0.5  # how often the console log is re-read for new lines
     cfg_dir: str = ""
     exec_cfg_name: str = "message.cfg"
     bind_key: str = "p"
@@ -38,17 +39,25 @@ class GameSettings(BaseModel):
 class LLMSettings(BaseModel):
     """Which Llama 3 runtime to talk to."""
 
-    backend: str = "mock"  # llama_cpp | ollama | mock
+    backend: str = "ollama"  # llama_cpp | ollama | mock; local Ollama until the Server tab says otherwise
     model_path: str = ""  # GGUF file for llama_cpp
     # Point this at another machine to run the model remotely, e.g. http://gpu-box:11434
     ollama_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "llama3:8b-instruct-q4_K_M"
+    ollama_model: str = "hf.co/Andycurrent/Llama-3-8B-Lexi-Uncensored:Q4_K_M"
     ollama_api_key: str = ""  # sent as `Authorization: Bearer ...` for proxied servers
     ollama_verify_tls: bool = True  # off for a self-signed certificate on your own proxy
     n_ctx: int = 4096
+    # -1 puts every layer on the GPU, 0 keeps the model on the CPU. `gpu_auto` overrides this:
+    # the whole model goes on the card only when it fits beside CS2, otherwise none of it does.
     n_gpu_layers: int = -1
-    n_threads: int = 0  # 0 -> let the runtime decide
+    gpu_auto: bool = True
+    n_threads: int = 0  # 0 -> half the cores, so the game keeps the other half
     request_timeout: float = 30.0
+    cpu_only: bool = False  # keep the model off the graphics card entirely (saves VRAM for CS2)
+    speech_ollama_model: str = ""  # Ollama tag used for spoken lines; blank -> the chat model
+    chat_enabled: bool = True  # off -> no typed replies are generated
+    speech_enabled: bool = True  # off -> no spoken replies are generated
+    warm_on_start: bool = True  # load the model while you are in the menu, not on the first reply
 
 
 class GenerationSettings(BaseModel):
@@ -76,6 +85,17 @@ class PersonaSettings(BaseModel):
     extra_instructions: str = ""
     banned_words: list[str] = Field(default_factory=list)
     max_reply_chars: int = 160
+    # Off for a persona that should not know it is in a game: no map, round or dead/alive talk.
+    game_aware: bool = True
+
+
+class TeammateSettings(BaseModel):
+    """How the bot treats people on its own team, whatever the persona is like to everyone else."""
+
+    # same: no special treatment; nice: friendly to teammates even as a toxic persona;
+    # custom: use `custom` verbatim.
+    stance: str = "same"
+    custom: str = ""
 
 
 class BehaviorSettings(BaseModel):
@@ -84,15 +104,14 @@ class BehaviorSettings(BaseModel):
     intelligence: int = 60  # 0..100, game IQ: how good the tactical thinking is
     literacy: int = 60  # 0..100, how well it writes: spelling, punctuation, sentence length
     unprompted_advice: bool = False  # volunteer pointers instead of only answering
+    game_mode: bool = True  # tell the model the score: match just started, close, match point
     avoid_repeats: bool = True
     repeat_memory: int = 8  # how many of the bot's own lines to remember
     repeat_similarity: float = 0.75  # 0..1, above this a reply counts as a repeat
     repeat_retries: int = 2
     reply_probability: float = 1.0
     cooldown_seconds: float = 3.0
-    reply_channels: list[ChatChannel] = Field(
-        default_factory=lambda: [ChatChannel.ALL, ChatChannel.TEAM]
-    )
+    reply_channels: list[ChatChannel] = Field(default_factory=lambda: [ChatChannel.ALL, ChatChannel.TEAM])
     history_turns: int = 6
     trigger_words: list[str] = Field(default_factory=list)  # empty -> reply to everything
     ignore_players: list[str] = Field(default_factory=list)
@@ -189,7 +208,8 @@ class StrategySettings(BaseModel):
     fallback_side: str = "T"
     obey_commands: bool = True  # !quiet / !talk / !strat a
     quiet_seconds: float = 120.0  # how long `!quiet` shuts the bot up for
-    # Let players swap the bot's personality from chat: `!persona toxic`, `!persona list`.
+    # Let players control the bot's personality from chat: `!persona toxic`, `!persona list`,
+    # or an order in their own words - "you are now a friendly operator" becomes the persona.
     obey_persona_commands: bool = True
 
 
@@ -204,10 +224,16 @@ class VoiceSettings(BaseModel):
     one of the words get an answer, which is how you stop it replying to every callout.
     """
 
-    enabled: bool = False
+    enabled: bool = True
     device: str = ""  # blank -> the default speakers
+    # What it listens to: "cs2" - only the game's own audio (Windows 10 2004+; falls back to the
+    # speakers when it cannot), or "pc" - everything the speakers play.
+    capture: str = "cs2"
+    capture_process: str = "cs2.exe"  # which program's audio to hear when capture is "cs2"
     model: str = "small.en"  # a Whisper model name, downloaded once on first use
-    # Only answer speech containing one of these; empty means answer anything worth answering.
+    # What it answers: "everything" it hears, "questions" only, or "triggers" - speech that
+    # contains one of `trigger_words`. Questions always get an answer in the first two modes.
+    answer: str = "everything"
     trigger_words: list[str] = Field(default_factory=lambda: ["bot"])
     obey_commands: bool = True  # spoken !quiet / strat calls count as commands
     cooldown_seconds: float = 8.0  # voice arrives far faster than typing does
@@ -215,9 +241,40 @@ class VoiceSettings(BaseModel):
     # How loud speech has to be before it is transcribed at all. Raise it if gunfire is being
     # sent to the model, lower it if a quiet teammate is being missed.
     noise_floor: float = 0.006
+    # Talking back over voice. The bot speaks with the Windows speech engine into a virtual
+    # microphone (VB-Audio Cable: it plays into "CABLE Input", CS2's microphone is set to
+    # "CABLE Output") while holding the push-to-talk key, so nothing touches the game.
+    # How team replies go out: "text" (typed in team chat), "voice" (spoken), or "all" (both).
+    # All-chat replies are always typed - the other team cannot hear team voice.
+    reply_with: str = "text"
+    speak_device: str = ""  # the output device to play into - pick the CABLE Input
+    speak_monitor: bool = True  # also play it on the default speakers so the player hears it
+    monitor_device: str = ""  # where "let me hear it too" plays; blank = the default speakers
+    resample_48k: bool = False  # off: the engine's own rate; on: 48 kHz, which some drivers mute
+    talk_key: str = "k"  # CS2's push-to-talk key
+    speak_engine: str = "kokoro"  # kokoro | piper | windows | supertonic | kitten | chatterbox (clones)
+    speak_voice: str = ""  # a voice id for the engine; blank -> its default
+    speak_rate: int = 1  # -10 (slow) .. 10 (fast)
 
 
 PROJECT_URL = "https://github.com/Oopsiez/cs2-llama-chatbot"
+
+
+class InitiativeSettings(BaseModel):
+    """Starting conversations instead of only answering them.
+
+    A real teammate chimes in on their own: a comment at the start of a round, a word after
+    dying, something to fill a quiet stretch. Each occasion is a chance, not a certainty, and
+    the gap between unprompted lines is enforced so it never turns into a monologue.
+    """
+
+    enabled: bool = False
+    channel: str = "team"  # "team" or "all"
+    min_gap_seconds: float = 90.0  # at least this long between unprompted lines
+    chance: float = 0.6  # 0..1, how often an occasion is actually taken
+    on_round_start: bool = True
+    on_death: bool = True
+    when_quiet_seconds: float = 120.0  # speak when nobody has said anything for this long; 0 = never
 
 
 class RevealSettings(BaseModel):
@@ -260,16 +317,22 @@ class WebSettings(BaseModel):
 
 class AppConfig(BaseModel):
     enabled: bool = False
+    respond_to: str = "both"  # text | voice | both - which chat the bot answers (voice = speaker comms)
     game: GameSettings = Field(default_factory=GameSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     persona: PersonaSettings = Field(default_factory=PersonaSettings)
+    speech_same_persona: bool = True  # spoken lines use `persona`; off -> `speech_persona`
+    speech_max_reply_chars: int = 0  # spoken lines are not typed into chat, so no cap by default
+    speech_persona: PersonaSettings = Field(default_factory=PersonaSettings)
     behavior: BehaviorSettings = Field(default_factory=BehaviorSettings)
+    teammates: TeammateSettings = Field(default_factory=TeammateSettings)
     dead_alive: DeadAliveSettings = Field(default_factory=DeadAliveSettings)
     snitch: SnitchSettings = Field(default_factory=SnitchSettings)
     strategy: StrategySettings = Field(default_factory=StrategySettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     reveal: RevealSettings = Field(default_factory=RevealSettings)
+    initiative: InitiativeSettings = Field(default_factory=InitiativeSettings)
     callouts: CalloutBook = Field(default_factory=CalloutBook)
     gsi: GSISettings = Field(default_factory=GSISettings)
     web: WebSettings = Field(default_factory=WebSettings)
@@ -281,6 +344,11 @@ def config_path() -> Path:
     if override:
         return Path(override)
     return Path(user_config_dir("cs2bot", appauthor=False)) / "config.json"
+
+
+def fallback_log_path() -> Path:
+    """The bot's own log, tailed while CS2's console.log is not there yet."""
+    return config_path().parent / "cs2bot-console.log"
 
 
 def default_cs2_dir() -> Path | None:
