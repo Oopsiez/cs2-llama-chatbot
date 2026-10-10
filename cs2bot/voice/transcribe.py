@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Protocol, cast
@@ -142,6 +143,7 @@ class WhisperTranscriber:
         self.language = language
         self.beam_size = beam_size
         self._model: _WhisperModel | None = None
+        self.last_timing = ""
         self.note = ""
 
     @property
@@ -173,6 +175,7 @@ class WhisperTranscriber:
         model = self._model
         if model is None:  # pragma: no cover - load() either builds it or raises
             raise RuntimeError("the speech model failed to load")
+        started = time.monotonic()
         segments, _ = model.transcribe(
             np.asarray(samples, dtype=np.float32),
             language=self.language or None,
@@ -187,7 +190,12 @@ class WhisperTranscriber:
             for segment in segments
             if segment.no_speech_prob < NO_SPEECH_LIMIT and segment.avg_logprob > LOGPROB_LIMIT
         ]
-        return clean(" ".join(kept))
+        text = clean(" ".join(kept))
+        self.last_timing = (
+            f"transcribed {len(samples) / 16000:.1f} s of speech in {time.monotonic() - started:.1f} s"
+            f" on the {self.device.upper()} ({self.compute_type})"
+        )
+        return text
 
 
 def wants_cuda_runtime(exc: BaseException) -> bool:

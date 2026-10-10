@@ -346,4 +346,5 @@ class Speaker:
             "kokoro": kokoro.status(),
             "engines": engines.status(),
             "clone": clone.info(),
+            "render_note": engines.last_render,
         }

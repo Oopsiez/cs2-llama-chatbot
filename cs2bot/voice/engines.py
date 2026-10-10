@@ -7,7 +7,9 @@ other two ship fixed voices. Everything runs on the CPU through onnxruntime, lik
 
 from __future__ import annotations
 
+import logging
 import threading
+import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -94,6 +96,7 @@ ENGINES: tuple[Engine, ...] = (
     ),
 )
 BY_ID = {e.id: e for e in ENGINES}
+log = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _sessions: dict[str, object] = {}
@@ -160,6 +163,7 @@ def status() -> list[dict[str, object]]:
             "downloading": downloading.get(e.id, False),
             "error": install_error.get(e.id, ""),
             "clones": e.clones,
+            "device": providers.get(e.id, ""),
             "voices": [{"id": v, "label": label} for v, label in e.voices],
         }
         for e in ENGINES
@@ -170,6 +174,18 @@ def speed(rate: int) -> float:
     return round(1.0 + max(-10, min(10, rate)) * 0.04, 3)
 
 
+providers: dict[str, str] = {}  # engine id -> "GPU (DirectML)" / "CPU", once a session exists
+last_render = ""  # "rendered 2.3 s of speech in 1.1 s on GPU (DirectML)"
+
+
+def gpu_provider(available: list[str]) -> str:
+    """The GPU execution provider to try first, or "" when onnxruntime only has the CPU one."""
+    for name in ("DmlExecutionProvider", "CUDAExecutionProvider"):
+        if name in available:
+            return name
+    return ""
+
+
 def _session(engine: Engine, name: str) -> object:
     import onnxruntime as ort
 
@@ -177,7 +193,19 @@ def _session(engine: Engine, name: str) -> object:
     if key not in _sessions:
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = 4
-        _sessions[key] = ort.InferenceSession(str(folder(engine) / "onnx" / name), opts)
+        path = str(folder(engine) / "onnx" / name)
+        gpu = gpu_provider(list(ort.get_available_providers()))
+        if gpu:
+            try:
+                _sessions[key] = ort.InferenceSession(
+                    path, opts, providers=[gpu, "CPUExecutionProvider"]
+                )
+                providers[engine.id] = "GPU (DirectML)" if gpu.startswith("Dml") else "GPU (CUDA)"
+                return _sessions[key]
+            except Exception as exc:  # a GPU the driver cannot run this model on: the CPU still can
+                log.warning("%s on %s failed, using the CPU: %s", name, gpu, exc)
+        _sessions[key] = ort.InferenceSession(path, opts)
+        providers.setdefault(engine.id, "CPU")
     return _sessions[key]
 
 
@@ -209,6 +237,7 @@ def synthesise(engine_id: str, text: str, voice: str = "", rate: int = 0) -> tup
     if not is_cached(engine):
         name = engine.label.split(" - ")[0]
         raise RuntimeError(f"{name} is not installed - press Install on the Speech tab")
+    started = time.monotonic()
     spoken = for_speech(text)
     with _lock:
         if engine.id == "supertonic":
@@ -217,6 +246,10 @@ def synthesise(engine_id: str, text: str, voice: str = "", rate: int = 0) -> tup
             samples = _kitten(engine, spoken, voice, rate)
         else:
             samples = _chatterbox(engine, spoken)
+    global last_render
+    took = time.monotonic() - started
+    where = providers.get(engine.id, "CPU")
+    last_render = f"rendered {len(samples) / engine.sample_rate:.1f} s of speech in {took:.1f} s on {where}"
     return [float(x) for x in samples], engine.sample_rate
 
 

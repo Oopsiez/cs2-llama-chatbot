@@ -775,3 +775,11 @@ def test_a_short_clone_clip_is_flagged(monkeypatch, tmp_path):
     assert info["short"] is True
     info = clone.save([0.2] * (8 * clone.SAMPLE_RATE), clone.SAMPLE_RATE, "long one")
     assert info["short"] is False
+
+
+def test_gpu_provider_is_preferred_and_the_cpu_is_the_fallback():
+    from cs2bot.voice import engines
+
+    assert engines.gpu_provider(["DmlExecutionProvider", "CPUExecutionProvider"]) == "DmlExecutionProvider"
+    assert engines.gpu_provider(["CUDAExecutionProvider", "CPUExecutionProvider"]) == "CUDAExecutionProvider"
+    assert engines.gpu_provider(["CPUExecutionProvider"]) == ""

@@ -25,6 +25,8 @@ jobs:
         shell: pwsh
         run: Set-Content cs2bot/_release.py "RELEASE = `"${{ github.ref_name }}`""
       - run: pip install ".[voice]" pyinstaller
+      # DirectML runs the ONNX voices on any Windows GPU; same import name, so swap it in after.
+      - run: pip uninstall -y onnxruntime && pip install onnxruntime-directml
       - run: python scripts/build_exe.py
       - name: Check the executable actually starts
         shell: pwsh

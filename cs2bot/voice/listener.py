@@ -232,6 +232,9 @@ class VoiceListener:
             "own_voice_ignored": self.own_voice_ignored,
             "last_text": self.last_text,
             "clip_seconds": round(len(self.last_audio) / audio.SAMPLE_RATE, 1),
+            "transcribe_note": (
+                self._transcriber.last_timing if isinstance(self._transcriber, WhisperTranscriber) else ""
+            ),
             "last_heard_at": self.last_heard_at,
             "error": self.error,
         }
