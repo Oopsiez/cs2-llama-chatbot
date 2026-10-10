@@ -323,7 +323,7 @@ class Speaker:
             time.sleep(self.lead_seconds)
             played = play(samples, rate, self.device, self.monitor, self.monitor_device, self.resample)
             time.sleep(0.15)
-        return played
+        return f"{played}; held {self.talk_key} for {time.time() - self.talk_started_at:.1f} s"
 
     def status(self) -> dict[str, object]:
         return {

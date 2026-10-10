@@ -744,3 +744,11 @@ def test_nothing_downloads_on_the_first_line(monkeypatch):
     monkeypatch.setattr(engines, "is_cached", lambda engine: False)
     with pytest.raises(RuntimeError, match="press Install"):
         engines.synthesise("kitten", "hi")
+
+
+def test_chatterbox_stops_when_the_decoder_babbles_in_a_loop():
+    from cs2bot.voice import engines
+
+    assert not engines._looping(list(range(40)))
+    assert engines._looping(list(range(10)) + [1, 2, 3, 4, 5, 6, 7, 8] * 4)
+    assert not engines._looping([1, 2, 3, 4, 5, 6, 7, 8] * 3)

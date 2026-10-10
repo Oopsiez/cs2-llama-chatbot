@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import ctypes
 import sys
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import cast
 
 # Spelled out rather than taken from `ctypes.wintypes`, which refuses to import off Windows and
 # would take the tests and the type check with it.
@@ -207,26 +209,69 @@ ERROR_ACCESS_DENIED = 5
 
 
 RELEASE_ATTEMPTS = 3
+MAPVK_VSC_TO_VK_EX = 3
+
+
+def _send(user32: object, code: int, key_up: bool) -> bool:
+    """One key event through SendInput, falling back to the legacy `keybd_event` when Windows
+    returns 0 without an error - the symptom of a scan-code event an overlay refused."""
+    event = _event(code, key_up=key_up)
+    sent = int(user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_Input)))  # type: ignore[attr-defined]
+    if sent or int(ctypes.get_last_error()) == ERROR_ACCESS_DENIED:  # type: ignore[attr-defined]
+        return bool(sent)
+    legacy = getattr_keybd_event(user32)
+    if legacy is None:
+        return False
+    flags = KEYEVENTF_SCANCODE | (KEYEVENTF_KEYUP if key_up else 0)
+    legacy(0, code & 0xFF, flags | (KEYEVENTF_EXTENDEDKEY if code > 0xFF else 0), 0)
+    return True
+
+
+def getattr_keybd_event(user32: object) -> Callable[..., object] | None:
+    try:
+        return cast(Callable[..., object], user32.keybd_event)  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
+
+
+def is_down(user32: object, code: int) -> bool | None:
+    """Whether Windows currently sees the key as pressed, or None when it cannot tell."""
+    try:
+        vk = int(user32.MapVirtualKeyW(code, MAPVK_VSC_TO_VK_EX))  # type: ignore[attr-defined]
+        if not vk:
+            return None
+        return bool(int(user32.GetAsyncKeyState(vk)) & 0x8000)  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
 
 
 @contextmanager
 def hold(key: str) -> Iterator[None]:
-    """Keep `key` down for the block - a push-to-talk key while a clip plays."""
+    """Keep `key` down for the block - a push-to-talk key while a clip plays.
+
+    The press is checked against what Windows reports and sent again if the game did not get
+    it, and the release is retried until the key really is up - a stuck talk key both keeps the
+    mic open and makes Windows drop the next synthetic press.
+    """
     code = scan_code(key)
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
     except AttributeError as exc:  # pragma: no cover - only reachable off Windows
         raise KeyPressError("sending keystrokes only works on Windows") from exc
-    down = _event(code, key_up=False)
-    if not user32.SendInput(1, ctypes.byref(down), ctypes.sizeof(_Input)):
-        raise KeyPressError(_refusal(int(ctypes.get_last_error())))  # type: ignore[attr-defined]
+    for _attempt in range(RELEASE_ATTEMPTS):
+        if not _send(user32, code, key_up=False):
+            raise KeyPressError(_refusal(int(ctypes.get_last_error())))  # type: ignore[attr-defined]
+        if is_down(user32, code) is not False:
+            break
+        time.sleep(0.02)
     try:
         yield
     finally:
-        up = _event(code, key_up=True)
         for _ in range(RELEASE_ATTEMPTS):
-            if user32.SendInput(1, ctypes.byref(up), ctypes.sizeof(_Input)):
+            _send(user32, code, key_up=True)
+            if is_down(user32, code) is not True:
                 break
+            time.sleep(0.02)
 
 
 def press(key: str) -> None:
@@ -242,9 +287,8 @@ def press(key: str) -> None:
     except AttributeError as exc:  # pragma: no cover - only reachable off Windows
         raise KeyPressError("sending keystrokes only works on Windows") from exc
 
-    def send(key_up: bool) -> int:
-        event = _event(code, key_up=key_up)
-        return int(user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_Input)))
+    def send(key_up: bool) -> bool:
+        return _send(user32, code, key_up)
 
     if not send(key_up=False):
         raise KeyPressError(_refusal(int(ctypes.get_last_error())))  # type: ignore[attr-defined]

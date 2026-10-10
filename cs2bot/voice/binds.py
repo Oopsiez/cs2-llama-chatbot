@@ -81,4 +81,8 @@ def detect_voice_key(cfg_dir: str = "", roots: list[Path] | None = None) -> tupl
                 continue
             if key:
                 return key, str(path)
-    return "", "no +voicerecord bind found in Steam userdata - is CS2 installed on this PC?"
+    looked = [str(p) for p in key_files(roots)] or [str(r / "userdata") for r in (roots or steam_roots())]
+    return "", (
+        "no +voicerecord bind found - looked in " + ", ".join(looked[:4]) + "; CS2 only writes the "
+        "key file after you change a bind in its settings, so type the key here instead"
+    )

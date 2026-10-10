@@ -281,6 +281,15 @@ def text_ids(engine: Engine, text: str) -> list[int]:
     return list(_tokenizer(engine).encode(text).ids)  # type: ignore[attr-defined]
 
 
+def _looping(tokens: list[int], window: int = 8, repeats: int = 4) -> bool:
+    """True when the last `window` tokens have repeated `repeats` times in a row - the
+    babble a stuck decoder produces instead of ever emitting the stop token."""
+    if len(tokens) < window * repeats:
+        return False
+    tail = tokens[-window:]
+    return all(tokens[-window * (i + 1) : len(tokens) - window * i] == tail for i in range(1, repeats))
+
+
 def _chatterbox(engine: Engine, text: str) -> list[float]:
     import numpy as np
 
@@ -308,7 +317,10 @@ def _chatterbox(engine: Engine, text: str) -> list[float]:
     attention: Any = np.ones((1, seq_len), dtype=np.int64)
     position: Any = np.arange(seq_len, dtype=np.int64).reshape(1, -1)
     generated = [START_SPEECH]
-    for _ in range(1024):
+    # ~4 speech tokens per character is far more than any real line needs; past that the model
+    # has lost the plot and only produces noise, so stop rather than run out the full 1024.
+    budget = min(1024, 40 + 4 * len(text))
+    for _ in range(budget):
         logits, *present = lm.run(  # type: ignore[attr-defined]
             None,
             {"inputs_embeds": inputs_embeds, "attention_mask": attention, "position_ids": position, **past},
@@ -318,7 +330,7 @@ def _chatterbox(engine: Engine, text: str) -> list[float]:
         scores[seen] = np.where(scores[seen] < 0, scores[seen] * 1.2, scores[seen] / 1.2)
         token = int(np.argmax(scores))
         generated.append(token)
-        if token == STOP_SPEECH:
+        if token == STOP_SPEECH or _looping(generated):
             break
         inputs_embeds = embed.run(None, {"input_ids": np.array([[token]], dtype=np.int64)})[0]  # type: ignore[attr-defined]
         attention = np.concatenate([attention, np.ones((1, 1), dtype=np.int64)], axis=1)

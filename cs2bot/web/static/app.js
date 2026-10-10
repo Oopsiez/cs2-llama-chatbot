@@ -693,6 +693,7 @@ function bindActions() {
   $("voice-speak-engine").addEventListener("change", async () => {
     config.voice.speak_engine = $("voice-speak-engine").value;
     config.voice.speak_voice = "";
+    await saveConfig();
     await renderVoice();
   });
   $("llm-placement").addEventListener("change", () => applyPlacement($("llm-placement").value));
