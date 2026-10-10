@@ -752,3 +752,26 @@ def test_chatterbox_stops_when_the_decoder_babbles_in_a_loop():
     assert not engines._looping(list(range(40)))
     assert engines._looping(list(range(10)) + [1, 2, 3, 4, 5, 6, 7, 8] * 4)
     assert not engines._looping([1, 2, 3, 4, 5, 6, 7, 8] * 3)
+
+
+def test_last_voice_builds_up_across_short_callouts(monkeypatch, tmp_path):
+    from cs2bot.voice import listener as listener_mod
+
+    captured = listener_mod.VoiceListener.__new__(listener_mod.VoiceListener)
+    captured.last_audio = []
+    rate = listener_mod.audio.SAMPLE_RATE
+    for _ in range(5):
+        captured.last_audio = (captured.last_audio + [0.1] * (3 * rate))[
+            -int(listener_mod.CLONE_BUFFER_SECONDS * rate) :
+        ]
+    assert len(captured.last_audio) == int(listener_mod.CLONE_BUFFER_SECONDS * rate)
+
+
+def test_a_short_clone_clip_is_flagged(monkeypatch, tmp_path):
+    from cs2bot.voice import clone
+
+    monkeypatch.setattr(clone, "cache_dir", lambda: tmp_path)
+    info = clone.save([0.2] * (5 * clone.SAMPLE_RATE), clone.SAMPLE_RATE, "short one")
+    assert info["short"] is True
+    info = clone.save([0.2] * (8 * clone.SAMPLE_RATE), clone.SAMPLE_RATE, "long one")
+    assert info["short"] is False

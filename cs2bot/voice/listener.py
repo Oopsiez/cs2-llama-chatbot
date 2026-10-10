@@ -20,6 +20,8 @@ from . import audio
 from .segment import Segmenter
 from .transcribe import Transcriber, WhisperTranscriber, model_is_cached, whisper_missing
 
+CLONE_BUFFER_SECONDS = 12.0
+
 log = logging.getLogger(__name__)
 
 # How many finished utterances may wait for the model before the oldest is dropped.
@@ -80,6 +82,8 @@ class VoiceListener:
         self.utterances_heard = 0
         self.last_text = ""
         self.last_heard_at = 0.0
+        # The most recent teammate speech, newest last, kept to CLONE_BUFFER_SECONDS so a voice
+        # clone can be built from several short callouts rather than one.
         self.last_audio: list[float] = []
         self._gate = gate
         self.own_voice_ignored = 0
@@ -193,7 +197,8 @@ class VoiceListener:
             self.utterances_heard += 1
             self.last_text = text
             self.last_heard_at = time.time()
-            self.last_audio = list(samples)
+            keep = int(CLONE_BUFFER_SECONDS * audio.SAMPLE_RATE)
+            self.last_audio = (self.last_audio + list(samples))[-keep:]
             run.heard.put(
                 Utterance(
                     text=text,
@@ -226,6 +231,7 @@ class VoiceListener:
             "heard": self.utterances_heard,
             "own_voice_ignored": self.own_voice_ignored,
             "last_text": self.last_text,
+            "clip_seconds": round(len(self.last_audio) / audio.SAMPLE_RATE, 1),
             "last_heard_at": self.last_heard_at,
             "error": self.error,
         }

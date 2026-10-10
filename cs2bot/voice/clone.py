@@ -19,7 +19,8 @@ from .tts import cache_dir
 
 SAMPLE_RATE = 24000
 MAX_SECONDS = 12.0
-MIN_SECONDS = 2.0
+MIN_SECONDS = 4.0
+GOOD_SECONDS = 7.0  # below this Chatterbox has too little voice to go on and tends to babble
 
 
 def path() -> Path:
@@ -33,7 +34,12 @@ def info() -> dict[str, object]:
     with wave.open(str(target)) as handle:
         seconds = handle.getnframes() / handle.getframerate()
     note = target.with_suffix(".txt")
-    return {"ready": True, "seconds": round(seconds, 1), "source": note.read_text() if note.exists() else ""}
+    return {
+        "ready": True,
+        "seconds": round(seconds, 1),
+        "short": seconds < GOOD_SECONDS,
+        "source": note.read_text() if note.exists() else "",
+    }
 
 
 def reference() -> list[float] | None:
@@ -66,7 +72,10 @@ def save(samples: Sequence[float], rate: int, source: str) -> dict[str, object]:
     """Store `samples` as the clone reference; trims to MAX_SECONDS, refuses very short clips."""
     mono = resample(samples, rate)
     if len(mono) < MIN_SECONDS * SAMPLE_RATE:
-        raise ValueError(f"the clip is too short - at least {MIN_SECONDS:g} seconds of speech are needed")
+        raise ValueError(
+            f"the clip is too short ({len(mono) / SAMPLE_RATE:.1f} s) - at least {MIN_SECONDS:g} s of"
+            f" speech are needed, {GOOD_SECONDS:g}-{MAX_SECONDS:g} s for a clean clone"
+        )
     mono = mono[: int(MAX_SECONDS * SAMPLE_RATE)]
     peak = max(abs(x) for x in mono) or 1.0
     pcm = array.array("h", (int(max(-1.0, min(1.0, x / peak * 0.9)) * 32767) for x in mono))

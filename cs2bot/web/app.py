@@ -400,6 +400,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         import base64
 
         from ..voice import clone
+        from ..voice import listener as listener_mod
 
         try:
             if payload.get("source") == "last":
@@ -407,6 +408,14 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                 samples = listener.last_audio if listener else []
                 if not samples or listener is None:
                     return {"ok": False, "detail": "nothing heard yet - start the bot, let a teammate talk"}
+                seconds = len(samples) / 16000
+                if seconds < clone.MIN_SECONDS:
+                    return {
+                        "ok": False,
+                        "detail": f"only {seconds:.1f} s of speech heard so far - let them talk a bit more"
+                        f" (clips build up to {listener_mod.CLONE_BUFFER_SECONDS:g} s), then press again",
+                        **clone.info(),
+                    }
                 result = await asyncio.to_thread(
                     clone.save, samples, 16000, f"last voice heard: {listener.last_text[:60]}"
                 )
@@ -423,7 +432,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                 return {"ok": False, "detail": "send a file, a URL or source=last"}
         except (ValueError, OSError) as exc:
             return {"ok": False, "detail": str(exc), **clone.info()}
-        return {"ok": True, "detail": f"voice clip saved ({result['seconds']} s)", **result}
+        detail = f"voice clip saved ({result['seconds']} s)"
+        if result["short"]:
+            detail += f" - short; {clone.GOOD_SECONDS:g}+ s gives a much cleaner clone"
+        return {"ok": True, "detail": detail, **result}
 
     @app.post("/api/voice/preview")
     async def voice_preview(payload: dict[str, Any]) -> dict[str, Any]:

@@ -239,6 +239,9 @@ class MonitorError(RuntimeError):
         self.played = played
 
 
+MAX_CLIP_SECONDS = 20.0
+
+
 @dataclass
 class Speaker:
     """Talks over push-to-talk: synthesise, hold the key, play into the virtual mic, release."""
@@ -316,6 +319,11 @@ class Speaker:
 
     def _speak(self, text: str) -> str:
         samples, rate = render(text, self.voice, self.rate, self.engine)
+        # A runaway engine (Chatterbox babbling) would otherwise hold the mic open and mute the
+        # listener for the whole clip; nothing a teammate says needs more than this.
+        cut = int(MAX_CLIP_SECONDS * rate)
+        clipped = len(samples) > cut
+        samples = samples[:cut]
         # Only playback counts as talking: a slow engine can take seconds to render, and the
         # listener must not be muted for that.
         self.talk_started_at = time.time()
@@ -323,7 +331,8 @@ class Speaker:
             time.sleep(self.lead_seconds)
             played = play(samples, rate, self.device, self.monitor, self.monitor_device, self.resample)
             time.sleep(0.15)
-        return f"{played}; held {self.talk_key} for {time.time() - self.talk_started_at:.1f} s"
+        note = f"{played}; held {self.talk_key} for {time.time() - self.talk_started_at:.1f} s"
+        return f"{note}; clip cut at {MAX_CLIP_SECONDS:g} s (engine ran on)" if clipped else note
 
     def status(self) -> dict[str, object]:
         return {

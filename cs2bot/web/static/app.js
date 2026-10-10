@@ -930,7 +930,7 @@ function renderEngineInstall(engine, status) {
   $("voice-clone-row").hidden = !(hf && hf.clones);
   if (hf && hf.clones)
     $("voice-clone-note").textContent = clone.ready
-      ? `clip ready: ${clone.seconds} s${clone.source ? ` - ${clone.source}` : ""}`
+      ? `clip ready: ${clone.seconds} s${clone.short ? " (short - 7+ s clones cleaner)" : ""}${clone.source ? ` - ${clone.source}` : ""}`
       : "no clip yet - add one or the bot cannot speak with this engine";
 }
 
