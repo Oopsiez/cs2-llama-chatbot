@@ -324,6 +324,7 @@ class AppConfig(BaseModel):
     persona: PersonaSettings = Field(default_factory=PersonaSettings)
     speech_same_persona: bool = True  # spoken lines use `persona`; off -> `speech_persona`
     speech_max_reply_chars: int = 0  # spoken lines are not typed into chat, so no cap by default
+    speech_max_sentences: int = 2  # spoken lines are cut after this many sentences; 0 -> no limit
     speech_persona: PersonaSettings = Field(default_factory=PersonaSettings)
     behavior: BehaviorSettings = Field(default_factory=BehaviorSettings)
     teammates: TeammateSettings = Field(default_factory=TeammateSettings)

@@ -58,3 +58,13 @@ def test_the_bots_own_name_is_stripped_off_the_front_of_a_reply():
     assert humanize("[big dog 99] - rotate", literacy=100, max_chars=0, name="Big Dog 99") == "rotate"
     kept = humanize("heads up: they are b", literacy=100, max_chars=0, name="Big Dog 99")
     assert kept == "heads up: they are b"
+
+
+def test_spoken_lines_are_cut_after_the_sentence_limit():
+    from cs2bot.humanize import first_sentences
+
+    speech = "Push b now. They are all a! Trust me, I saw three. Go go go."
+    assert first_sentences(speech, 2) == "Push b now. They are all a!"
+    assert first_sentences(speech, 1) == "Push b now."
+    assert first_sentences(speech, 0) == speech
+    assert first_sentences("no punctuation at all", 1) == "no punctuation at all"

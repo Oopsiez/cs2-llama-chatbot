@@ -201,7 +201,7 @@ _SPOKEN_NOTE = (
     "say it mid-game: casual, contractions, short clauses, maybe a filler word, trailing off is "
     "fine. No lists, no emoji, no quotes, no stage directions, no names at the start, no "
     "'As an AI' or 'As your teammate', never explain yourself, never offer more help. "
-    "One or two spoken sentences at most. Sound like these (do not copy them): "
+    "{length} Sound like these (do not copy them): "
     "'yeah yeah he's long, I got him' / 'nah stay, don't peek that, we got time' / "
     "'oof... okay okay, save, we go next' / 'he's one, he's lit, push push' / "
     "'ha, that was so lucky, I'm not even gonna lie'."
@@ -336,7 +336,7 @@ def build_system_prompt(
             "in the chat and the game context."
         )
     if persona.max_reply_chars <= 0:
-        lines.append(_SPOKEN_NOTE)
+        lines.append(_SPOKEN_NOTE.format(length=spoken_length_rule(config.speech_max_sentences)))
     else:
         lines.append(
             "Reply with the chat message only: no quotes, no name prefix, no narration, "
@@ -452,6 +452,15 @@ def build_initiative_turns(
         )
     )
     return turns
+
+
+def spoken_length_rule(max_sentences: int) -> str:
+    """How long a spoken line may run; 0 means the model decides."""
+    if max_sentences <= 0:
+        return "Keep it to what a player would actually say out loud."
+    if max_sentences == 1:
+        return "One short spoken sentence, no more."
+    return f"At most {max_sentences} short spoken sentences, usually fewer."
 
 
 def length_rule(max_chars: int, reserve: int = 0) -> str:

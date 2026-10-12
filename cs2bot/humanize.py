@@ -102,6 +102,16 @@ def _typo(word: str, rng: random.Random) -> str:
     return word[:index] + word[index + 1 :]  # dropped key
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def first_sentences(text: str, limit: int) -> str:
+    """The first `limit` sentences of `text` (0 = all of it), so a spoken line stays a line."""
+    if limit <= 0:
+        return text
+    return " ".join(_SENTENCE_END.split(text.strip())[:limit]).strip()
+
+
 SPECIAL_TOKEN = re.compile(r"<\|[^|<>]{1,32}\|>")  # <|im_end|>, <|eot_id|> ... leaked by some GGUFs
 
 
