@@ -100,6 +100,7 @@ log = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _sessions: dict[str, object] = {}
+_cpu_only: set[str] = set()  # engines whose GPU session blew up at run time
 downloading: dict[str, bool] = {}
 install_error: dict[str, str] = {}
 
@@ -194,7 +195,7 @@ def _session(engine: Engine, name: str) -> object:
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = 4
         path = str(folder(engine) / "onnx" / name)
-        gpu = gpu_provider(list(ort.get_available_providers()))
+        gpu = "" if engine.id in _cpu_only else gpu_provider(list(ort.get_available_providers()))
         if gpu:
             try:
                 _sessions[key] = ort.InferenceSession(
@@ -240,17 +241,35 @@ def synthesise(engine_id: str, text: str, voice: str = "", rate: int = 0) -> tup
     started = time.monotonic()
     spoken = for_speech(text)
     with _lock:
-        if engine.id == "supertonic":
-            samples = _supertonic(engine, spoken, voice, rate)
-        elif engine.id == "kitten":
-            samples = _kitten(engine, spoken, voice, rate)
-        else:
-            samples = _chatterbox(engine, spoken)
+        try:
+            samples = _render(engine, spoken, voice, rate)
+        except Exception as exc:
+            if providers.get(engine.id, "CPU") == "CPU":
+                raise
+            log.warning("%s failed on %s, retrying on the CPU: %s", engine.id, providers[engine.id], exc)
+            force_cpu(engine)
+            samples = _render(engine, spoken, voice, rate)
     global last_render
     took = time.monotonic() - started
     where = providers.get(engine.id, "CPU")
     last_render = f"rendered {len(samples) / engine.sample_rate:.1f} s of speech in {took:.1f} s on {where}"
     return [float(x) for x in samples], engine.sample_rate
+
+
+def _render(engine: Engine, text: str, voice: str, rate: int) -> list[float]:
+    if engine.id == "supertonic":
+        return _supertonic(engine, text, voice, rate)
+    if engine.id == "kitten":
+        return _kitten(engine, text, voice, rate)
+    return _chatterbox(engine, text)
+
+
+def force_cpu(engine: Engine) -> None:
+    """Forget an engine's GPU sessions so the next call rebuilds them on the CPU."""
+    for key in [k for k in _sessions if k.startswith(f"{engine.id}/") and not k.endswith("/tokenizer")]:
+        del _sessions[key]
+    _cpu_only.add(engine.id)
+    providers[engine.id] = "CPU"
 
 
 def _supertonic(engine: Engine, text: str, voice: str, rate: int) -> list[float]:

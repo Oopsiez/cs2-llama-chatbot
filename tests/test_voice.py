@@ -798,3 +798,48 @@ def test_accented_piper_voices_share_one_model_file_and_pick_a_speaker():
     assert ryan is not None and ryan.speaker is None
     assert tts.model_files(ryan)[0].name == "en_US-ryan-high.onnx"
     assert len({v.id for v in tts.VOICES}) == len(tts.VOICES)
+
+
+def test_an_engine_that_fails_on_the_gpu_is_retried_on_the_cpu(monkeypatch):
+    from cs2bot.voice import engines
+
+    engine = engines.find("kitten")
+    assert engine is not None
+    monkeypatch.setattr(engines, "runtime_missing", lambda: "")
+    monkeypatch.setattr(engines, "is_cached", lambda e: True)
+    engines._sessions["kitten/model_quantized.onnx"] = object()
+    engines._sessions["kitten/tokenizer"] = object()
+    engines.providers["kitten"] = "GPU (DirectML)"
+    calls = []
+
+    def render(e, text, voice, rate):
+        calls.append(engines.providers[e.id])
+        if len(calls) == 1:
+            raise RuntimeError("ConvTranspose: The parameter is incorrect")
+        return [0.0] * 24000
+
+    monkeypatch.setattr(engines, "_render", render)
+    samples, rate = engines.synthesise("kitten", "hello")
+    assert calls == ["GPU (DirectML)", "CPU"]
+    assert "kitten/model_quantized.onnx" not in engines._sessions
+    assert "kitten/tokenizer" in engines._sessions
+    assert "on CPU" in engines.last_render
+    assert len(samples) == 24000 and rate == engine.sample_rate
+
+
+def test_kokoro_session_is_pinned_to_the_cpu(monkeypatch):
+    import sys
+    import types
+
+    from cs2bot.voice import kokoro
+
+    seen = {}
+
+    class Session:
+        def __init__(self, path, opts, providers):
+            seen["path"], seen["providers"] = path, providers
+
+    fake = types.SimpleNamespace(SessionOptions=lambda: types.SimpleNamespace(), InferenceSession=Session)
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake)
+    kokoro.cpu_session("model.onnx")
+    assert seen == {"path": "model.onnx", "providers": ["CPUExecutionProvider"]}

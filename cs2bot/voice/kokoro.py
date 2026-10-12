@@ -11,6 +11,7 @@ import random
 import threading
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 from .tts import cache_dir
 
@@ -96,6 +97,16 @@ def speed(rate: int) -> float:
     return round(1.0 + max(-10, min(10, rate)) * 0.04, 3)
 
 
+def cpu_session(model_path: str) -> Any:
+    """Kokoro's ONNX session pinned to the CPU: DirectML rejects its ConvTranspose layers
+    ("The parameter is incorrect"), and the model is quick enough on a few cores anyway."""
+    import onnxruntime as ort
+
+    opts = ort.SessionOptions()
+    opts.intra_op_num_threads = 4
+    return ort.InferenceSession(model_path, opts, providers=["CPUExecutionProvider"])
+
+
 def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple[list[float], int]:
     """Mono float samples and sample rate; the model must be installed first."""
     global _model
@@ -111,7 +122,7 @@ def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple
     with _lock:
         if _model is None:
             model_path, voices_path = files()
-            _model = Kokoro(str(model_path), str(voices_path))
+            _model = Kokoro.from_session(cpu_session(str(model_path)), str(voices_path))
         assert isinstance(_model, Kokoro)
         samples, rate_hz = _model.create(
             for_speech(text), voice=voice, speed=speed(rate) * random.uniform(0.95, 1.05), lang=lang
