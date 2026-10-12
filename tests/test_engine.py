@@ -336,9 +336,16 @@ class FakeListener:
         self.waiting = [Utterance(text=text, seconds=1.0)]
         self.started = False
         self.own_voice_ignored = 0
+        self.error = ""
+        self.restarts = 0
 
     def start(self) -> None:
         self.started = True
+
+    def restart(self) -> None:
+        self.restarts += 1
+        self.error = ""
+        self.waiting = [Utterance(text="rotate b now please", seconds=1.0)]
 
     def stop(self) -> None:
         self.started = False
@@ -584,3 +591,23 @@ async def test_respond_to_voice_turns_the_text_bot_off(tmp_path, monkeypatch):
     engine.config.respond_to = "text"
     assert not engine.listens_to_voice and engine.answers_text
     assert await engine.handle_message(chat(sender="Gavin", text="what do we do now?")) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_dead_listener_is_reported_once_and_retried_later(monkeypatch):
+    from cs2bot import engine as engine_module
+
+    engine = build_voice_engine(**{"game.console_log_path": ""})
+    listener = FakeListener("they are pushing b, we need help")
+    listener.waiting = []
+    listener.error = "RuntimeError: no loopback device"
+    engine._voice = listener
+    await engine._tick()
+    await engine._tick()
+    assert listener.restarts == 0
+    assert engine._voice_error_logged == listener.error
+    later = time.time() + engine_module.VOICE_RETRY_SECONDS + 1
+    monkeypatch.setattr(engine_module.time, "time", lambda: later)
+    await engine._tick()
+    assert listener.restarts == 1 and listener.error == ""
+    assert engine._voice_error_logged == ""

@@ -44,6 +44,7 @@ from .voice.segment import Segmenter
 from .voice.speak import Speaker
 
 POLL_INTERVAL = 0.25
+VOICE_RETRY_SECONDS = 30.0  # a listener that died (sound card gone, Whisper crash) is retried this often
 # Reading the message and deciding what to say, before any typing time.
 THINK_SECONDS = 0.8
 # How long after the bot speaks a bare "you" still counts as a reply to it.
@@ -122,6 +123,8 @@ class Engine:
         self.log_source = ""  # "cs2" once console.log is being read, "fallback" for the bot's own log
         self._voice: VoiceListener | None = None
         self._own_voice_logged = 0
+        self._voice_error_logged = ""
+        self._voice_retry_at = 0.0
         self._speaker: Speaker | None = None
         self.last_voice_reply_at = float("-inf")
         self._task: asyncio.Task[None] | None = None
@@ -547,6 +550,22 @@ class Engine:
                 self._voice.stop()
             return
         self.voice.start()
+        if self.voice.error:
+            now = time.time()
+            if self.voice.error != self._voice_error_logged:
+                retry = f"retrying in {VOICE_RETRY_SECONDS:.0f} s"
+                self.log_note(f"stopped listening: {self.voice.error} ({retry})")
+                self._voice_error_logged = self.voice.error
+                self._voice_retry_at = now + VOICE_RETRY_SECONDS
+            elif now >= self._voice_retry_at:
+                self._voice_retry_at = now + VOICE_RETRY_SECONDS
+                self.voice.restart()
+                if not self.voice.error:
+                    self.log_note("listening again")
+                    self._voice_error_logged = ""
+        elif self._voice_error_logged:
+            self.log_note("listening again")
+            self._voice_error_logged = ""
         ignored = self.voice.own_voice_ignored
         if ignored != self._own_voice_logged:
             self.log_note(f"ignored my own voice ({ignored - self._own_voice_logged}x)")
