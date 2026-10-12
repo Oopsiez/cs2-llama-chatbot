@@ -169,6 +169,7 @@ const BINDINGS = {
   "voice-triggers": ["voice.trigger_words", "list"],
   "voice-cooldown": ["voice.cooldown_seconds", "float"],
   "voice-min-words": ["voice.min_words", "int"],
+  "voice-stale-seconds": ["voice.stale_seconds", "float"],
   "voice-floor": ["voice.noise_floor", "float"],
 };
 

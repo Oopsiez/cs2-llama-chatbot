@@ -238,6 +238,9 @@ class VoiceSettings(BaseModel):
     obey_commands: bool = True  # spoken !quiet / strat calls count as commands
     cooldown_seconds: float = 8.0  # voice arrives far faster than typing does
     min_words: int = 2  # ignore one-word transcripts, which are usually noise
+    # A transcript older than this when it is finally ready is dropped instead of answered to a
+    # conversation that has moved on. 0 answers everything no matter how late.
+    stale_seconds: float = 90.0
     # How loud speech has to be before it is transcribed at all. Raise it if gunfire is being
     # sent to the model, lower it if a quiet teammate is being missed.
     noise_floor: float = 0.006

@@ -7,6 +7,8 @@ project's GitHub release into the same cache folder as the Piper voices. Runs on
 
 from __future__ import annotations
 
+import logging
+import os
 import random
 import threading
 import urllib.request
@@ -14,6 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from .tts import cache_dir
+
+log = logging.getLogger(__name__)
 
 RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
 MODEL_FILE = "kokoro-v1.0.onnx"
@@ -122,7 +126,12 @@ def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple
     with _lock:
         if _model is None:
             model_path, voices_path = files()
-            _model = Kokoro.from_session(cpu_session(str(model_path)), str(voices_path))
+            try:
+                _model = Kokoro.from_session(cpu_session(str(model_path)), str(voices_path))
+            except Exception as exc:
+                log.warning("kokoro CPU session failed (%s), letting kokoro-onnx build it", exc)
+                os.environ.setdefault("ONNX_PROVIDER", "CPUExecutionProvider")
+                _model = Kokoro(str(model_path), str(voices_path))
         assert isinstance(_model, Kokoro)
         samples, rate_hz = _model.create(
             for_speech(text), voice=voice, speed=speed(rate) * random.uniform(0.95, 1.05), lang=lang

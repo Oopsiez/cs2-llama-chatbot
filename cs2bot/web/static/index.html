@@ -473,6 +473,10 @@
           <label>Ignore speech shorter than (words)
             <input type="number" id="voice-min-words" min="1" step="1" />
           </label>
+          <label>Too late to answer after (seconds)
+            <input type="number" id="voice-stale-seconds" min="0" step="5" />
+            <span class="tip" title="If transcribing took longer than this, the line is skipped instead of answered to a conversation that has moved on (the log says 'skipped ... too late'). 0 = always answer.">?</span>
+          </label>
         </div>
       </details>
       <label class="check"><input type="checkbox" id="initiative-on-speech" /><span>Start conversations on its own <span class="tip" title="Chimes in unprompted at round start, after dying or when it has been quiet - how often and where is set under Behaviour.">?</span></span></label>
