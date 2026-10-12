@@ -44,6 +44,7 @@ from .voice.segment import Segmenter
 from .voice.speak import Speaker
 
 POLL_INTERVAL = 0.25
+STALE_VOICE_SECONDS = 25.0  # a transcript older than this is answered to a conversation that moved on
 # Reading the message and deciding what to say, before any typing time.
 THINK_SECONDS = 0.8
 # How long after the bot speaks a bare "you" still counts as a reply to it.
@@ -556,7 +557,18 @@ class Engine:
                 self.log_note(f"ignored my own voice: {utterance.text}")
                 self.bus.publish("skipped", {"sender": "voice", "reason": "that was the bot's own voice"})
                 continue
-            await self.handle_voice(utterance.text, utterance.source)
+            age = time.time() - utterance.heard_at
+            if age > STALE_VOICE_SECONDS:
+                self.log_note(f"skipped (heard {age:.0f} s ago, too late to answer): {utterance.text}")
+                self.bus.publish("skipped", {"sender": "voice", "reason": f"transcribed {age:.0f} s late"})
+                continue
+            started = time.perf_counter()
+            reply = await self.handle_voice(utterance.text, utterance.source)
+            if reply is not None:
+                self.log_note(
+                    f"answered {time.time() - utterance.heard_at:.0f} s after they spoke "
+                    f"(transcribing {age:.0f} s, replying {time.perf_counter() - started:.0f} s)"
+                )
 
     @property
     def listens_to_voice(self) -> bool:

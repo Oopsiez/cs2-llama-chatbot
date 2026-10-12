@@ -24,6 +24,18 @@ class Voice:
     label: str
     path: str  # repo folder, e.g. "en/en_US/ryan/high"
     size_mb: int
+    model: str = ""  # file stem when several voices share one multi-speaker model; blank -> `id`
+    speaker: int | None = None  # speaker id inside a multi-speaker model
+
+    @property
+    def file_stem(self) -> str:
+        return self.model or self.id
+
+
+def _shared(voice_id: str, label: str, model: str, speaker: int) -> Voice:
+    """One speaker inside a multi-speaker Piper model (ARCTIC / L2-ARCTIC)."""
+    lang, name, quality = model.split("-")
+    return Voice(voice_id, label, f"en/{lang}/{name}/{quality}", 73, model=model, speaker=speaker)
 
 
 VOICES: tuple[Voice, ...] = (
@@ -51,6 +63,32 @@ VOICES: tuple[Voice, ...] = (
         "en/en_GB/northern_english_male/medium",
         63,
     ),
+    # Accented English: L2-ARCTIC (non-native speakers) and ARCTIC share one model file each.
+    Voice("en_US-reza_ibrahim-medium", "Reza - Persian-accented male", "en/en_US/reza_ibrahim/medium", 60),
+    _shared("en_US-l2arctic-aba", "Arabic-accented male (ABA)", "en_US-l2arctic-medium", 21),
+    _shared("en_US-l2arctic-ska", "Arabic-accented female (SKA)", "en_US-l2arctic-medium", 23),
+    _shared("en_US-l2arctic-ybaa", "Arabic-accented male, deeper (YBAA)", "en_US-l2arctic-medium", 18),
+    _shared("en_US-l2arctic-asi", "Indian male (ASI)", "en_US-l2arctic-medium", 10),
+    _shared("en_US-l2arctic-rrbi", "Indian male, soft (RRBI)", "en_US-l2arctic-medium", 19),
+    _shared("en_US-l2arctic-svbi", "Indian female (SVBI)", "en_US-l2arctic-medium", 2),
+    _shared("en_US-l2arctic-tni", "Indian female, bright (TNI)", "en_US-l2arctic-medium", 9),
+    _shared("en_US-l2arctic-bwc", "Chinese-accented male (BWC)", "en_US-l2arctic-medium", 20),
+    _shared("en_US-l2arctic-lxc", "Chinese-accented female (LXC)", "en_US-l2arctic-medium", 12),
+    _shared("en_US-l2arctic-txhc", "Chinese-accented male, low (TXHC)", "en_US-l2arctic-medium", 0),
+    _shared("en_US-l2arctic-hkk", "Korean-accented male (HKK)", "en_US-l2arctic-medium", 16),
+    _shared("en_US-l2arctic-hjk", "Korean-accented female (HJK)", "en_US-l2arctic-medium", 11),
+    _shared("en_US-l2arctic-erms", "Spanish-accented male (ERMS)", "en_US-l2arctic-medium", 6),
+    _shared("en_US-l2arctic-ebvs", "Spanish-accented male, relaxed (EBVS)", "en_US-l2arctic-medium", 22),
+    _shared("en_US-l2arctic-njs", "Spanish-accented female (NJS)", "en_US-l2arctic-medium", 17),
+    _shared("en_US-l2arctic-mbmps", "Spanish-accented female, warm (MBMPS)", "en_US-l2arctic-medium", 7),
+    _shared("en_US-l2arctic-hqtv", "Vietnamese-accented male (HQTV)", "en_US-l2arctic-medium", 8),
+    _shared("en_US-l2arctic-thv", "Vietnamese-accented female (THV)", "en_US-l2arctic-medium", 1),
+    _shared("en_US-arctic-ksp", "Indian male, clear (ksp)", "en_US-arctic-medium", 3),
+    _shared("en_US-arctic-gka", "Indian male, older (gka)", "en_US-arctic-medium", 17),
+    _shared("en_US-arctic-axb", "Indian female (axb)", "en_US-arctic-medium", 15),
+    _shared("en_US-arctic-slp", "Indian female, calm (slp)", "en_US-arctic-medium", 12),
+    _shared("en_US-arctic-awb", "Scottish male (awb)", "en_US-arctic-medium", 0),
+    _shared("en_US-arctic-jmk", "Canadian male (jmk)", "en_US-arctic-medium", 8),
 )
 DEFAULT_VOICE = VOICES[0].id
 WINDOWS_PREFIX = "windows:"  # speak_voice values that pick a System.Speech voice instead
@@ -80,7 +118,7 @@ def cache_dir() -> Path:
 
 def model_files(voice: Voice) -> tuple[Path, Path]:
     folder = cache_dir()
-    return folder / f"{voice.id}.onnx", folder / f"{voice.id}.onnx.json"
+    return folder / f"{voice.file_stem}.onnx", folder / f"{voice.file_stem}.onnx.json"
 
 
 def is_cached(voice_id: str) -> bool:
@@ -172,13 +210,14 @@ def synthesise(text: str, voice_id: str = DEFAULT_VOICE, rate: int = 0) -> tuple
     from piper import PiperVoice, SynthesisConfig
 
     with _lock:
-        model = _loaded.get(voice.id)
+        model = _loaded.get(voice.file_stem)
         if model is None:
             onnx, _ = model_files(voice)
             model = PiperVoice.load(onnx)
-            _loaded[voice.id] = model
+            _loaded[voice.file_stem] = model
         assert isinstance(model, PiperVoice)
         config = SynthesisConfig(
+            speaker_id=voice.speaker,
             length_scale=length_scale(rate) * random.uniform(0.94, 1.06),
             noise_scale=random.uniform(0.6, 0.75),
             noise_w_scale=random.uniform(0.7, 0.9),

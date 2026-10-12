@@ -783,3 +783,18 @@ def test_gpu_provider_is_preferred_and_the_cpu_is_the_fallback():
     assert engines.gpu_provider(["DmlExecutionProvider", "CPUExecutionProvider"]) == "DmlExecutionProvider"
     assert engines.gpu_provider(["CUDAExecutionProvider", "CPUExecutionProvider"]) == "CUDAExecutionProvider"
     assert engines.gpu_provider(["CPUExecutionProvider"]) == ""
+
+
+def test_accented_piper_voices_share_one_model_file_and_pick_a_speaker():
+    from cs2bot.voice import tts
+
+    indian = tts.find("en_US-l2arctic-asi")
+    arabic = tts.find("en_US-l2arctic-aba")
+    assert indian is not None and arabic is not None
+    assert indian.speaker != arabic.speaker
+    assert tts.model_files(indian) == tts.model_files(arabic)
+    assert tts.model_files(indian)[0].name == "en_US-l2arctic-medium.onnx"
+    ryan = tts.find("en_US-ryan-high")
+    assert ryan is not None and ryan.speaker is None
+    assert tts.model_files(ryan)[0].name == "en_US-ryan-high.onnx"
+    assert len({v.id for v in tts.VOICES}) == len(tts.VOICES)
