@@ -138,6 +138,26 @@ def com_apartment() -> Iterator[None]:
 
 
 RECHECK_SECONDS = 2.0  # how often the speakers fallback looks for the program to appear
+SILENT_SECONDS = 20.0  # exclude-mode capture that stays this silent is not capturing anything
+SILENT_PEAK = 1e-4
+
+
+def until_sound_or_timeout(
+    source: Iterator[list[float]], seconds: float = SILENT_SECONDS
+) -> Iterator[list[float]]:
+    """Pass `source` through, but give up if nothing but digital silence arrives for `seconds`.
+
+    Windows happily hands out a process-exclude loopback stream that carries zeros forever
+    (some drivers, some device changes); the only way to tell is that no sample ever moves."""
+    silent = 0.0
+    for block in source:
+        if silent >= 0 and max((abs(x) for x in block), default=0.0) > SILENT_PEAK:
+            silent = -1.0
+        elif silent >= 0:
+            silent += len(block) / SAMPLE_RATE
+            if silent >= seconds:
+                raise RuntimeError(f"only silence for {seconds:.0f} s")
+        yield block
 
 
 def capture(
@@ -161,7 +181,7 @@ def capture(
         if not reason:
             note("hearing the whole PC except the bot's own voice")
             try:
-                yield from process_loopback.blocks_except_me()
+                yield from until_sound_or_timeout(process_loopback.blocks_except_me())
             except Exception as exc:
                 reason = f"could not leave out the bot's own voice: {exc}"
         note(f"hearing {speakers}: {reason}")
@@ -175,7 +195,7 @@ def capture(
         if process_loopback.find_process(process):
             note(f"hearing {process} only")
             try:
-                yield from process_loopback.blocks(process)
+                yield from until_sound_or_timeout(process_loopback.blocks(process))
             except Exception as exc:
                 reason = f"{process} capture failed: {exc}"
             else:

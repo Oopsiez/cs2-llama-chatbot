@@ -1047,6 +1047,8 @@ async function renderVoice() {
     `heard ${status.heard} time${status.heard === 1 ? "" : "s"}${status.last_text ? `, last: "${status.last_text}"` : ""}`,
   );
   if (status.note) lines.push(status.note);
+  if (status.running && status.level !== undefined)
+    lines.push(`input level: ${Math.round(Math.min(1, status.level) * 100)}%${status.level < 0.0001 ? " (silence)" : ""}`);
   if (status.transcribe_note) lines.push(status.transcribe_note);
   $("voice-status").textContent = lines.join("\n");
 }

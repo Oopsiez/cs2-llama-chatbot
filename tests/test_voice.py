@@ -843,3 +843,30 @@ def test_kokoro_session_is_pinned_to_the_cpu(monkeypatch):
     monkeypatch.setitem(sys.modules, "onnxruntime", fake)
     kokoro.cpu_session("model.onnx")
     assert seen == {"path": "model.onnx", "providers": ["CPUExecutionProvider"]}
+
+
+def test_an_exclude_capture_that_only_carries_silence_falls_back_to_the_speakers(monkeypatch):
+    from cs2bot.voice import audio, process_loopback
+
+    notes: list[str] = []
+    monkeypatch.setattr(process_loopback, "unavailable", lambda: "")
+    silent = [[0.0] * audio.SAMPLE_RATE] * 25
+    monkeypatch.setattr(process_loopback, "blocks_except_me", lambda: iter(silent))
+    monkeypatch.setattr(audio, "blocks", lambda device_id="": iter([[0.1]]))
+    monkeypatch.setattr(audio, "device_name", lambda device_id: "Headset (Realtek)")
+    out = list(audio.capture(scope="pc", on_note=notes.append))
+    assert out[-1] == [0.1] and len(out) == 20
+    assert notes[-1] == (
+        "hearing the whole PC via Headset (Realtek): "
+        "could not leave out the bot's own voice: only silence for 20 s"
+    )
+    loud = iter([[0.0] * audio.SAMPLE_RATE] * 5 + [[0.3]] + [[0.0] * audio.SAMPLE_RATE] * 30)
+    assert len(list(audio.until_sound_or_timeout(loud))) == 36
+
+
+def test_the_listener_reports_the_input_level():
+    from cs2bot.voice.listener import VoiceListener
+
+    listener = VoiceListener(source=lambda: iter([[0.0, 0.25, -0.5]]), transcriber=object())
+    listener._listen(listener._run)
+    assert listener.status()["level"] == 0.5

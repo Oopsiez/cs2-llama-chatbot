@@ -87,6 +87,7 @@ class VoiceListener:
         self.last_audio: list[float] = []
         self._gate = gate
         self.own_voice_ignored = 0
+        self.level = 0.0  # loudest sample in the last block, 0..1, so the panel can show a meter
 
     # ---- lifecycle --------------------------------------------------------------
 
@@ -147,6 +148,7 @@ class VoiceListener:
             for block in self._source():
                 if run.stop.is_set():
                     break
+                self.level = max((abs(x) for x in block), default=0.0)
                 for utterance in self._segmenter.feed(block):
                     self._offer(run, utterance)
         except Exception as exc:
@@ -230,6 +232,7 @@ class VoiceListener:
             "downloading": self.loading,
             "heard": self.utterances_heard,
             "own_voice_ignored": self.own_voice_ignored,
+            "level": round(self.level, 4),
             "last_text": self.last_text,
             "clip_seconds": round(len(self.last_audio) / audio.SAMPLE_RATE, 1),
             "transcribe_note": (
