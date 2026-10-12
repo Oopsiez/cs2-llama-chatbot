@@ -654,6 +654,7 @@ class Engine:
             "supported": not missing,
             "unsupported_reason": missing,
             "running": False,
+            "bot_running": self._task is not None and not self._task.done(),
             "device": settings.device,
             "model": settings.model,
             "model_ready": model_is_cached(settings.model),

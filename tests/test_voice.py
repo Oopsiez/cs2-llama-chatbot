@@ -239,7 +239,12 @@ def test_a_listener_that_failed_stays_stopped_until_it_is_restarted():
     listener.start()
     assert not listener.running
 
-    listener._source = lambda: iter([quiet(10)])
+    def endless():
+        while True:
+            yield quiet(10)
+            time.sleep(0.01)
+
+    listener._source = endless
     listener.restart()
     try:
         assert listener.error == ""
@@ -882,3 +887,19 @@ def test_the_listener_reports_the_input_level():
     listener = VoiceListener(source=lambda: iter([[0.0, 0.25, -0.5]]), transcriber=object())
     listener._listen(listener._run)
     assert listener.status()["level"] == 0.5
+
+
+def test_a_capture_that_ends_on_its_own_is_an_error_not_a_quiet_stop():
+    from cs2bot.voice.listener import VoiceListener
+
+    listener = VoiceListener.__new__(VoiceListener)
+    listener.error = ""
+    listener.level = 0.0
+    listener._source = lambda: iter([[0.0]])
+    listener._segmenter = type("S", (), {"feed": staticmethod(lambda block: [])})()
+
+    class Run:
+        stop = __import__("threading").Event()
+
+    listener._listen(Run())
+    assert "ended on its own" in listener.error and Run.stop.is_set()

@@ -151,6 +151,8 @@ class VoiceListener:
                 self.level = max((abs(x) for x in block), default=0.0)
                 for utterance in self._segmenter.feed(block):
                     self._offer(run, utterance)
+            else:
+                raise RuntimeError("the audio capture ended on its own")
         except Exception as exc:
             self.error = f"{type(exc).__name__}: {exc}"
             log.warning("voice capture stopped: %s", self.error)

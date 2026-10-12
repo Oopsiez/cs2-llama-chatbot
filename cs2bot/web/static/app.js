@@ -1040,6 +1040,7 @@ async function renderVoice() {
   else if (!status.supported) lines.push(`cannot listen here: ${status.unsupported_reason}`);
   else if (status.downloading) lines.push(`downloading the ${status.model} speech model…`);
   else if (status.running) lines.push("listening");
+  else if (status.enabled && !status.bot_running) lines.push("not listening: the bot is not started");
   else if (status.enabled) lines.push("starting…");
   else lines.push("not listening");
   lines.push(
