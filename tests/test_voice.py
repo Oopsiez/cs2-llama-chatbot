@@ -849,19 +849,31 @@ def test_an_exclude_capture_that_only_carries_silence_falls_back_to_the_speakers
     from cs2bot.voice import audio, process_loopback
 
     notes: list[str] = []
+    ticks = iter(range(0, 1000))
+    monkeypatch.setattr(audio.time, "monotonic", lambda: float(next(ticks)))
     monkeypatch.setattr(process_loopback, "unavailable", lambda: "")
-    silent = [[0.0] * audio.SAMPLE_RATE] * 25
-    monkeypatch.setattr(process_loopback, "blocks_except_me", lambda: iter(silent))
+    monkeypatch.setattr(process_loopback, "blocks_except_me", lambda: iter([[]] * 100))  # empty blocks
     monkeypatch.setattr(audio, "blocks", lambda device_id="": iter([[0.1]]))
     monkeypatch.setattr(audio, "device_name", lambda device_id: "Headset (Realtek)")
     out = list(audio.capture(scope="pc", on_note=notes.append))
-    assert out[-1] == [0.1] and len(out) == 20
+    assert out[-1] == [0.1] and 0 < len(out) < 30
     assert notes[-1] == (
         "hearing the whole PC via Headset (Realtek): "
         "could not leave out the bot's own voice: only silence for 20 s"
     )
-    loud = iter([[0.0] * audio.SAMPLE_RATE] * 5 + [[0.3]] + [[0.0] * audio.SAMPLE_RATE] * 30)
-    assert len(list(audio.until_sound_or_timeout(loud))) == 36
+
+
+def test_sound_resets_the_silence_timer():
+    from cs2bot.voice import audio
+
+    now = [0.0]
+    blocks = [[0.0]] * 10 + [[0.3]] + [[0.0]] * 30
+
+    def clock() -> float:
+        now[0] += 1.0
+        return now[0]
+
+    assert len(list(audio.until_sound_or_timeout(iter(blocks), seconds=20, clock=clock))) == 41
 
 
 def test_the_listener_reports_the_input_level():

@@ -16,6 +16,7 @@ import ctypes
 import os
 import sys
 import threading
+import time
 from collections.abc import Callable, Iterator
 from ctypes import POINTER, Structure, byref, c_void_p, cast
 from ctypes import wintypes as wt
@@ -278,6 +279,9 @@ def _format() -> _WaveFormatEx:
     return _WaveFormatEx(WAVE_FORMAT_IEEE_FLOAT, CHANNELS, SAMPLE_RATE, SAMPLE_RATE * block, block, 32, 0)
 
 
+NO_FRAMES_SECONDS = 20.0
+
+
 def blocks(process: str = CS2_PROCESS, block_seconds: float = 0.05) -> Iterator[list[float]]:
     """Yield mono blocks of what `process` is playing, forever; raises if it cannot."""
     pid = find_process(process) if not unavailable() else 0
@@ -345,8 +349,13 @@ def _capture(pid: int, mode: int, block_seconds: float) -> Iterator[list[float]]
             )
             release_buffer = _method(capture, 4, ctypes.c_long, wt.UINT)
             pending: list[float] = []
+            last_frames = time.monotonic()
             while True:
                 kernel32.WaitForSingleObject(event, 200)
+                if time.monotonic() - last_frames > NO_FRAMES_SECONDS:
+                    # The stream is up but Windows never fills it (a device change, a driver
+                    # that will not loop this process): say so instead of listening to nothing.
+                    raise RuntimeError(f"no audio frames for {NO_FRAMES_SECONDS:.0f} s")
                 while True:
                     data = c_void_p()
                     frames = wt.UINT()
@@ -355,6 +364,7 @@ def _capture(pid: int, mode: int, block_seconds: float) -> Iterator[list[float]]
                     if hr == 0x08890001 or frames.value == 0:  # AUDCLNT_S_BUFFER_EMPTY
                         break
                     _check(hr, "GetBuffer")
+                    last_frames = time.monotonic()
                     count = frames.value * CHANNELS
                     if bflags.value & AUDCLNT_BUFFERFLAGS_SILENT or not data:
                         samples = [0.0] * count

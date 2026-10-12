@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import time
 import warnings
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
@@ -143,19 +144,22 @@ SILENT_PEAK = 1e-4
 
 
 def until_sound_or_timeout(
-    source: Iterator[list[float]], seconds: float = SILENT_SECONDS
+    source: Iterator[list[float]],
+    seconds: float = SILENT_SECONDS,
+    clock: Callable[[], float] | None = None,
 ) -> Iterator[list[float]]:
-    """Pass `source` through, but give up if nothing but digital silence arrives for `seconds`.
+    """Pass `source` through, but give up if nothing but silence arrives for `seconds` of wall time.
 
-    Windows happily hands out a process-exclude loopback stream that carries zeros forever
-    (some drivers, some device changes); the only way to tell is that no sample ever moves."""
-    silent = 0.0
+    Windows happily hands out a process loopback stream that carries zeros - or no samples at
+    all - forever (some drivers, some device changes); the only way to tell is that no sample
+    ever moves while the clock does."""
+    clock = clock or time.monotonic
+    quiet_since: float | None = clock()
     for block in source:
-        if silent >= 0 and max((abs(x) for x in block), default=0.0) > SILENT_PEAK:
-            silent = -1.0
-        elif silent >= 0:
-            silent += len(block) / SAMPLE_RATE
-            if silent >= seconds:
+        if quiet_since is not None:
+            if max((abs(x) for x in block), default=0.0) > SILENT_PEAK:
+                quiet_since = None
+            elif clock() - quiet_since >= seconds:
                 raise RuntimeError(f"only silence for {seconds:.0f} s")
         yield block
 
