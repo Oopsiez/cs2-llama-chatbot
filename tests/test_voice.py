@@ -903,3 +903,20 @@ def test_a_capture_that_ends_on_its_own_is_an_error_not_a_quiet_stop():
 
     listener._listen(Run())
     assert "ended on its own" in listener.error and Run.stop.is_set()
+
+
+def test_named_clones_become_chatterbox_voices(tmp_path, monkeypatch):
+    from cs2bot.voice import clone, engines
+
+    monkeypatch.setattr(clone, "cache_dir", lambda: tmp_path)
+    samples = [0.5 if i % 20 < 10 else -0.5 for i in range(int(8 * clone.SAMPLE_RATE))]
+    info = clone.save(samples, clone.SAMPLE_RATE, "a clip", "Big Marcus!")
+    assert info["ready"] and info["seconds"] == 8.0
+    assert clone.presets() == [("clone:big-marcus", "Big Marcus!")]
+    assert clone.preset_name("clone:big-marcus") == "big-marcus" and clone.preset_name("clone") == ""
+    assert clone.reference("big-marcus") is not None and clone.reference() is None
+    chatterbox = next(e for e in engines.ENGINES if e.id == "chatterbox")
+    ids = [v for v, _ in engines.voices_of(chatterbox)]
+    assert ids == ["clone", "clone:big-marcus"]
+    clone.delete("big-marcus")
+    assert clone.presets() == [] and engines.voices_of(chatterbox) == engines.CHATTERBOX_VOICES

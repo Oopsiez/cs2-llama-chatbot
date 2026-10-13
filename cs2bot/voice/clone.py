@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import array
 import io
+import re
 import subprocess
 import sys
 import urllib.request
@@ -23,12 +24,44 @@ MIN_SECONDS = 4.0
 GOOD_SECONDS = 7.0  # below this Chatterbox has too little voice to go on and tends to babble
 
 
-def path() -> Path:
-    return cache_dir() / "clone.wav"
+PRESET_PREFIX = "clone:"
 
 
-def info() -> dict[str, object]:
-    target = path()
+def slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40]
+
+
+def path(name: str = "") -> Path:
+    """`clone.wav` for the latest clip, `clones/<slug>.wav` for a saved, named voice."""
+    if not name:
+        return cache_dir() / "clone.wav"
+    return cache_dir() / "clones" / f"{slug(name)}.wav"
+
+
+def preset_name(voice_id: str) -> str:
+    """The saved voice a dropdown id such as `clone:marcus` refers to, else ""."""
+    return voice_id[len(PRESET_PREFIX) :] if voice_id.startswith(PRESET_PREFIX) else ""
+
+
+def presets() -> list[tuple[str, str]]:
+    """`(voice id, display name)` for every saved voice, as the Chatterbox dropdown shows them."""
+    folder = cache_dir() / "clones"
+    if not folder.is_dir():
+        return []
+    out = []
+    for wav in sorted(folder.glob("*.wav")):
+        label = wav.with_suffix(".name")
+        out.append((PRESET_PREFIX + wav.stem, label.read_text() if label.exists() else wav.stem))
+    return out
+
+
+def delete(name: str) -> None:
+    for suffix in (".wav", ".txt", ".name"):
+        path(name).with_suffix(suffix).unlink(missing_ok=True)
+
+
+def info(name: str = "") -> dict[str, object]:
+    target = path(name)
     if not target.exists():
         return {"ready": False, "seconds": 0.0, "source": ""}
     with wave.open(str(target)) as handle:
@@ -42,8 +75,8 @@ def info() -> dict[str, object]:
     }
 
 
-def reference() -> list[float] | None:
-    target = path()
+def reference(name: str = "") -> list[float] | None:
+    target = path(name)
     if not target.exists():
         return None
     with wave.open(str(target)) as handle:
@@ -68,8 +101,9 @@ def resample(samples: Sequence[float], rate: int, target: int = SAMPLE_RATE) -> 
     return out
 
 
-def save(samples: Sequence[float], rate: int, source: str) -> dict[str, object]:
-    """Store `samples` as the clone reference; trims to MAX_SECONDS, refuses very short clips."""
+def save(samples: Sequence[float], rate: int, source: str, name: str = "") -> dict[str, object]:
+    """Store `samples` as the clone reference - the latest clip, or a saved voice called `name`;
+    trims to MAX_SECONDS, refuses very short clips."""
     mono = resample(samples, rate)
     if len(mono) < MIN_SECONDS * SAMPLE_RATE:
         raise ValueError(
@@ -79,16 +113,17 @@ def save(samples: Sequence[float], rate: int, source: str) -> dict[str, object]:
     mono = mono[: int(MAX_SECONDS * SAMPLE_RATE)]
     peak = max(abs(x) for x in mono) or 1.0
     pcm = array.array("h", (int(max(-1.0, min(1.0, x / peak * 0.9)) * 32767) for x in mono))
-    with wave.open(str(path()), "wb") as handle:
+    target = path(name)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(target), "wb") as handle:
         handle.setnchannels(1)
         handle.setsampwidth(2)
         handle.setframerate(SAMPLE_RATE)
         handle.writeframes(pcm.tobytes())
-    path().with_suffix(".txt").write_text(source)
-    from . import engines
-
-    engines._sessions.pop("chatterbox/reference", None)
-    return info()
+    target.with_suffix(".txt").write_text(source)
+    if name:
+        target.with_suffix(".name").write_text(name.strip())
+    return info(name)
 
 
 def decode(data: bytes, name: str = "") -> tuple[list[float], int]:

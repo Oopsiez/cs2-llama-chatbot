@@ -396,11 +396,19 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     @app.post("/api/voice/clone")
     async def voice_clone(payload: dict[str, Any]) -> dict[str, Any]:
-        """Set the voice Chatterbox imitates: {source: "last"} | {url} | {file: base64, name}."""
+        """Set the voice Chatterbox imitates: {source: "last"} | {url} | {file: base64, name};
+        with `save_as` the clip is kept as a named voice in the dropdown instead."""
         import base64
 
         from ..voice import clone
         from ..voice import listener as listener_mod
+
+        save_as = str(payload.get("save_as") or "").strip()
+        if save_as and not clone.slug(save_as):
+            return {"ok": False, "detail": "give the saved voice a name with letters or digits in it"}
+
+        def keep(samples: list[float], rate: int, source: str) -> dict[str, object]:
+            return clone.save(samples, rate, source, save_as)
 
         try:
             if payload.get("source") == "last":
@@ -417,25 +425,44 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                         **clone.info(),
                     }
                 result = await asyncio.to_thread(
-                    clone.save, samples, 16000, f"last voice heard: {listener.last_text[:60]}"
+                    keep, list(samples), 16000, f"last voice heard: {listener.last_text[:60]}"
                 )
             elif payload.get("url"):
                 url = str(payload["url"]).strip()
                 samples, rate = await asyncio.to_thread(clone.fetch, url)
-                result = await asyncio.to_thread(clone.save, samples, rate, url)
+                result = await asyncio.to_thread(keep, samples, rate, url)
             elif payload.get("file"):
                 name = str(payload.get("name") or "upload")
                 data = base64.b64decode(str(payload["file"]).split(",", 1)[-1])
                 samples, rate = await asyncio.to_thread(clone.decode, data, name)
-                result = await asyncio.to_thread(clone.save, samples, rate, name)
+                result = await asyncio.to_thread(keep, samples, rate, name)
             else:
                 return {"ok": False, "detail": "send a file, a URL or source=last"}
         except (ValueError, OSError) as exc:
             return {"ok": False, "detail": str(exc), **clone.info()}
         detail = f"voice clip saved ({result['seconds']} s)"
+        if save_as:
+            voice_id = clone.PRESET_PREFIX + clone.slug(save_as)
+            engine.config.voice.speak_voice = voice_id
+            save_config(engine.config)
+            detail = f"saved as '{save_as}' and selected ({result['seconds']} s)"
         if result["short"]:
             detail += f" - short; {clone.GOOD_SECONDS:g}+ s gives a much cleaner clone"
         return {"ok": True, "detail": detail, **result}
+
+    @app.post("/api/voice/clone/delete")
+    async def voice_clone_delete(payload: dict[str, Any]) -> dict[str, Any]:
+        """Forget a saved voice: {voice: "clone:<slug>"}."""
+        from ..voice import clone
+
+        name = clone.preset_name(str(payload.get("voice") or ""))
+        if not name:
+            return {"ok": False, "detail": "that is not a saved voice"}
+        await asyncio.to_thread(clone.delete, name)
+        if engine.config.voice.speak_voice == clone.PRESET_PREFIX + name:
+            engine.config.voice.speak_voice = ""
+            save_config(engine.config)
+        return {"ok": True, "detail": f"removed the saved voice '{name}'"}
 
     @app.post("/api/voice/preview")
     async def voice_preview(payload: dict[str, Any]) -> dict[str, Any]:

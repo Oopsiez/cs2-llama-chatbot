@@ -44,7 +44,16 @@ KITTEN_VOICES = tuple(
     for n in (2, 3, 4, 5)
     for s in ("m", "f")
 )
-CHATTERBOX_VOICES = (("clone", "Cloned voice (from the clip on this tab)"),)
+CHATTERBOX_VOICES = (("clone", "Latest clip (from the clip on this tab)"),)
+
+
+def voices_of(engine: Engine) -> tuple[tuple[str, str], ...]:
+    """The dropdown entries: fixed voices, plus every saved clone for an engine that clones."""
+    if not engine.clones:
+        return engine.voices
+    from . import clone
+
+    return engine.voices + tuple(clone.presets())
 
 ENGINES: tuple[Engine, ...] = (
     Engine(
@@ -165,7 +174,7 @@ def status() -> list[dict[str, object]]:
             "error": install_error.get(e.id, ""),
             "clones": e.clones,
             "device": providers.get(e.id, ""),
-            "voices": [{"id": v, "label": label} for v, label in e.voices],
+            "voices": [{"id": v, "label": label} for v, label in voices_of(e)],
         }
         for e in ENGINES
     ]
@@ -261,7 +270,7 @@ def _render(engine: Engine, text: str, voice: str, rate: int) -> list[float]:
         return _supertonic(engine, text, voice, rate)
     if engine.id == "kitten":
         return _kitten(engine, text, voice, rate)
-    return _chatterbox(engine, text)
+    return _chatterbox(engine, text, voice)
 
 
 def force_cpu(engine: Engine) -> None:
@@ -342,13 +351,16 @@ def _looping(tokens: list[int], window: int = 8, repeats: int = 4) -> bool:
     return all(tokens[-window * (i + 1) : len(tokens) - window * i] == tail for i in range(1, repeats))
 
 
-def _chatterbox(engine: Engine, text: str) -> list[float]:
+def _chatterbox(engine: Engine, text: str, voice: str = "") -> list[float]:
     import numpy as np
 
     from . import clone
 
-    reference = clone.reference()
+    name = clone.preset_name(voice)
+    reference = clone.reference(name)
     if reference is None:
+        if name:
+            raise RuntimeError(f"the saved voice '{name}' is gone - pick another or clone it again")
         raise RuntimeError(
             "no voice to clone yet - add a clip (upload, URL or last voice heard) on the Speech tab"
         )

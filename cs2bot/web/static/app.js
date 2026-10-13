@@ -669,16 +669,33 @@ function bindActions() {
   });
   const sendClone = async (payload) => {
     $("voice-clone-note").textContent = "saving the clip…";
+    const save_as = $("voice-clone-name").value.trim();
     const body = await (
       await fetch("/api/voice/clone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, save_as }),
       })
     ).json();
     $("voice-clone-note").textContent = body.detail;
+    if (body.ok && save_as) {
+      $("voice-clone-name").value = "";
+      config = await (await fetch("/api/config")).json();
+    }
     await renderVoice();
   };
+  $("voice-clone-delete").addEventListener("click", async () => {
+    const body = await (
+      await fetch("/api/voice/clone/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voice: $("voice-speak-voice").value }),
+      })
+    ).json();
+    $("voice-clone-note").textContent = body.detail;
+    if (body.ok) config = await (await fetch("/api/config")).json();
+    await renderVoice();
+  });
   $("voice-clone-file").addEventListener("change", () => {
     const file = $("voice-clone-file").files[0];
     if (!file) return;
@@ -930,7 +947,13 @@ function renderEngineInstall(engine, status) {
   }
   const clone = status.clone || {};
   $("voice-clone-row").hidden = !(hf && hf.clones);
-  if (hf && hf.clones)
+  const chosen = $("voice-speak-voice").value || "";
+  $("voice-clone-delete").hidden = !(hf && hf.clones && chosen.startsWith("clone:"));
+  if (hf && hf.clones && chosen.startsWith("clone:"))
+    $("voice-clone-note").textContent = `using the saved voice "${
+      ((hf.voices || []).find((v) => v.id === chosen) || { label: chosen }).label
+    }" - clone another with a name in "Save as" to add more`;
+  else if (hf && hf.clones)
     $("voice-clone-note").textContent = clone.ready
       ? `clip ready: ${clone.seconds} s${clone.short ? " (short - 7+ s clones cleaner)" : ""}${clone.source ? ` - ${clone.source}` : ""}`
       : "no clip yet - add one or the bot cannot speak with this engine";

@@ -583,12 +583,14 @@
         </label>
       </div>
       <div class="row" id="voice-clone-row" hidden>
-        <label>Voice to clone <span class="tip" title="Chatterbox imitates whoever is in this clip: 3-12 seconds of one person talking. Upload a file, paste a link to audio/video (direct link, or YouTube if yt-dlp is installed), or take the last teammate the bot heard.">?</span>
+        <label>Voice to clone <span class="tip" title="Chatterbox imitates whoever is in this clip: 3-12 seconds of one person talking. Upload a file, paste a link to audio/video (direct link, or YouTube if yt-dlp is installed), or take the last teammate the bot heard. Type a name in 'Save as' first and the clip is kept as its own entry in the Voice dropdown, so you can collect several voices and switch between them; leave it blank to just replace the latest clip.">?</span>
           <span class="inline">
+            <input type="text" id="voice-clone-name" placeholder="Save as… (optional name)" style="max-width:180px" />
             <input type="file" id="voice-clone-file" accept="audio/*,video/*" />
             <input type="text" id="voice-clone-url" placeholder="https://… link to a clip" />
             <button class="action" id="voice-clone-url-go" type="button">Use link</button>
             <button class="action" id="voice-clone-last" type="button">Clone the last voice I heard</button>
+            <button class="action" id="voice-clone-delete" type="button" hidden>Remove this saved voice</button>
           </span>
           <span class="hint" id="voice-clone-note">no clip yet</span>
         </label>
