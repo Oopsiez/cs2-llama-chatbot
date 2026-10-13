@@ -122,3 +122,22 @@ def test_be_quiet_is_still_a_quiet_order():
 def test_only_an_explicit_persona_order_is_worth_a_complaint():
     assert commands.parse("be careful", settings()).explicit is False
     assert commands.parse("!persona toxic", settings()).explicit is True
+
+
+@pytest.mark.parametrize(
+    "text,instruction",
+    [
+        ("you are now a friendly operator", "a friendly operator"),
+        ("bot, from now on you are a calm coach who never swears", "a calm coach who never swears"),
+        ("talk like a pirate", "talk like a pirate"),
+        ("!persona you are now a friendly operator", "a friendly operator"),
+    ],
+)
+def test_free_form_orders_become_instructions(text, instruction):
+    command = commands.parse(text, settings())
+    assert command is not None and command.kind == commands.PERSONA
+    assert command.instruction == instruction and command.explicit
+
+
+def test_free_form_orders_need_the_persona_switch():
+    assert commands.parse("you are now a friendly operator", settings(obey_persona_commands=False)) is None

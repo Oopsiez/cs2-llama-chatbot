@@ -51,6 +51,8 @@ class GameStateStore:
             active_weapon=self.player.active_weapon,
             bomb=str(bomb.get("state") or round_state.get("bomb") or ""),
             round_number=int(round_info.get("round") or 0),
+            score_ct=int((round_info.get("team_ct") or {}).get("score") or 0),
+            score_t=int((round_info.get("team_t") or {}).get("score") or 0),
             updated_at=time.time(),
         )
 

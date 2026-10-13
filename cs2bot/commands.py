@@ -35,14 +35,57 @@ _TALK_WORDS = ("talk", "unmute", "speak", "wake up")
 _PERSONA_WORDS = ("persona", "personas", "personality", "personalities")
 # Said without the word "persona", so a name has to follow for it to be an order at all.
 _PERSONA_LEADS = (("act", "like"), ("pretend", "to", "be"), ("switch", "to"), ("become",), ("be",))
+# Said *to* the bot about what it is from now on - these carry a free-form instruction, so the
+# words after them are kept whole instead of being matched against persona names only.
+_INSTRUCTION_LEADS = (
+    "you are now",
+    "you're now",
+    "from now on",
+    "from now on you are",
+    "your new personality is",
+    "new persona:",
+    "new personality:",
+    "talk like",
+    "speak like",
+    "sound like",
+)
 _PERSONA_FILLER = {
-    "a", "an", "the", "bot", "more", "please", "now", "mode", "to",
-    "act", "like", "pretend", "switch", "become", "be", "go", "use", "your",
+    "a",
+    "an",
+    "the",
+    "bot",
+    "more",
+    "please",
+    "now",
+    "mode",
+    "to",
+    "act",
+    "like",
+    "pretend",
+    "switch",
+    "become",
+    "be",
+    "go",
+    "use",
+    "your",
 }
 # "!persona", "!persona list", "what personas do you have" all mean the same thing.
 _LIST_WORDS = {
-    "list", "options", "what", "which", "who", "do", "you", "have", "got",
-    "is", "are", "there", "available", "can", "say",
+    "list",
+    "options",
+    "what",
+    "which",
+    "who",
+    "do",
+    "you",
+    "have",
+    "got",
+    "is",
+    "are",
+    "there",
+    "available",
+    "can",
+    "say",
 }
 
 
@@ -52,6 +95,7 @@ class Command:
     site: str = ""
     persona: str = ""  # "" on a persona command means "tell me the ones you have"
     explicit: bool = False  # written as `!command`, so a name it cannot place is worth saying
+    instruction: str = ""  # the whole order, for when it is not the name of a known persona
 
 
 def _strip_prefix(text: str) -> tuple[str, bool]:
@@ -88,6 +132,27 @@ def _persona_wanted(words: list[str]) -> str | None:
     return None
 
 
+def _instruction_in(body: str) -> str:
+    """The order after "you are now" / "from now on" / "talk like", in the player's own words."""
+    lowered = body.casefold().strip()
+    for lead in sorted(_INSTRUCTION_LEADS, key=len, reverse=True):
+        for prefix in (
+            lead,
+            "persona " + lead,
+            "personality " + lead,
+            "bot " + lead,
+            "bot, " + lead,
+            "ok bot " + lead,
+            "hey bot " + lead,
+        ):
+            if lowered.startswith(prefix):
+                rest = body.strip()[len(prefix) :].strip(" ,:-")
+                if lead in ("talk like", "speak like", "sound like"):
+                    rest = f"talk like {rest}"
+                return rest if len(rest.split()) >= 1 else ""
+    return ""
+
+
 def parse(text: str, settings: StrategySettings) -> Command | None:
     """The order in a chat line, if there is one."""
     body, explicit = _strip_prefix(text)
@@ -95,6 +160,12 @@ def parse(text: str, settings: StrategySettings) -> Command | None:
     if not lowered:
         return None
     words = lowered.replace(",", " ").split()
+
+    if settings.obey_commands and settings.obey_persona_commands:
+        instruction = _instruction_in(body)
+        if instruction:
+            return Command(PERSONA, persona=instruction, explicit=True, instruction=instruction)
+
     # A long sentence that happens to contain "strat" is somebody talking, not somebody calling.
     if not explicit and len(words) > _MAX_COMMAND_WORDS:
         return None

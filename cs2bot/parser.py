@@ -16,6 +16,7 @@ from collections.abc import Sequence
 
 from .identity import TIMESTAMP, is_same_player
 from .models import ChatChannel, ChatMessage, LifeState, Team
+from .radio import is_radio_tagged
 
 _SRCDS = re.compile(
     r'^"(?P<name>.*?)<\d+><(?P<sid>[^>]*)><(?P<team>[^>]*)>"\s+(?P<cmd>say|say_team)\s+"(?P<text>.*)"\s*$'
@@ -61,14 +62,12 @@ def _team(value: str | None) -> Team:
     return _TEAM_BY_NAME.get(value.strip().lower(), Team.UNKNOWN)
 
 
-def parse_chat_line(
-    line: str, own_name: str = "", aliases: Sequence[str] = ()
-) -> ChatMessage | None:
+def parse_chat_line(line: str, own_name: str = "", aliases: Sequence[str] = ()) -> ChatMessage | None:
     """Parse a single console line. Returns None when the line is not player chat."""
     raw = line.rstrip("\r\n")
     saw_marker = any(mark in raw for mark in _BIDI_MARKS)
     body = _clean(TIMESTAMP.sub("", _clean(raw)))
-    if not body:
+    if not body or is_radio_tagged(body):
         return None
 
     srcds = _SRCDS.match(body)

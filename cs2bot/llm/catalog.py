@@ -24,6 +24,9 @@ class ModelChoice:
     vram_gb: float  # to keep it entirely on the GPU beside CS2
     ram_gb: float  # to run it on the CPU instead
     note: str
+    speech_tier: str = ""  # good | better | best - how natural it sounds spoken; blank = not offered
+
+SPEECH_TIERS = ("good", "better", "best")
 
 
 CHOICES: tuple[ModelChoice, ...] = (
@@ -83,15 +86,64 @@ CHOICES: tuple[ModelChoice, ...] = (
         note="Loosest tongue of the mid-size models.",
     ),
     ModelChoice(
-        key="llama3.1-8b",
-        label="Llama 3.1 8B Instruct (Q4_K_M)",
-        ollama="llama3.1:8b-instruct-q4_K_M",
-        gguf="bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+        key="lexi-8b",
+        label="Llama 3 8B Lexi Uncensored (Q4_K_M)",
+        ollama="hf.co/Andycurrent/Llama-3-8B-Lexi-Uncensored:Q4_K_M",
+        gguf="Andycurrent/Llama-3-8B-Lexi-Uncensored",
         params="8B",
-        download_gb=4.7,
+        download_gb=4.9,
         vram_gb=7.0,
         ram_gb=16.0,
-        note="Best banter here, but wants an 8GB+ card with CS2 already on it.",
+        note="The default: best banter, says what it is told to. Wants an 8GB card - fine on a 2080 Super.",
+        speech_tier="good",
+    ),
+    ModelChoice(
+        key="lexi-v2-8b",
+        label="Llama 3.1 8B Lexi Uncensored V2 (Q4_K_M)",
+        ollama="hf.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2-GGUF:Q4_K_M",
+        gguf="Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2-GGUF",
+        params="8B",
+        download_gb=4.9,
+        vram_gb=7.0,
+        ram_gb=16.0,
+        note="Uncensored. The newer Lexi: same attitude, follows persona orders more closely.",
+        speech_tier="better",
+    ),
+    ModelChoice(
+        key="stheno-8b",
+        label="L3 8B Stheno v3.2 (Q4_K_M)",
+        ollama="hf.co/bartowski/L3-8B-Stheno-v3.2-GGUF:Q4_K_M",
+        gguf="bartowski/L3-8B-Stheno-v3.2-GGUF",
+        params="8B",
+        download_gb=4.9,
+        vram_gb=7.0,
+        ram_gb=16.0,
+        note="Uncensored. Most natural spoken-style dialogue of the lot - the pick for the voice.",
+        speech_tier="best",
+    ),
+    ModelChoice(
+        key="dolphin3-8b",
+        label="Dolphin 3.0 Llama 3.1 8B (Q4_K_M)",
+        ollama="hf.co/dphn/Dolphin3.0-Llama3.1-8B-GGUF:Q4_K_M",
+        gguf="dphn/Dolphin3.0-Llama3.1-8B-GGUF",
+        params="8B",
+        download_gb=4.9,
+        vram_gb=7.0,
+        ram_gb=16.0,
+        note="Uncensored. Chatty and obedient to the system prompt.",
+        speech_tier="good",
+    ),
+    ModelChoice(
+        key="darkidol-8b",
+        label="DarkIdol Llama 3.1 8B Uncensored 1.2 (Q4_K_M)",
+        ollama="hf.co/bartowski/DarkIdol-Llama-3.1-8B-Instruct-1.2-Uncensored-GGUF:Q4_K_M",
+        gguf="bartowski/DarkIdol-Llama-3.1-8B-Instruct-1.2-Uncensored-GGUF",
+        params="8B",
+        download_gb=4.9,
+        vram_gb=7.0,
+        ram_gb=16.0,
+        note="Uncensored. Roleplay-tuned: stays in character hardest.",
+        speech_tier="better",
     ),
 )
 
@@ -115,10 +167,11 @@ def verdict(choice: ModelChoice, hardware: Hardware) -> tuple[str, str]:
 
 def recommended(hardware: Hardware) -> str:
     """The biggest model this machine can hold on the GPU, or the smallest one otherwise."""
-    for choice in reversed(CHOICES):
-        if verdict(choice, hardware)[0] == FITS:
-            return choice.key
-    return CHOICES[0].key
+    best: ModelChoice | None = None
+    for choice in CHOICES:
+        if verdict(choice, hardware)[0] == FITS and (best is None or choice.vram_gb > best.vram_gb):
+            best = choice  # a tie keeps the earlier one, so the default wins over its alternatives
+    return (best or CHOICES[0]).key
 
 
 def survey(hardware: Hardware) -> list[dict[str, str | float]]:
@@ -142,3 +195,14 @@ def survey(hardware: Hardware) -> list[dict[str, str | float]]:
             }
         )
     return rows
+
+
+def known_on_server(wanted: str, available: list[str]) -> str:
+    """The catalog tag the server actually has when `wanted` is not there - the default first,
+    then the rest in catalog order - or "" when nothing on it is one of ours."""
+    if wanted in available:
+        return wanted
+    for choice in CHOICES:
+        if choice.ollama in available:
+            return choice.ollama
+    return ""

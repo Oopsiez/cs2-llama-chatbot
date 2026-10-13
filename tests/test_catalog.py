@@ -8,22 +8,22 @@ def choice(key: str) -> catalog.ModelChoice:
 
 def test_a_big_card_holds_the_big_model():
     beefy = Hardware(ram_gb=32, vram_gb=16)
-    assert catalog.verdict(choice("llama3.1-8b"), beefy)[0] == catalog.FITS
-    assert catalog.recommended(beefy) == "llama3.1-8b"
+    assert catalog.verdict(choice("lexi-8b"), beefy)[0] == catalog.FITS
+    assert catalog.recommended(beefy) == "lexi-8b"
 
 
 def test_cs2_keeps_its_share_of_a_small_card():
     # 6GB card: the 8B model would fit on paper, but not beside the game.
     small = Hardware(ram_gb=16, vram_gb=6)
     assert catalog.verdict(choice("llama3.2-3b"), small)[0] == catalog.FITS
-    assert catalog.verdict(choice("llama3.1-8b"), small)[0] != catalog.FITS
+    assert catalog.verdict(choice("lexi-8b"), small)[0] != catalog.FITS
     assert catalog.recommended(small) == "phi3.5-mini"
 
 
 def test_no_gpu_falls_back_to_the_cpu_rather_than_refusing():
     laptop = Hardware(ram_gb=8, vram_gb=0)
     assert catalog.verdict(choice("llama3.2-1b"), laptop)[0] == catalog.CPU_ONLY
-    assert catalog.verdict(choice("llama3.1-8b"), laptop)[0] == catalog.TOO_BIG
+    assert catalog.verdict(choice("lexi-8b"), laptop)[0] == catalog.TOO_BIG
     assert catalog.recommended(laptop) == "llama3.2-1b"
 
 
@@ -35,3 +35,21 @@ def test_every_model_is_offered_with_its_cost():
     rows = catalog.survey(Hardware(ram_gb=16, vram_gb=8))
     assert len(rows) == len(catalog.CHOICES)
     assert all(row["download_gb"] and row["verdict"] and row["ollama"] for row in rows)
+
+
+def test_a_stale_model_name_gives_way_to_the_catalog_model_the_server_has():
+    from cs2bot.llm.catalog import known_on_server
+
+    lexi = "hf.co/Andycurrent/Llama-3-8B-Lexi-Uncensored:Q4_K_M"
+    assert known_on_server("lexi:latest", ["other:latest", lexi]) == lexi
+    assert known_on_server(lexi, [lexi]) == lexi
+    assert known_on_server("lexi:latest", ["other:latest"]) == ""
+
+
+def test_the_uncensored_models_are_tiered_for_speech():
+    from cs2bot.llm.catalog import CHOICES, SPEECH_TIERS
+
+    tiered = {c.key: c.speech_tier for c in CHOICES if c.speech_tier}
+    assert set(tiered.values()) <= set(SPEECH_TIERS)
+    assert tiered["stheno-8b"] == "best" and tiered["lexi-8b"] == "good"
+    assert "llama3.2-1b" not in tiered and "mistral-7b" not in tiered

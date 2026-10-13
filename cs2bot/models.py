@@ -78,11 +78,50 @@ class LocalPlayer(BaseModel):
     active_weapon: str = ""
     bomb: str = ""  # planted | carried | dropped | defused | exploded
     round_number: int = 0
+    score_ct: int = 0
+    score_t: int = 0
     updated_at: float = 0.0
 
     @property
     def is_warmup(self) -> bool:
         return self.map_phase == "warmup"
+
+    @property
+    def rounds_to_win(self) -> int:
+        """First to this many rounds takes the map: MR12 competitive/premier, MR8 wingman,
+        casual's 15-round format. CS2 does not send it, so it follows the mode."""
+        mode = self.mode.casefold()
+        if mode in ("wingman", "scrimcomp2v2"):
+            return 9
+        if mode in ("casual", "deathmatch"):
+            return 8
+        return 13
+
+    @property
+    def match_situation(self) -> str:
+        """Where the match stands, in words the model can use: just started, close, match point,
+        or over. Empty without a scoreboard."""
+        if not self.map_phase or self.is_warmup:
+            return ""
+        if self.map_phase == "gameover":
+            return "the match is over"
+        ours, theirs = (
+            (self.score_ct, self.score_t) if self.team is Team.CT else (self.score_t, self.score_ct)
+        )
+        total = ours + theirs
+        need = self.rounds_to_win
+        on_a_side = self.team in (Team.CT, Team.T)
+        score = f"{ours}-{theirs}" if on_a_side else f"CT {self.score_ct} - T {self.score_t}"
+        if max(ours, theirs) == need - 1:
+            who = "you are" if ours > theirs else "they are" if theirs > ours else "both teams are"
+            return f"score {score}, match point - {who} one round from winning"
+        if total <= 2:
+            return f"score {score}, the match has just started"
+        if max(ours, theirs) >= need - 3:
+            return f"score {score}, the match is nearly over"
+        if abs(ours - theirs) <= 2:
+            return f"score {score}, it is close"
+        return f"score {score}, {'you are ahead' if ours > theirs else 'you are behind'}"
 
     @property
     def is_stale(self) -> bool:
