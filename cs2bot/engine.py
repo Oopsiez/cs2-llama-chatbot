@@ -16,7 +16,7 @@ from .config import AppConfig, fallback_log_path, load_config, save_config
 from .echo import EchoGuard
 from .events import EventBus
 from .gamestate import GameStateStore
-from .humanize import first_sentences, humanize, sampling_for
+from .humanize import first_sentences, first_words, humanize, sampling_for
 from .identity import addressed_to, detect_name_from_line
 from .liveness import DeathBoard
 from .llm import LLMBackend, LLMError, OllamaBackend, SamplingParams, build_backend
@@ -29,6 +29,7 @@ from .parser import parse_chat_line
 from .persona import (
     build_initiative_turns,
     build_reveal_turns,
+    build_spoken_rewrite_turns,
     build_strategy_turns,
     build_turns,
     find_persona,
@@ -505,8 +506,42 @@ class Engine:
         except OSError:
             pass
 
+    def _speech_params(self, params: SamplingParams) -> SamplingParams:
+        """Sampling for a spoken line: looser than typed chat (or it reads like prose), with a token
+        budget that fits the spoken length rather than the typed one, so it is not cut mid-thought."""
+        words = self.config.speech_max_words
+        budget = words * 2 + 16 if words > 0 else 96
+        return replace(
+            params,
+            temperature=max(params.temperature, 1.0),
+            repeat_penalty=1.1,
+            max_tokens=max(params.max_tokens, budget),
+        )
+
+    async def rewrite_for_speech(self, text: str) -> str:
+        """The typed reply reworded as something said out loud; the typed text if the model fails."""
+        if not self.config.speech_rewrite or not text:
+            return text
+        config = self.speech_config
+        try:
+            raw = await self.speech_backend.generate(
+                build_spoken_rewrite_turns(config, text), self._speech_params(self._sampling_params())
+            )
+        except LLMError as exc:
+            self.log_note(f"could not reword for speech: {exc}")
+            return text
+        spoken = humanize(
+            raw,
+            literacy=config.behavior.literacy,
+            max_chars=0,
+            seed=self._random.randrange(2**32),
+            name=self.own_name,
+        )
+        return spoken or text
+
     async def speak(self, text: str) -> tuple[bool, str]:
         text = first_sentences(text, self.config.speech_max_sentences) or text
+        text = first_words(text, self.config.speech_max_words) or text
         spoken, detail = await self.speaker.say(text)
         self.log_note(f"said: {text}" if spoken else f"could not say: {detail}")
         self.bus.publish("spoken" if spoken else "error", {"text": text, "detail": detail})
@@ -752,8 +787,11 @@ class Engine:
         spoken_text = ""
         try:
             text = await self.generate_reply(message, local_state, spoken=spoken and not typed)
-            if typed and spoken and self.speech_differs:
-                spoken_text = await self.generate_reply(message, local_state, spoken=True)
+            if typed and spoken:
+                if self.speech_differs:
+                    spoken_text = await self.generate_reply(message, local_state, spoken=True)
+                else:
+                    spoken_text = await self.rewrite_for_speech(text)
         except LLMError as exc:
             self.last_error = str(exc)
             self.bus.publish("error", {"message": str(exc)})
@@ -1228,8 +1266,7 @@ class Engine:
         for attempt in range(attempts):
             params = self._sampling_params()
             if spoken:
-                # Spoken banter wants looser sampling than typed chat, or it reads like prose.
-                params = replace(params, temperature=max(params.temperature, 1.0), repeat_penalty=1.1)
+                params = self._speech_params(params)
             if attempt:
                 # Nudge it out of the groove it just fell into.
                 params = replace(params, temperature=min(1.6, params.temperature + 0.15 * attempt))

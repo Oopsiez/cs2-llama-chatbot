@@ -105,11 +105,38 @@ def _typo(word: str, rng: random.Random) -> str:
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
+_FRAGMENT_WORDS = 3
+
+
+def sentences_of(text: str) -> list[str]:
+    """`text` split into sentences; a stub such as "Nice!" or "Okay." rides with what follows it."""
+    out: list[str] = []
+    for piece in _SENTENCE_END.split(text.strip()):
+        if out and len(out[-1].split()) < _FRAGMENT_WORDS:
+            out[-1] = f"{out[-1]} {piece}"
+        else:
+            out.append(piece)
+    return out
+
+
 def first_sentences(text: str, limit: int) -> str:
     """The first `limit` sentences of `text` (0 = all of it), so a spoken line stays a line."""
     if limit <= 0:
         return text
-    return " ".join(_SENTENCE_END.split(text.strip())[:limit]).strip()
+    return " ".join(sentences_of(text)[:limit]).strip()
+
+
+def first_words(text: str, limit: int) -> str:
+    """The first `limit` words of `text` (0 = all of it), ending at the last sentence end that fits
+    when there is one, so a cut line still sounds finished."""
+    words = text.split()
+    if limit <= 0 or len(words) <= limit:
+        return text
+    kept = " ".join(words[:limit])
+    ends = [m.end() for m in re.finditer(r"[.!?]+(?=\s|$)", kept)]
+    if ends and ends[-1] >= len(kept) // 2:
+        return kept[: ends[-1]].strip()
+    return kept.rstrip(",;:-") + "..."
 
 
 SPECIAL_TOKEN = re.compile(r"<\|[^|<>]{1,32}\|>")  # <|im_end|>, <|eot_id|> ... leaked by some GGUFs

@@ -25,6 +25,8 @@ const BINDINGS = {
   "persona-game-aware": ["persona.game_aware", "bool"],
   "speech-same-persona": ["speech_same_persona", "bool"],
   "speech-max-sentences": ["speech_max_sentences", "int"],
+  "speech-max-words": ["speech_max_words", "int"],
+  "speech-rewrite": ["speech_rewrite", "bool"],
   "speech-persona-name": ["speech_persona.name", "text"],
   "speech-persona-description": ["speech_persona.description", "text"],
   "speech-persona-style": ["speech_persona.style_notes", "text"],

@@ -172,3 +172,15 @@ def test_spoken_lines_get_the_talking_directive_instead_of_the_typed_one():
     config.persona.max_reply_chars = 120
     typed = prompt(config)
     assert "chat message only" in typed and "talking out loud" not in typed
+
+
+def test_spoken_length_rule_mentions_the_word_cap():
+    from cs2bot.config import AppConfig
+    from cs2bot.persona import build_spoken_rewrite_turns, spoken_length_rule
+
+    assert "under 12 words" in spoken_length_rule(2, 12)
+    assert "under 12 words" in spoken_length_rule(0, 12)
+    assert "words" not in spoken_length_rule(2, 0)
+    turns = build_spoken_rewrite_turns(AppConfig(speech_max_words=12), "rotate b, they are all a")
+    assert turns[-1].content == "rotate b, they are all a"
+    assert "voice comms" in turns[0].content and "under 12 words" in turns[0].content

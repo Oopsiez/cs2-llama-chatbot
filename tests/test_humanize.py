@@ -68,3 +68,21 @@ def test_spoken_lines_are_cut_after_the_sentence_limit():
     assert first_sentences(speech, 1) == "Push b now."
     assert first_sentences(speech, 0) == speech
     assert first_sentences("no punctuation at all", 1) == "no punctuation at all"
+
+
+def test_spoken_sentence_cut_keeps_a_stub_with_what_follows():
+    from cs2bot.humanize import first_sentences
+
+    assert first_sentences("Nice! Rotate b now, he's one. Go go go.", 1) == "Nice! Rotate b now, he's one."
+    assert first_sentences("Okay. Okay. Save this one.", 1) == "Okay. Okay. Save this one."
+
+
+def test_spoken_lines_are_cut_after_the_word_limit():
+    from cs2bot.humanize import first_words
+
+    line = "Push b now, he's lit. Trust me I saw three of them go that way and nobody is a."
+    assert first_words(line, 0) == line
+    assert first_words(line, 40) == line
+    assert first_words(line, 8) == "Push b now, he's lit."
+    assert first_words("one two three four five six seven eight", 5) == "one two three four five..."
+    assert first_words("one two three four, five six", 4) == "one two three four..."

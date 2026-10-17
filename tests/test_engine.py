@@ -611,3 +611,36 @@ async def test_a_dead_listener_is_reported_once_and_retried_later(monkeypatch):
     await engine._tick()
     assert listener.restarts == 1 and listener.error == ""
     assert engine._voice_error_logged == ""
+
+
+class StubSpeaker:
+    def __init__(self) -> None:
+        self.said: list[str] = []
+
+    async def say(self, text: str) -> tuple[bool, str]:
+        self.said.append(text)
+        return True, "stub"
+
+
+@pytest.mark.asyncio
+async def test_typed_reply_is_reworded_and_capped_before_it_is_spoken():
+    engine = build_engine(**{"voice.reply_with": "all"})
+    engine.config.speech_max_words = 6
+    engine._backend = StubBackend(
+        ["rotate to b site, they are all pushing a long", "yo rotate b! all of them went a long, trust me"]
+    )
+    engine._speaker = StubSpeaker()
+    reply = await engine.handle_message(chat(channel=ChatChannel.TEAM, sender="mate"))
+    assert reply is not None and reply.text == "rotate to b site, they are all pushing a long"
+    assert engine._speaker.said == ["yo rotate b!"]
+    assert engine._backend.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_spoken_token_budget_fits_the_word_cap():
+    engine = build_engine()
+    engine.config.generation.auto_from_intelligence = False
+    engine.config.generation.max_tokens = 20
+    assert engine._speech_params(engine._sampling_params()).max_tokens == 96
+    engine.config.speech_max_words = 10
+    assert engine._speech_params(engine._sampling_params()).max_tokens == 36

@@ -328,6 +328,8 @@ class AppConfig(BaseModel):
     speech_same_persona: bool = True  # spoken lines use `persona`; off -> `speech_persona`
     speech_max_reply_chars: int = 0  # spoken lines are not typed into chat, so no cap by default
     speech_max_sentences: int = 2  # spoken lines are cut after this many sentences; 0 -> no limit
+    speech_max_words: int = 0  # spoken lines are cut after this many words; 0 -> no limit
+    speech_rewrite: bool = True  # a typed reply is reworded into speech before it is said out loud
     speech_persona: PersonaSettings = Field(default_factory=PersonaSettings)
     behavior: BehaviorSettings = Field(default_factory=BehaviorSettings)
     teammates: TeammateSettings = Field(default_factory=TeammateSettings)

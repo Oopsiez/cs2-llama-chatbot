@@ -336,7 +336,11 @@ def build_system_prompt(
             "in the chat and the game context."
         )
     if persona.max_reply_chars <= 0:
-        lines.append(_SPOKEN_NOTE.format(length=spoken_length_rule(config.speech_max_sentences)))
+        lines.append(
+            _SPOKEN_NOTE.format(
+                length=spoken_length_rule(config.speech_max_sentences, config.speech_max_words)
+            )
+        )
     else:
         lines.append(
             "Reply with the chat message only: no quotes, no name prefix, no narration, "
@@ -454,13 +458,36 @@ def build_initiative_turns(
     return turns
 
 
-def spoken_length_rule(max_sentences: int) -> str:
+def spoken_length_rule(max_sentences: int, max_words: int = 0) -> str:
     """How long a spoken line may run; 0 means the model decides."""
+    words = f" and under {max_words} words" if max_words > 0 else ""
     if max_sentences <= 0:
+        if max_words > 0:
+            return f"Keep it under {max_words} words, like something a player would actually say out loud."
         return "Keep it to what a player would actually say out loud."
     if max_sentences == 1:
-        return "One short spoken sentence, no more."
-    return f"At most {max_sentences} short spoken sentences, usually fewer."
+        return f"One short spoken sentence{words}, no more."
+    return f"At most {max_sentences} short spoken sentences{words}, usually fewer."
+
+
+_REWRITE_NOTE = (
+    "A teammate typed the line below into chat. Say the same thing out loud on voice comms instead: "
+    "keep its meaning and any callouts, drop nothing important, add nothing new. {spoken}"
+)
+
+
+def build_spoken_rewrite_turns(config: AppConfig, text: str) -> list[ChatTurn]:
+    """Turn a typed reply into the spoken version of itself, in the speech persona's voice."""
+    length = spoken_length_rule(config.speech_max_sentences, config.speech_max_words)
+    spoken = _SPOKEN_NOTE.format(length=length)
+    system = "\n".join(
+        [
+            f"You are {config.persona.name}, a Counter-Strike 2 player on voice comms with your team.",
+            _REWRITE_NOTE.format(spoken=spoken),
+            "Answer with the spoken line only.",
+        ]
+    )
+    return [ChatTurn("system", system), ChatTurn("user", text)]
 
 
 def length_rule(max_chars: int, reserve: int = 0) -> str:
