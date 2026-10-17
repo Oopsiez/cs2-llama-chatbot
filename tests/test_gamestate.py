@@ -44,3 +44,26 @@ def test_a_config_from_another_port_or_token_asks_to_be_reinstalled(tmp_path):
 
 def test_the_endpoint_is_loopback_whatever_the_panel_binds_to():
     assert gsi_endpoint(8420) == "http://127.0.0.1:8420/api/gsi"
+
+
+def test_the_score_says_where_the_match_stands():
+    from cs2bot.gamestate import GameStateStore
+
+    store = GameStateStore()
+
+    def post(ct, t, phase="live", mode="competitive"):
+        return store.update(
+            {
+                "provider": {"steamid": "1"},
+                "player": {"steamid": "1", "team": "CT", "state": {"health": 100}},
+                "map": {"phase": phase, "mode": mode, "team_ct": {"score": ct}, "team_t": {"score": t}},
+            }
+        )
+
+    assert "just started" in post(0, 0).match_situation
+    assert "close" in post(6, 5).match_situation
+    assert post(12, 7).match_situation == "score 12-7, match point - you are one round from winning"
+    assert "nearly over" in post(10, 4).match_situation
+    assert post(8, 3, mode="wingman").match_situation.startswith("score 8-3, match point")
+    assert post(0, 0, phase="warmup").match_situation == ""
+    assert post(13, 7, phase="gameover").match_situation == "the match is over"

@@ -42,8 +42,13 @@ stayed quiet when it did.
 | Option | What you need | Notes |
 | ------ | ------------- | ----- |
 | **Mock** | nothing | Canned replies. Good for trying the panel out. |
-| **Ollama** | [Ollama](https://ollama.com) + `ollama pull llama3:8b-instruct-q4_K_M` | Easiest real option. Can run on **another computer** - see below. |
+| **Ollama** | [Ollama](https://ollama.com) + `ollama pull llama3.2:3b-instruct-q4_K_M` | Easiest real option. Can run on **another computer** - see below. |
 | **llama.cpp** | a `.gguf` model file | Fastest, no extra program running. |
+
+The model runs next to CS2 and competes with it for memory, so pick one that fits - the **Model**
+tab has a *What can this machine run?* button that reads your card and says which of the models
+below fit, which spill into system memory, and which only run on the CPU. See
+[Which model, and what it costs](#which-model-and-what-it-costs).
 
 ---
 
@@ -113,6 +118,7 @@ The **Strats** tab in the panel controls it:
 | *Only near round start* | Ignores strat requests once the round is underway. |
 | *Chat lines per strat* | How many lines it is allowed to spend. Six - a header plus five players - says all of it; anything that does not fit is folded into the last line rather than dropped. |
 | *Give the jobs to teammates by name* | On by default. Off, everyone is `P1`-`P5`. |
+| *Let players control the personality in chat* | On by default. Anyone in the chat it listens to can swap the persona with `!persona <name>`, or just tell it what it is now: "you are now a friendly operator", "from now on talk like a pirate". |
 | *Ask phrases* | The words it listens for. `strat`, `strats`, `what's the plan`, `call it`, `what do we do` by default. |
 
 In chat:
@@ -120,6 +126,13 @@ In chat:
 - `strat?`, `strats`, `what's the plan`, `call it` - give me a call.
 - `!strat a`, `!strat b`, `!strat mid` - a call for that site, if the map has one.
 - `!quiet` - shut up for two minutes. `!talk` - come back.
+- `!persona toxic`, `!persona coach`, `bot be the therapist` - change its personality on the spot.
+  Anything that is not a known name becomes the persona verbatim: "you are now a friendly operator
+  who never swears" makes it exactly that, keeping the current style and game awareness.
+  `!persona` on its own lists what it can be. Presets and anything you saved on the **Persona**
+  tab count, and nicknames (`toxic`, `igl`, `silver`, `deadpan`) find the obvious one. Orders come
+  from the same chat as the strat orders, and *Let players control the personality in chat* on the
+  **Strats** tab turns it off.
 
 The map and side come from Game State Integration, so install the GSI config (**Game** tab) or it
 falls back to the side you picked in the panel and to map-agnostic calls. GSI is Valve's own API
@@ -141,8 +154,26 @@ text-to-speech and no virtual microphone, and your own microphone is never opene
 - **The speech model downloads once.** `small.en` is about 500 MB and is fetched the first time
   somebody talks; the tab says whether it is ready, downloading, or failed. Everything else ships
   inside the Windows installer - no `pip install` required.
-- **It only answers on a trigger word.** A lobby talks far more than it types, so by default it
-  waits to hear "bot". Clear the field to have it answer anything worth answering.
+- **Pick what it answers.** *Everything it hears* (the default), *Only questions*, or *Only
+  speech with a trigger word* such as "bot". Questions are answered even during the cooldown;
+  everything else follows the reply-chance and wait-between-answers settings.
+- **Starting conversations (optional).** *Talk on its own* on the Behaviour tab makes the bot chime
+  in unprompted - at round start, after it dies, or when nobody has said anything for a while -
+  in whatever persona it is currently playing, with a minimum gap between lines and a chance per
+  occasion so it never monologues. It goes out by text, voice or both like any other team reply.
+- **Talking back (optional).** *Respond with* on the Voice tab picks how team replies go out:
+  text (typed in team chat), voice (spoken), or all (both); all-chat replies are always typed.
+  Spoken replies use a natural neural voice - Piper (instant) or Kokoro (most human, 1-3 s a line), both on the CPU and downloaded once; the Windows speech engine is the fallback - chosen on the Speech tab played into a virtual microphone while the bot
+  holds your push-to-talk key. One-time setup: press *Install the virtual
+  microphone* on the Voice tab (it downloads [VB-Audio Cable](https://vb-audio.com/Cable/), the
+  one piece the installer cannot bundle because it is a signed driver, and runs its setup - accept
+  the prompt and restart Windows), press *Use CABLE Input*, and in CS2 → Settings → Audio set
+  the microphone to *CABLE Output* with push-to-talk on the same key as the panel's *Push-to-talk
+  key*. "Say mic check now" proves the chain before a match. Nothing is injected into the game:
+  it is a real key press and a real microphone, just one only the bot talks into.
+- **Radio commands are ignored.** "Enemy spotted", "Need backup", "Affirmative" and the rest of
+  the radio and ping wheels are played through the speakers and printed in the log as `(RADIO)`
+  lines; the bot recognises them (`cs2bot/radio.py`) and does not answer them, typed or heard.
 - **Replies always go to team chat**, whatever the reply-channel settings say, because voice comms
   are team-only.
 - **It cannot tell who spoke.** A speaker mix carries voices, gunfire and the bomb, with no names
@@ -154,6 +185,11 @@ text-to-speech and no virtual microphone, and your own microphone is never opene
 The *Say this out loud* box on the tab runs a transcript through the whole path without a
 microphone, which is the quickest way to see what it would answer.
 
+Speech recognition runs on the CPU on purpose: the GPU is CS2's and the chat model's, and a
+`small.en` model keeps up in real time on the CPU. If a build ever tries the GPU and Windows says
+`cublas64_12.dll is not found`, the bot falls back to the CPU on its own and says so in the Voice
+status.
+
 ## Teaching it callouts
 
 CS2 tells the bot your coordinates, not that you are standing in banana. So you teach it once per
@@ -161,13 +197,78 @@ map: stand somewhere, type the name on the **Snitch** tab, and press *Record whe
 Anything within about 400 units of that point is then called by that name. Until you record
 something it just says it does not know the callout - health and bomb state still work.
 
+## Which model, and what it costs
+
+Chat replies are one or two sentences, so a small instruct model is not much of a compromise: the
+8B models are funnier, not necessary. These are the ones the panel offers, with the 4-bit quant
+download size, what it takes to keep the whole model on the GPU **beside CS2** (the panel reserves
+2GB for the game), and what it takes to run it on the CPU instead:
+
+| Model | Download | VRAM (with CS2) | RAM (CPU only) |
+| --- | --- | --- | --- |
+| Llama 3.2 1B Instruct | 0.8GB | 1.5GB | 4GB |
+| Qwen2.5 1.5B Instruct | 1.0GB | 2GB | 4GB |
+| Llama 3.2 3B Instruct | 2.0GB | 3.5GB | 8GB |
+| Phi-3.5 Mini Instruct | 2.2GB | 4GB | 8GB |
+| Mistral 7B Instruct | 4.4GB | 6.5GB | 16GB |
+| Llama 3 8B Lexi Uncensored (default) | 4.9GB | 7GB | 16GB |
+
+Limitations worth knowing before you blame the bot:
+
+- **A model that does not fit still runs, badly.** Layers that miss the card spill into system
+  memory; a reply that took 300ms takes several seconds, and the bot misses the conversation.
+- **CPU-only works.** A 1-3B model on a modern CPU answers in a second or two, which is fine for
+  chat and too slow for a strat mid-round. Bump *Reply delay* rather than fighting it.
+- **CS2 wants the card too.** On a 6GB GPU, a 3B model is the ceiling if you do not want the game
+  to stutter; on 8GB you can run the 7-8B models.
+- **Nothing is bundled.** Model weights are gigabytes and are not in the installer - the panel
+  gives you the exact `ollama pull` line, or you point llama.cpp at a `.gguf` you downloaded.
+- **Not enough machine for any of it?** Point the bot at Ollama on another computer (below), or
+  leave it on the mock backend, which needs nothing.
+
+## The PC froze on the first reply
+
+That is the model being loaded onto the graphics card in the middle of a round, while CS2 already
+holds most of it. Three things now stop it:
+
+- **It loads while you are in the menu.** The model is warmed as soon as the panel starts
+  (`llm.warm_on_start`); the status line says "loading the model…" and chat is skipped until it is
+  ready, instead of the first reply paying the cost mid-fight.
+- **It leaves half the CPU to the game.** Local inference uses half the cores by default and runs
+  at a lower priority on Windows. Set `llm.n_threads` to override.
+- **It will not overfill the card.** With `llm.gpu_auto` on (the default), a GGUF model goes on the
+  GPU only when it fits beside CS2's 2 GB; otherwise it runs on the CPU. Ollama places its own
+  models - pick a smaller one on the Model tab if it is tight.
+
+The **GPU** tab shows what is sitting on the card right now - models Ollama still has loaded (it
+keeps them for a while after use, and other assistants that start with Windows hold theirs) and
+every process using GPU memory (NVIDIA only; needs `nvidia-smi`). Unload a model or end a process
+there before a match. CS2, Steam, the bot itself and Windows system processes are never offered.
+
+## Clean slate and teammates
+
+The **Clean slate** preset is a persona that does not know it is in a game: no map, round, or
+dead/alive context goes into the prompt, it just chats. Untick *Knows it is in a CS2 match* on any
+persona for the same effect.
+
+Everyone who has spoken in team chat or on voice counts as a teammate. Under **Teammates** on the
+Personality tab, pick whether the bot treats them the same as everyone else, is always friendly to
+them even as a toxic persona, or follows your own instructions for them.
+
 ## Running the model on another computer
 
-The model is the only heavy part, so it can live on a different machine - a desktop with a GPU, a
-home server, anything reachable over the network. On that machine run Ollama with
-`OLLAMA_HOST=0.0.0.0 ollama serve`, then on the **Model** tab set the Ollama URL to
-`http://that-machine:11434`. If it sits behind a reverse proxy with a password, put the token in
-*Ollama API key*; for a self-signed HTTPS certificate, untick *Verify TLS certificate*.
+A spare PC on the same network (anything with 16 GB RAM; a GPU with 8 GB makes it quick) can be
+the brain, so nothing fights CS2 for the graphics card. On that PC run **CS2 Chatbot Server
+Setup.exe** from the release: it installs Ollama if needed, sets it to listen on the LAN, adds a
+Windows Firewall rule for TCP 11434 on the *private* network profile only, pulls the default model
+and prints the address to use. On the gaming PC, Model tab → *Use a server on my network* → paste
+that address. Uninstalling the server package removes the firewall rule and puts Ollama back to
+localhost only. Ollama's tray app starts with Windows, so the server comes back by itself after a
+reboot.
+
+The server installer also puts **CS2 Chatbot Server** in the Start menu: a small window with an on/off switch for the AI models, the address the gaming PC should use (and the port, which updates the firewall rule), and who is connected right now.
+
+It also installs a small **update agent** (TCP 11435, private network only). On the gaming PC, *Test server* on the Model tab shows which release the server is on; when the server is behind, an **Update server** button has it download and silently install the matching `CS2.Chatbot.Server.Setup.exe` from GitHub - so only the gaming PC needs a manual install from then on.
 
 ## Is this a cheat?
 

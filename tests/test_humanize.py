@@ -34,3 +34,55 @@ def test_directives_change_with_level():
     assert literacy_directive(0) != literacy_directive(100)
     assert game_iq_directive(0) != game_iq_directive(100)
     assert literacy_directive(50) != game_iq_directive(50)
+
+
+def test_leaked_chat_template_tokens_are_never_typed_or_spoken():
+    from cs2bot.humanize import humanize
+
+    assert humanize("rush b<|im_end|>", literacy=100, max_chars=0) == "rush b"
+    assert "<|" not in humanize("<|start_header_id|>ok <|eot_id|>", literacy=100, max_chars=160)
+
+
+def test_no_cap_means_no_cap():
+    from cs2bot.humanize import humanize
+
+    text = " ".join(["word"] * 60)
+    assert humanize(text, literacy=100, max_chars=0) == text
+    assert len(humanize(text, literacy=100, max_chars=0).split()) == 60
+
+
+def test_the_bots_own_name_is_stripped_off_the_front_of_a_reply():
+    from cs2bot.humanize import humanize
+
+    assert humanize("Big Dog 99: push b now", literacy=100, max_chars=0, name="Big Dog 99") == "push b now"
+    assert humanize("[big dog 99] - rotate", literacy=100, max_chars=0, name="Big Dog 99") == "rotate"
+    kept = humanize("heads up: they are b", literacy=100, max_chars=0, name="Big Dog 99")
+    assert kept == "heads up: they are b"
+
+
+def test_spoken_lines_are_cut_after_the_sentence_limit():
+    from cs2bot.humanize import first_sentences
+
+    speech = "Push b now. They are all a! Trust me, I saw three. Go go go."
+    assert first_sentences(speech, 2) == "Push b now. They are all a!"
+    assert first_sentences(speech, 1) == "Push b now."
+    assert first_sentences(speech, 0) == speech
+    assert first_sentences("no punctuation at all", 1) == "no punctuation at all"
+
+
+def test_spoken_sentence_cut_keeps_a_stub_with_what_follows():
+    from cs2bot.humanize import first_sentences
+
+    assert first_sentences("Nice! Rotate b now, he's one. Go go go.", 1) == "Nice! Rotate b now, he's one."
+    assert first_sentences("Okay. Okay. Save this one.", 1) == "Okay. Okay. Save this one."
+
+
+def test_spoken_lines_are_cut_after_the_word_limit():
+    from cs2bot.humanize import first_words
+
+    line = "Push b now, he's lit. Trust me I saw three of them go that way and nobody is a."
+    assert first_words(line, 0) == line
+    assert first_words(line, 40) == line
+    assert first_words(line, 8) == "Push b now, he's lit."
+    assert first_words("one two three four five six seven eight", 5) == "one two three four five..."
+    assert first_words("one two three four, five six", 4) == "one two three four..."

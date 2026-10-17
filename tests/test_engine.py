@@ -2,10 +2,11 @@ import time
 
 import pytest
 
-from cs2bot.config import AppConfig
+from cs2bot.config import AppConfig, PersonaSettings
 from cs2bot.engine import Engine
 from cs2bot.models import ChatChannel, ChatMessage, LifeState
 from cs2bot.output.dry_run import DryRunSender
+from cs2bot.voice.listener import Utterance
 
 
 def build_engine(**overrides) -> Engine:
@@ -23,8 +24,13 @@ def build_engine(**overrides) -> Engine:
 
 
 def chat(**kwargs) -> ChatMessage:
-    base = {"raw": "raw", "sender": "enemy", "text": "ez", "channel": ChatChannel.ALL,
-            "sender_state": LifeState.ALIVE}
+    base = {
+        "raw": "raw",
+        "sender": "enemy",
+        "text": "ez",
+        "channel": ChatChannel.ALL,
+        "sender_state": LifeState.ALIVE,
+    }
     base.update(kwargs)
     return ChatMessage(**base)
 
@@ -277,7 +283,10 @@ def build_voice_engine(**overrides) -> Engine:
 @pytest.mark.asyncio
 async def test_a_transcript_is_answered_in_team_chat():
     engine = build_voice_engine()
-    reply = await engine.handle_voice("they are pushing b, we need help")
+    notes: list[str] = []
+    engine.log_note = notes.append  # type: ignore[method-assign]
+    reply = await engine.handle_voice("they are pushing b, we need help", "hearing cs2.exe only")
+    assert notes[0] == "heard [cs2.exe only]: they are pushing b, we need help"
     assert reply is not None and reply.delivered
     assert engine._sender.sent[-1][1] is True  # team_only
 
@@ -300,6 +309,7 @@ async def test_a_grunt_is_not_worth_answering():
 @pytest.mark.asyncio
 async def test_voice_only_answers_when_its_own_trigger_word_is_said():
     engine = build_voice_engine()
+    engine.config.voice.answer = "triggers"
     engine.config.voice.trigger_words = ["bot"]
     engine.config.behavior.trigger_words = ["hey"]
     assert await engine.handle_voice("hey are they pushing b") is None
@@ -310,11 +320,49 @@ async def test_voice_only_answers_when_its_own_trigger_word_is_said():
 async def test_voice_is_paced_on_a_clock_of_its_own():
     engine = build_voice_engine()
     engine.config.voice.cooldown_seconds = 60
-    engine.config.behavior.cooldown_seconds = 0
+    engine.config.behavior.cooldown_seconds = 60
     assert await engine.handle_voice("they are pushing b right now") is not None
     assert await engine.handle_voice("they are going a instead") is None
-    # Typed chat is not silenced by the voice cooldown.
+    # Answering the voice does not spend the typed chat's cooldown, or a talkative lobby
+    # would keep the bot out of chat entirely.
     assert await engine.handle_message(chat()) is not None
+    assert await engine.handle_voice("they are going a instead") is None
+
+
+class FakeListener:
+    """A listener that hands over one transcript and never touches a sound card."""
+
+    def __init__(self, text: str) -> None:
+        self.waiting = [Utterance(text=text, seconds=1.0)]
+        self.started = False
+        self.own_voice_ignored = 0
+        self.error = ""
+        self.restarts = 0
+
+    def start(self) -> None:
+        self.started = True
+
+    def restart(self) -> None:
+        self.restarts += 1
+        self.error = ""
+        self.waiting = [Utterance(text="rotate b now please", seconds=1.0)]
+
+    def stop(self) -> None:
+        self.started = False
+
+    def drain(self) -> list[Utterance]:
+        out, self.waiting = self.waiting, []
+        return out
+
+
+@pytest.mark.asyncio
+async def test_the_bot_listens_even_when_it_cannot_find_console_log():
+    """Speech comes off the speakers, so a missing console.log must not silence it."""
+    engine = build_voice_engine(**{"game.console_log_path": ""})
+    engine._voice = FakeListener("they are pushing b, we need help")
+    await engine._tick()
+    assert engine._voice.started
+    assert engine._sender.sent[-1][1] is True
 
 
 @pytest.mark.asyncio
@@ -343,6 +391,7 @@ async def test_spoken_orders_can_be_ignored():
     engine.config.strategy.enabled = True
     engine.config.strategy.round_start_only = False
     engine.game_state.player.map_name = "de_mirage"
+    engine.config.voice.answer = "triggers"
     engine.config.voice.trigger_words = ["bot"]
     assert await engine.handle_voice("what is the plan here") is None
 
@@ -351,6 +400,7 @@ async def test_spoken_orders_can_be_ignored():
 async def test_nothing_listens_until_voice_is_turned_on():
     engine = build_engine()
     engine.config.voice.enabled = False
+    engine.config.respond_to = "text"
     await engine.pump_voice()
     assert engine._voice is None
     assert engine.voice_status()["enabled"] is False
@@ -365,3 +415,232 @@ async def test_changing_the_voice_settings_builds_a_fresh_listener():
     await engine.apply_config(updated, persist=False)
     assert engine._voice is None
     assert engine.voice is not listener
+
+
+@pytest.mark.asyncio
+async def test_a_player_can_pick_the_personality_from_chat(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    reply = await engine.handle_message(chat(sender="Gavin", text="!persona toxic"))
+    assert engine.config.persona.name == "Angry and Toxic"
+    assert reply is not None and reply.delivered
+    assert "Angry and Toxic" in engine._sender.sent[-1][0]
+
+
+@pytest.mark.asyncio
+async def test_a_saved_persona_can_be_asked_for_by_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.saved_personas = {
+        "Danish Caster": PersonaSettings(name="Danish Caster", description="You cast the game.")
+    }
+    await engine.handle_message(chat(sender="Gavin", text="!persona danish"))
+    assert engine.config.persona.name == "Danish Caster"
+
+
+@pytest.mark.asyncio
+async def test_asking_for_the_personalities_lists_them_without_changing_anything(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    before = engine.config.persona.name
+    await engine.handle_message(chat(sender="Gavin", text="!persona"))
+    said = " ".join(line for line, _ in engine._sender.sent)
+    assert "Coach" in said and "Angry and Toxic" in said
+    assert all(len(line) <= engine.config.game.chat_char_limit for line, _ in engine._sender.sent)
+    assert engine.config.persona.name == before
+
+
+@pytest.mark.asyncio
+async def test_a_persona_nobody_has_is_answered_only_when_it_was_an_order(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    await engine.handle_message(chat(sender="Gavin", text="!persona astronaut"))
+    # Not a preset, so the bot becomes exactly what was asked for.
+    assert "ok, astronaut it is" in " ".join(line for line, _ in engine._sender.sent)
+    assert engine.config.persona.description.startswith("You are astronaut.")
+    # "be careful" is a teammate talking, so it gets an ordinary reply instead of a complaint.
+    engine._sender.sent.clear()
+    reply = await engine.handle_message(chat(sender="Gavin", text="be careful"))
+    assert reply is not None
+    assert "no persona" not in engine._sender.sent[-1][0]
+
+
+@pytest.mark.asyncio
+async def test_persona_orders_are_only_taken_from_the_chosen_chat(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine(**{"strategy.listen_channel": "team"})
+    before = engine.config.persona.name
+    await engine.handle_message(chat(sender="enemy", text="!persona toxic"))
+    assert engine.config.persona.name == before
+    assert not engine._sender.sent
+
+
+@pytest.mark.asyncio
+async def test_persona_orders_can_be_switched_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine(**{"strategy.obey_persona_commands": False})
+    before = engine.config.persona.name
+    await engine.handle_message(chat(sender="Gavin", text="!persona toxic"))
+    assert engine.config.persona.name == before
+
+
+@pytest.mark.asyncio
+async def test_a_spoken_persona_order_is_answered_in_team_chat(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_voice_engine()
+    engine.config.strategy.reply_channel = "all"
+    await engine.handle_voice("bot switch to the coach persona")
+    assert engine.config.persona.name == "Coach"
+    assert engine._sender.sent[-1][1] is True
+
+
+def test_the_mock_backend_is_not_warmed_and_a_reply_is_not_held_back():
+    import asyncio
+
+    from cs2bot.config import AppConfig
+    from cs2bot.engine import Engine
+
+    config = AppConfig()
+    config.llm.backend = "mock"
+    engine = Engine(config)
+
+    async def run():
+        await engine.start()
+        assert not engine.llm_loading
+        assert engine.status()["llm_loading"] is False
+        await engine.stop()
+
+    asyncio.run(run())
+
+
+@pytest.mark.asyncio
+async def test_a_player_can_rewrite_the_personality_in_their_own_words(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.strategy.enabled = True
+    reply = await engine.handle_message(chat(sender="Gavin", text="you are now a friendly operator"))
+    assert reply is not None
+    assert "friendly operator" in engine.config.persona.description
+
+
+@pytest.mark.asyncio
+async def test_reply_with_picks_text_voice_or_both(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    said: list[str] = []
+
+    async def fake_say(text):
+        said.append(text)
+        return True, "spoken"
+
+    monkeypatch.setattr(engine.speaker, "say", fake_say)
+    engine.config.behavior.cooldown_seconds = 0
+
+    engine.config.voice.reply_with = "voice"
+    assert await engine.handle_message(chat(sender="Gavin", text="what do we do now?")) is not None
+    assert said == [] and len(engine._sender.sent) == 1  # all chat is always typed
+
+    engine.last_reply_at = 0
+    await engine.handle_message(chat(sender="Gavin", text="rotate?", channel=ChatChannel.TEAM))
+    assert len(said) == 1 and len(engine._sender.sent) == 1
+
+    engine.config.voice.reply_with = "all"
+    engine.last_reply_at = 0
+    await engine.handle_message(chat(sender="Gavin", text="where now?", channel=ChatChannel.TEAM))
+    assert len(said) == 2 and len(engine._sender.sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_the_bot_starts_a_conversation_when_it_goes_quiet(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.initiative.enabled = True
+    engine.config.initiative.chance = 1.0
+    engine.config.initiative.when_quiet_seconds = 1.0
+    engine.config.initiative.on_round_start = False
+    engine.config.initiative.on_death = False
+    engine._last_activity_at -= 5
+    await engine.maybe_initiate()
+    assert len(engine._sender.sent) == 1 and engine._sender.sent[-1][1] is True
+    assert engine.history[-1].is_self
+    # The gap stops it from doing it again straight away.
+    engine._last_activity_at -= 5
+    await engine.maybe_initiate()
+    assert len(engine._sender.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_bot_stays_silent_on_its_own_unless_told_to(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.initiative.when_quiet_seconds = 1.0
+    engine._last_activity_at -= 5
+    await engine.maybe_initiate()
+    assert not engine._sender.sent
+
+
+@pytest.mark.asyncio
+async def test_respond_to_voice_turns_the_text_bot_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("CS2BOT_CONFIG", str(tmp_path / "config.json"))
+    engine = build_engine()
+    engine.config.behavior.cooldown_seconds = 0
+    engine.config.respond_to = "voice"
+    assert engine.listens_to_voice and not engine.answers_text
+    assert await engine.handle_message(chat(sender="Gavin", text="what do we do now?")) is None
+    assert engine._sender.sent == []
+    engine.config.respond_to = "text"
+    assert not engine.listens_to_voice and engine.answers_text
+    assert await engine.handle_message(chat(sender="Gavin", text="what do we do now?")) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_dead_listener_is_reported_once_and_retried_later(monkeypatch):
+    from cs2bot import engine as engine_module
+
+    engine = build_voice_engine(**{"game.console_log_path": ""})
+    listener = FakeListener("they are pushing b, we need help")
+    listener.waiting = []
+    listener.error = "RuntimeError: no loopback device"
+    engine._voice = listener
+    await engine._tick()
+    await engine._tick()
+    assert listener.restarts == 0
+    assert engine._voice_error_logged == listener.error
+    later = time.time() + engine_module.VOICE_RETRY_SECONDS + 1
+    monkeypatch.setattr(engine_module.time, "time", lambda: later)
+    await engine._tick()
+    assert listener.restarts == 1 and listener.error == ""
+    assert engine._voice_error_logged == ""
+
+
+class StubSpeaker:
+    def __init__(self) -> None:
+        self.said: list[str] = []
+
+    async def say(self, text: str) -> tuple[bool, str]:
+        self.said.append(text)
+        return True, "stub"
+
+
+@pytest.mark.asyncio
+async def test_typed_reply_is_reworded_and_capped_before_it_is_spoken():
+    engine = build_engine(**{"voice.reply_with": "all"})
+    engine.config.speech_max_words = 6
+    engine._backend = StubBackend(
+        ["rotate to b site, they are all pushing a long", "yo rotate b! all of them went a long, trust me"]
+    )
+    engine._speaker = StubSpeaker()
+    reply = await engine.handle_message(chat(channel=ChatChannel.TEAM, sender="mate"))
+    assert reply is not None and reply.text == "rotate to b site, they are all pushing a long"
+    assert engine._speaker.said == ["yo rotate b!"]
+    assert engine._backend.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_spoken_token_budget_fits_the_word_cap():
+    engine = build_engine()
+    engine.config.generation.auto_from_intelligence = False
+    engine.config.generation.max_tokens = 20
+    assert engine._speech_params(engine._sampling_params()).max_tokens == 96
+    engine.config.speech_max_words = 10
+    assert engine._speech_params(engine._sampling_params()).max_tokens == 36
