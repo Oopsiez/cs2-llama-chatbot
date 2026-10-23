@@ -723,9 +723,12 @@ class Engine:
         if not self.config.enabled:
             return None
         if not message.is_voice and not self.answers_text:
-            self.bus.publish(
-                "skipped", {"message": message.model_dump(mode="json"), "reason": "text bot is off"}
+            reason = (
+                "Respond to is set to voice comms only"
+                if self.config.respond_to == "voice"
+                else "the chat model is switched off"
             )
+            self.bus.publish("skipped", {"message": message.model_dump(mode="json"), "reason": reason})
             return None
 
         taken, called = await self._handle_command(message)
