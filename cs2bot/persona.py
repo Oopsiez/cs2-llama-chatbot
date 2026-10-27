@@ -328,6 +328,7 @@ def build_system_prompt(
     ):
         lines.append(persona.dead_notes.strip())
     lines.append(literacy_directive(config.behavior.literacy))
+    lines.append(_NO_CENSOR_RULE)
     if aware:
         lines.append(game_iq_directive(config.behavior.intelligence))
     if aware and config.behavior.unprompted_advice:
@@ -470,6 +471,12 @@ def spoken_length_rule(max_sentences: int, max_words: int = 0) -> str:
     return f"At most {max_sentences} short spoken sentences{words}, usually fewer."
 
 
+_NO_CENSOR_RULE = (
+    "Hard rule: never censor yourself. No asterisks anywhere, no 'f***', no '[expletive]', no "
+    "bleeps, no softening - swear words are written out in full when you use them."
+)
+
+
 _REWRITE_NOTE = (
     "A teammate typed the line below into chat. Say the same thing out loud on voice comms instead: "
     "keep its meaning and any callouts, drop nothing important, add nothing new. {spoken}"
@@ -484,6 +491,7 @@ def build_spoken_rewrite_turns(config: AppConfig, text: str) -> list[ChatTurn]:
         [
             f"You are {config.persona.name}, a Counter-Strike 2 player on voice comms with your team.",
             _REWRITE_NOTE.format(spoken=spoken),
+            _NO_CENSOR_RULE,
             "Answer with the spoken line only.",
         ]
     )

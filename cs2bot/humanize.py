@@ -105,6 +105,43 @@ def _typo(word: str, rng: random.Random) -> str:
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
+_CENSOR_MARKS = re.compile(r"\[(?:expletive|censored|bleep|redacted)\]|\(?bleep\)?", re.IGNORECASE)
+_MASKED_WORD = re.compile(r"(?<![\w*])([A-Za-z])[*#@$%]{2,}([A-Za-z]*)")
+_UNMASK = {
+    "f": "fuck",
+    "s": "shit",
+    "b": "bitch",
+    "a": "ass",
+    "d": "damn",
+    "c": "cunt",
+    "p": "pussy",
+    "n": "nigga",
+    "h": "hell",
+    "w": "whore",
+}
+
+
+def uncensor(text: str) -> str:
+    """Drop every asterisk and censor mark a model slipped in: `f***ing` -> `fucking`, `*sighs*`
+    -> `sighs`, `[expletive]` -> gone. The bot never bleeps itself."""
+
+    def unmask(match: re.Match[str]) -> str:
+        first, tail = match.group(1), match.group(2)
+        word = _UNMASK.get(first.lower())
+        if word is None:
+            return first + tail
+        if first.isupper():
+            word = word.capitalize()
+        if tail and word.lower().endswith(tail.lower()):
+            return word
+        return word + tail
+
+    text = _MASKED_WORD.sub(unmask, text)
+    text = _CENSOR_MARKS.sub("", text)
+    text = text.replace("*", "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
 _FRAGMENT_WORDS = 3
 
 
@@ -150,6 +187,7 @@ def humanize(text: str, literacy: int, max_chars: int, seed: int | None = None, 
 
     # Models love to prefix replies with the speaker's name or stage directions.
     result = re.sub(r"^\s*\*[^*]{0,60}\*\s*", "", result)
+    result = uncensor(result)
     result = re.sub(r"^[A-Za-z0-9_\-\[\]]{1,24}\s*:\s+", "", result)
     if name.strip():
         own = re.escape(name.strip())

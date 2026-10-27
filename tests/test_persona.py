@@ -184,3 +184,18 @@ def test_spoken_length_rule_mentions_the_word_cap():
     turns = build_spoken_rewrite_turns(AppConfig(speech_max_words=12), "rotate b, they are all a")
     assert turns[-1].content == "rotate b, they are all a"
     assert "voice comms" in turns[0].content and "under 12 words" in turns[0].content
+
+
+def test_every_prompt_carries_the_no_censor_rule():
+    from cs2bot.config import AppConfig
+    from cs2bot.gamestate import LocalPlayer
+    from cs2bot.models import ChatChannel, ChatMessage, LifeState
+    from cs2bot.persona import build_spoken_rewrite_turns, build_turns
+
+    config = AppConfig()
+    msg = ChatMessage(
+        raw="r", sender="mate", text="ez", channel=ChatChannel.TEAM, sender_state=LifeState.ALIVE
+    )
+    typed = build_turns(config, LocalPlayer(), LifeState.ALIVE, msg, [], "", [])
+    assert "never censor yourself" in typed[0].content
+    assert "never censor yourself" in build_spoken_rewrite_turns(config, "x")[0].content

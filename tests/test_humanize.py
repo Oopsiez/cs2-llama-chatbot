@@ -86,3 +86,12 @@ def test_spoken_lines_are_cut_after_the_word_limit():
     assert first_words(line, 8) == "Push b now, he's lit."
     assert first_words("one two three four five six seven eight", 5) == "one two three four five..."
     assert first_words("one two three four, five six", 4) == "one two three four..."
+
+
+def test_the_bot_never_bleeps_itself():
+    from cs2bot.humanize import humanize, uncensor
+
+    assert uncensor("what the f*** was that, s**t") == "what the fuck was that, shit"
+    assert uncensor("F***ing hell [expletive] *sighs*") == "Fucking hell sighs"
+    assert uncensor("no stars here") == "no stars here"
+    assert humanize("holy s*** he *is* one", literacy=100, max_chars=0) == "holy shit he is one"
