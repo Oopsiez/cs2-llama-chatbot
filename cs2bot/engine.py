@@ -16,7 +16,7 @@ from .config import AppConfig, fallback_log_path, load_config, save_config
 from .echo import EchoGuard
 from .events import EventBus
 from .gamestate import GameStateStore
-from .humanize import first_sentences, first_words, humanize, sampling_for
+from .humanize import first_sentences, first_words, for_speech, humanize, sampling_for
 from .identity import addressed_to, detect_name_from_line
 from .liveness import DeathBoard
 from .llm import LLMBackend, LLMError, OllamaBackend, SamplingParams, build_backend
@@ -543,6 +543,7 @@ class Engine:
     async def speak(self, text: str) -> tuple[bool, str]:
         text = first_sentences(text, self.config.speech_max_sentences) or text
         text = first_words(text, self.config.speech_max_words) or text
+        text = for_speech(text)
         spoken, detail = await self.speaker.say(text)
         self.log_note(f"said: {text}" if spoken else f"could not say: {detail}")
         self.bus.publish("spoken" if spoken else "error", {"text": text, "detail": detail})

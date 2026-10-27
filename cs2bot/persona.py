@@ -201,6 +201,8 @@ _SPOKEN_NOTE = (
     "say it mid-game: casual, contractions, short clauses, maybe a filler word, trailing off is "
     "fine. No lists, no emoji, no quotes, no stage directions, no names at the start, no "
     "'As an AI' or 'As your teammate', never explain yourself, never offer more help. "
+    "Spell every word in full (making, nothing, going - never makin', nothin', goin') - a voice "
+    "engine reads this out and chopped spellings come out wrong. "
     "{length} Sound like these (do not copy them): "
     "'yeah yeah he's long, I got him' / 'nah stay, don't peek that, we got time' / "
     "'oof... okay okay, save, we go next' / 'he's one, he's lit, push push' / "

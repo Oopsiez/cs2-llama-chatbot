@@ -110,3 +110,17 @@ def test_spoken_lines_keep_full_words_and_drop_the_sign_off():
     assert spoken == "You are right, go B now."
     assert strip_own_name("SteamySlayer: nice one, SteamySlayer!", "SteamySlayer") == "nice one"
     assert strip_own_name("steamyslayer out", "SteamySlayer") == "steamyslayer out"
+
+
+def test_dropped_gs_are_spelled_back_for_the_voice_engine():
+    from cs2bot.humanize import for_speech
+
+    assert (
+        for_speech("we makin' a play, nothin to lose, goin' B")
+        == "we making a play, nothing to lose, going B"
+    )
+    assert (
+        for_speech("again Kevin, win the pin, join the main train")
+        == "again Kevin, win the pin, join the main train"
+    )
+    assert for_speech("making it, Nothin'!") == "making it, Nothing!"

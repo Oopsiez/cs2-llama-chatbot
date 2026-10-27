@@ -181,6 +181,115 @@ def uncensor(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+_DROPPED_G = re.compile(r"\b([A-Za-z]{2,}?)in['\u2019]?(?=\W|$)")
+_NOT_DROPPED_G = {
+    "again",
+    "begin",
+    "within",
+    "cabin",
+    "basin",
+    "robin",
+    "satin",
+    "latin",
+    "resin",
+    "cousin",
+    "margin",
+    "origin",
+    "virgin",
+    "ruin",
+    "coin",
+    "join",
+    "rain",
+    "brain",
+    "train",
+    "main",
+    "chain",
+    "plain",
+    "gain",
+    "pain",
+    "spain",
+    "stain",
+    "vain",
+    "grain",
+    "drain",
+    "twin",
+    "skin",
+    "thin",
+    "spin",
+    "grin",
+    "chin",
+    "shin",
+    "pin",
+    "win",
+    "bin",
+    "fin",
+    "gin",
+    "sin",
+    "tin",
+    "dolphin",
+    "muffin",
+    "penguin",
+    "protein",
+    "captain",
+    "certain",
+    "mountain",
+    "curtain",
+    "bargain",
+    "fountain",
+    "villain",
+    "explain",
+    "contain",
+    "remain",
+    "obtain",
+    "maintain",
+    "entertain",
+    "complain",
+    "sustain",
+    "terrain",
+    "domain",
+    "login",
+    "admin",
+    "assassin",
+    "bulletin",
+    "vitamin",
+    "javelin",
+    "aspirin",
+    "penicillin",
+    "goblin",
+    "kremlin",
+    "berlin",
+    "dublin",
+    "austin",
+    "kevin",
+    "martin",
+    "justin",
+    "colin",
+    "benjamin",
+    "gavin",
+    "calvin",
+    "melvin",
+    "marvin",
+    "franklin",
+    "destin",
+    "mirin",
+    "ravin",
+}
+
+
+def for_speech(text: str) -> str:
+    """`text` the way a voice engine should read it: dropped g's spelled back ("makin'" ->
+    "making", "nothin" -> "nothing") so it is not read as "mac-in"; everything else untouched."""
+
+    def respell(match: re.Match[str]) -> str:
+        word = match.group(0)
+        bare = word.rstrip("'\u2019")
+        if bare.lower() in _NOT_DROPPED_G or bare.lower().endswith("ing"):
+            return word
+        return bare + "g"
+
+    return _DROPPED_G.sub(respell, text)
+
+
 _FRAGMENT_WORDS = 3
 
 
