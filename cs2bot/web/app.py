@@ -96,8 +96,12 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         # Saved personas are only ever changed through /api/personas, so a settings save that
         # left the panel before a persona was saved cannot wipe it.
         config = config.model_copy(update={"saved_personas": engine.config.saved_personas})
+        old = engine.config
+        changed = [name for name in type(config).model_fields if getattr(config, name) != getattr(old, name)]
         await engine.apply_config(config)
-        return engine.config.model_dump(mode="json")
+        if changed:
+            engine.log_note(f"settings applied: {', '.join(changed)}")
+        return {"config": engine.config.model_dump(mode="json"), "changed": changed}
 
     @app.post("/api/enabled")
     async def set_enabled(payload: dict[str, Any]) -> dict[str, Any]:

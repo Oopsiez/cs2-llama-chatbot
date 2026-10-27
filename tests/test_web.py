@@ -320,3 +320,14 @@ def test_the_bots_own_log_is_read_until_cs2_writes_one(client):
     assert body["source"] == "fallback"
     assert body["lines"][0]["chat"] is False
     assert body["lines"][0]["line"].endswith("heard: rush b")
+
+
+def test_saving_settings_says_what_changed_and_applies_it(client):
+    config = client.get("/api/config").json()["config"]
+    config["persona"]["name"] = "Dusty"
+    config["llm"]["chat_enabled"] = False
+    body = client.put("/api/config", json=config).json()
+    assert body["config"]["persona"]["name"] == "Dusty"
+    assert sorted(body["changed"]) == ["llm", "persona"]
+    assert client.get("/api/config").json()["config"]["llm"]["chat_enabled"] is False
+    assert client.put("/api/config", json=body["config"]).json()["changed"] == []

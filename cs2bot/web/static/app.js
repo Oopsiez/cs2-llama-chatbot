@@ -286,17 +286,54 @@ function scheduleSave() {
   saving = setTimeout(saveConfig, 350);
 }
 
+const SECTION_NAMES = {
+  persona: "personality",
+  speech_persona: "speech personality",
+  behavior: "behaviour",
+  llm: "models",
+  voice: "voice",
+  game: "CS2",
+  generation: "sampling",
+  strategy: "strats",
+  respond_to: "respond to",
+  enabled: "bot on/off",
+};
+
+let saveNoteTimer = null;
+let saveInFlight = false;
+
+function showSaveNote(text, failed = false) {
+  const note = $("save-note");
+  if (!note) return;
+  note.textContent = text;
+  note.classList.toggle("failed", failed);
+  note.hidden = false;
+  clearTimeout(saveNoteTimer);
+  saveNoteTimer = setTimeout(() => (note.hidden = true), failed ? 8000 : 3500);
+}
+
 async function saveConfig() {
-  const response = await fetch("/api/config", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
+  saving = null;
+  saveInFlight = true;
+  let response;
+  try {
+    response = await fetch("/api/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+  } finally {
+    saveInFlight = false;
+  }
   if (!response.ok) {
     pushEvent({ kind: "error", data: { message: `saving settings failed (${response.status})` } });
+    showSaveNote(`not saved (${response.status}) - change it again`, true);
     return;
   }
-  config = await response.json();
+  const body = await response.json();
+  if (saving === null) config = body.config;
+  const what = (body.changed || []).map((name) => SECTION_NAMES[name] || name.replaceAll("_", " "));
+  showSaveNote(what.length ? `saved: ${what.join(", ")} - in effect now` : "saved - nothing changed");
 }
 
 function bindInputs() {
@@ -503,7 +540,9 @@ function connect() {
     }
     if (event.kind === "status") return renderStatus(event.data);
     if (event.kind === "config") {
-      config = event.data;
+      // The bot changed its own settings (order from chat, model fallback). Edits that are still
+      // on their way to the server must not be overwritten by the copy from before them.
+      if (saving === null && !saveInFlight) config = event.data;
       return;
     }
     pushEvent(event);
@@ -682,7 +721,7 @@ function bindActions() {
     $("voice-clone-note").textContent = body.detail;
     if (body.ok && save_as) {
       $("voice-clone-name").value = "";
-      config = await (await fetch("/api/config")).json();
+      config = (await (await fetch("/api/config")).json()).config;
     }
     await renderVoice();
   };
@@ -695,7 +734,7 @@ function bindActions() {
       })
     ).json();
     $("voice-clone-note").textContent = body.detail;
-    if (body.ok) config = await (await fetch("/api/config")).json();
+    if (body.ok) config = (await (await fetch("/api/config")).json()).config;
     await renderVoice();
   });
   $("voice-clone-file").addEventListener("change", () => {
