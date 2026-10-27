@@ -95,3 +95,18 @@ def test_the_bot_never_bleeps_itself():
     assert uncensor("F***ing hell [expletive] *sighs*") == "Fucking hell sighs"
     assert uncensor("no stars here") == "no stars here"
     assert humanize("holy s*** he *is* one", literacy=100, max_chars=0) == "holy shit he is one"
+
+
+def test_spoken_lines_keep_full_words_and_drop_the_sign_off():
+    from cs2bot.humanize import humanize, strip_own_name
+
+    typed = humanize(
+        "You are right, go B now. SteamySlayer", literacy=30, max_chars=0, seed=1, name="SteamySlayer"
+    )
+    assert "SteamySlayer" not in typed
+    spoken = humanize(
+        "You are right, go B now. - SteamySlayer", literacy=30, max_chars=0, name="SteamySlayer", spoken=True
+    )
+    assert spoken == "You are right, go B now."
+    assert strip_own_name("SteamySlayer: nice one, SteamySlayer!", "SteamySlayer") == "nice one"
+    assert strip_own_name("steamyslayer out", "SteamySlayer") == "steamyslayer out"

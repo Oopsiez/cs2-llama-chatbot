@@ -13,17 +13,56 @@ import random
 import re
 
 _ADJACENT = {
-    "a": "sq", "b": "vn", "c": "xv", "d": "sf", "e": "wr", "f": "dg", "g": "fh", "h": "gj",
-    "i": "uo", "j": "hk", "k": "jl", "l": "k", "m": "n", "n": "bm", "o": "ip", "p": "o",
-    "q": "wa", "r": "et", "s": "ad", "t": "ry", "u": "yi", "v": "cb", "w": "qe", "x": "zc",
-    "y": "tu", "z": "x",
+    "a": "sq",
+    "b": "vn",
+    "c": "xv",
+    "d": "sf",
+    "e": "wr",
+    "f": "dg",
+    "g": "fh",
+    "h": "gj",
+    "i": "uo",
+    "j": "hk",
+    "k": "jl",
+    "l": "k",
+    "m": "n",
+    "n": "bm",
+    "o": "ip",
+    "p": "o",
+    "q": "wa",
+    "r": "et",
+    "s": "ad",
+    "t": "ry",
+    "u": "yi",
+    "v": "cb",
+    "w": "qe",
+    "x": "zc",
+    "y": "tu",
+    "z": "x",
 }
 
 _ABBREVIATIONS = {
-    "you": "u", "your": "ur", "you're": "ur", "are": "r", "okay": "ok", "please": "pls",
-    "thanks": "ty", "thank": "ty", "because": "cuz", "people": "ppl", "probably": "prob",
-    "really": "rly", "about": "abt", "with": "w", "though": "tho", "right": "rite",
-    "what": "wat", "want": "wanna", "going": "gonna", "yes": "ya", "know": "kno",
+    "you": "u",
+    "your": "ur",
+    "you're": "ur",
+    "are": "r",
+    "okay": "ok",
+    "please": "pls",
+    "thanks": "ty",
+    "thank": "ty",
+    "because": "cuz",
+    "people": "ppl",
+    "probably": "prob",
+    "really": "rly",
+    "about": "abt",
+    "with": "w",
+    "though": "tho",
+    "right": "rite",
+    "what": "wat",
+    "want": "wanna",
+    "going": "gonna",
+    "yes": "ya",
+    "know": "kno",
 }
 
 
@@ -179,8 +218,32 @@ def first_words(text: str, limit: int) -> str:
 SPECIAL_TOKEN = re.compile(r"<\|[^|<>]{1,32}\|>")  # <|im_end|>, <|eot_id|> ... leaked by some GGUFs
 
 
-def humanize(text: str, literacy: int, max_chars: int, seed: int | None = None, name: str = "") -> str:
-    """Apply the literacy-dependent degradation and trim to the chat limit (`max_chars` 0 = none)."""
+def strip_own_name(text: str, name: str) -> str:
+    """`text` without the bot's own name as a prefix ("Name: ...") or a sign-off ("... - Name",
+    "... Name", "...Name!"); models love to sign what they say."""
+    if not name.strip():
+        return text
+    own = re.escape(name.strip())
+    text = re.sub(rf"^\W{{0,2}}{own}\W{{0,2}}\s*[:\-\u2013\u2014]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(
+        rf"[\s,\-\u2013\u2014~]*\W{{0,2}}{own}\W{{0,3}}\s*$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text.strip()
+
+
+def humanize(
+    text: str,
+    literacy: int,
+    max_chars: int,
+    seed: int | None = None,
+    name: str = "",
+    spoken: bool = False,
+) -> str:
+    """Apply the literacy-dependent degradation and trim to the chat limit (`max_chars` 0 = none).
+    A `spoken` line keeps full words, case and punctuation: "u r rite" is typing, not speech."""
     rng = random.Random(seed)
     level = max(0, min(100, literacy))
     result = re.sub(r"\s+", " ", SPECIAL_TOKEN.sub(" ", text)).strip().strip('"')
@@ -189,9 +252,9 @@ def humanize(text: str, literacy: int, max_chars: int, seed: int | None = None, 
     result = re.sub(r"^\s*\*[^*]{0,60}\*\s*", "", result)
     result = uncensor(result)
     result = re.sub(r"^[A-Za-z0-9_\-\[\]]{1,24}\s*:\s+", "", result)
-    if name.strip():
-        own = re.escape(name.strip())
-        result = re.sub(rf"^\W{{0,2}}{own}\W{{0,2}}\s*[:\-\u2013\u2014]\s*", "", result, flags=re.IGNORECASE)
+    result = strip_own_name(result, name)
+    if spoken:
+        level = 100
 
     if level < 60:
         words = result.split(" ")

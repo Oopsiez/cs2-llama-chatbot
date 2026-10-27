@@ -536,6 +536,7 @@ class Engine:
             max_chars=0,
             seed=self._random.randrange(2**32),
             name=self.own_name,
+            spoken=True,
         )
         return spoken or text
 
@@ -1280,6 +1281,7 @@ class Engine:
                 max_chars=config.persona.max_reply_chars,
                 seed=self._random.randrange(2**32),
                 name=self.own_name,
+                spoken=spoken,
             )
             if not behavior.avoid_repeats or not text:
                 return text

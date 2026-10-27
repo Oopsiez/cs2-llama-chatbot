@@ -473,7 +473,8 @@ def spoken_length_rule(max_sentences: int, max_words: int = 0) -> str:
 
 _NO_CENSOR_RULE = (
     "Hard rule: never censor yourself. No asterisks anywhere, no 'f***', no '[expletive]', no "
-    "bleeps, no softening - swear words are written out in full when you use them."
+    "bleeps, no softening - swear words are written out in full when you use them. Never sign "
+    "off with your name or anyone's name at the end - you are talking, not signing a letter."
 )
 
 
