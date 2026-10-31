@@ -331,3 +331,14 @@ def test_saving_settings_says_what_changed_and_applies_it(client):
     assert sorted(body["changed"]) == ["llm", "persona"]
     assert client.get("/api/config").json()["config"]["llm"]["chat_enabled"] is False
     assert client.put("/api/config", json=body["config"]).json()["changed"] == []
+
+
+def test_the_speed_test_times_every_stage_and_names_the_slow_one(client):
+    body = client.post("/api/speedtest").json()
+    names = [stage["name"] for stage in body["stages"]]
+    assert "one typed reply from the chat model" in names
+    assert "key presses reach the game" in names
+    assert all("seconds" in stage and "verdict" in stage for stage in body["stages"])
+    assert body["report"].startswith("CS2 Chatbot")
+    assert "summary:" in body["report"]
+    assert body["machine"]["cores"] >= 1

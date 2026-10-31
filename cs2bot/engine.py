@@ -28,7 +28,6 @@ from .output import ChatSender, build_sender
 from .parser import parse_chat_line
 from .persona import (
     build_initiative_turns,
-    build_reveal_turns,
     build_spoken_rewrite_turns,
     build_strategy_turns,
     build_turns,
@@ -96,7 +95,6 @@ class Engine:
         self.last_spoke_at = 0.0
         self.last_announce_at = time.monotonic()
         self._last_seen_state = LifeState.UNKNOWN
-        self._revealed = False
         self.detected_name: str = ""
         self._detected_from: str = "console log"
         self.last_name_probe: str = ""
@@ -458,7 +456,6 @@ class Engine:
         await self.maybe_call_strategy()
         await self.maybe_announce()
         await self.maybe_initiate()
-        await self.maybe_reveal()
 
     # ---- voice comms ------------------------------------------------------------
 
@@ -478,8 +475,18 @@ class Engine:
         return self._speaker
 
     def _reply_modes(self, message: ChatMessage) -> tuple[bool, bool]:
+        """`(typed, spoken)` once each model's own switches are applied: the model must be on and
+        must be set to answer where this message came from (typed chat or voice comms)."""
         typed, spoken = self._wanted_modes(message)
-        return typed and self.config.llm.chat_enabled, spoken and self.config.llm.speech_enabled
+        chat_on, speech_on = self._models_answering(message.is_voice)
+        return typed and chat_on, spoken and speech_on
+
+    def _models_answering(self, voice: bool) -> tuple[bool, bool]:
+        """`(chat model, speech model)` - which of the two react to a voice (or typed) message."""
+        llm = self.config.llm
+        chat = llm.chat_enabled and (llm.chat_answers_voice if voice else llm.chat_answers_text)
+        speech = llm.speech_enabled and (llm.speech_answers_voice if voice else llm.speech_answers_text)
+        return chat, speech
 
     def _wanted_modes(self, message: ChatMessage) -> tuple[bool, bool]:
         """`(typed, spoken)` for a reply, per the Voice tab's reply-with setting.
@@ -628,13 +635,19 @@ class Engine:
 
     @property
     def listens_to_voice(self) -> bool:
-        """Voice comms are heard when the *Listen to voice comms* switch is on and *Respond to*
-        includes voice."""
-        return self.config.voice.enabled and self.config.respond_to in ("voice", "both")
+        """Voice comms are heard when *Listen to voice comms* is on and at least one model is set
+        to answer them."""
+        return self.config.voice.enabled and self.answers_voice
 
     @property
     def answers_text(self) -> bool:
-        return self.config.respond_to != "voice" and self.config.llm.chat_enabled
+        """Some model is switched on and set to answer typed chat."""
+        return any(self._models_answering(voice=False))
+
+    @property
+    def answers_voice(self) -> bool:
+        """Some model is switched on and set to answer voice comms."""
+        return any(self._models_answering(voice=True))
 
     def pull_model(self, tag: str) -> str:
         """Start downloading `tag` on the Ollama server the config points at; progress lands in
@@ -724,12 +737,9 @@ class Engine:
 
         if not self.config.enabled:
             return None
-        if not message.is_voice and not self.answers_text:
-            reason = (
-                "Respond to is set to voice comms only"
-                if self.config.respond_to == "voice"
-                else "the chat model is switched off"
-            )
+        if not (self.answers_voice if message.is_voice else self.answers_text):
+            where = "voice comms" if message.is_voice else "typed chat"
+            reason = f"no model is set to answer {where} (Models on the Persona tab)"
             self.bus.publish("skipped", {"message": message.model_dump(mode="json"), "reason": reason})
             return None
 
@@ -1178,59 +1188,6 @@ class Engine:
         self.bus.publish(
             "initiative", {"text": text, "occasion": occasion, "delivered": delivered, "reason": detail}
         )
-
-    async def maybe_reveal(self) -> None:
-        """Own up on the end-of-match scoreboard, once.
-
-        `gameover` keeps arriving for as long as the scoreboard is up, and the next match resets
-        the phase, which is what re-arms this.
-        """
-        settings = self.config.reveal
-        phase = self.game_state.player.map_phase
-        over = phase == "gameover"
-        if not over:
-            self._revealed = False
-            return
-        if self._revealed or not (self.config.enabled and settings.enabled):
-            return
-
-        text = await self._reveal_text()
-        if not text:
-            return
-        self._revealed = True
-        self._remember_reply(text)
-        self.echo.remember(text)
-        delivered, detail = await self.sender.send(text, team_only=settings.channel == "team")
-        self.last_spoke_at = time.time()
-        self.bus.publish("reveal", {"text": text, "delivered": delivered, "reason": detail})
-
-    async def _reveal_text(self) -> str:
-        """The confession itself, written in character unless a fixed line was configured."""
-        settings = self.config.reveal
-        written = settings.message.strip()
-        if settings.mode == "character":
-            try:
-                generated = await self.backend.generate(
-                    build_reveal_turns(self.config), self._sampling_params()
-                )
-            except LLMError as exc:
-                # The match is over either way; the canned line is better than silence.
-                self.last_error = str(exc)
-                generated = ""
-            written = (
-                humanize(
-                    generated,
-                    literacy=self.config.behavior.literacy,
-                    max_chars=max(40, self.config.persona.max_reply_chars - len(settings.link) - 1),
-                    seed=self._random.randrange(2**32),
-                    name=self.own_name,
-                )
-                or written
-            )
-        link = settings.link.strip()
-        if link and link not in written:
-            written = f"{written} {link}".strip()
-        return written
 
     def track_state(self, message: ChatMessage) -> ChatMessage:
         """Learn the sender's life state from `[DEAD]`, and remember it for the round."""

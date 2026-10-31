@@ -56,7 +56,11 @@ class LLMSettings(BaseModel):
     cpu_only: bool = False  # keep the model off the graphics card entirely (saves VRAM for CS2)
     speech_ollama_model: str = ""  # Ollama tag used for spoken lines; blank -> the chat model
     chat_enabled: bool = True  # off -> no typed replies are generated
+    chat_answers_text: bool = True  # the chat model answers typed team chat
+    chat_answers_voice: bool = True  # the chat model answers what it hears over voice comms
     speech_enabled: bool = True  # off -> no spoken replies are generated
+    speech_answers_text: bool = True  # the speech model answers typed team chat out loud
+    speech_answers_voice: bool = True  # the speech model answers voice comms out loud
     warm_on_start: bool = True  # load the model while you are in the menu, not on the first reply
 
 
@@ -280,33 +284,6 @@ class InitiativeSettings(BaseModel):
     when_quiet_seconds: float = 120.0  # speak when nobody has said anything for this long; 0 = never
 
 
-class RevealSettings(BaseModel):
-    """Owning up at the end of the match.
-
-    The scoreboard is the one moment nobody is being shot at, so it is where the bot admits what
-    it was and points at the project. It fires once per match - `gameover` is reported repeatedly
-    while the scoreboard sits there, and repeating the line would undo the joke.
-
-    In `character` mode the model writes the confession itself, so the Gaming Therapist signs off
-    differently from Angry and Toxic; `fixed` sends `message` verbatim for anyone who wants the
-    same line every time.
-    """
-
-    enabled: bool = True
-    channel: str = "all"  # all | team
-    mode: str = "character"  # character | fixed
-    # What the model is told to do in `character` mode.
-    instructions: str = (
-        "The match is over and you are on the final scoreboard. Break character just enough to "
-        "admit you were an AI playing this persona all match - name the persona, in your own "
-        "voice, and stay funny about it. Do not apologise."
-    )
-    # Sent verbatim in `fixed` mode, and used if the model cannot be reached in `character` mode.
-    message: str = "gg - you were talking to an AI this whole match"
-    # Appended to whatever the reveal says, so the project is always credited.
-    link: str = PROJECT_URL
-
-
 class GSISettings(BaseModel):
     """CS2 posts to the panel's own port, so there is nothing to configure but the token."""
 
@@ -320,7 +297,6 @@ class WebSettings(BaseModel):
 
 class AppConfig(BaseModel):
     enabled: bool = False
-    respond_to: str = "both"  # text | voice | both - which chat the bot answers (voice = speaker comms)
     game: GameSettings = Field(default_factory=GameSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
@@ -337,7 +313,6 @@ class AppConfig(BaseModel):
     snitch: SnitchSettings = Field(default_factory=SnitchSettings)
     strategy: StrategySettings = Field(default_factory=StrategySettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
-    reveal: RevealSettings = Field(default_factory=RevealSettings)
     initiative: InitiativeSettings = Field(default_factory=InitiativeSettings)
     callouts: CalloutBook = Field(default_factory=CalloutBook)
     gsi: GSISettings = Field(default_factory=GSISettings)

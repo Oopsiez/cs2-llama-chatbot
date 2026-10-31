@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .. import RELEASE, gpu, server_update
+from .. import RELEASE, gpu, server_update, speedtest
 from ..callouts import DEFAULT_RADIUS, Callout
 from ..config import AppConfig, PersonaSettings, config_path, load_config, save_config
 from ..elevate import relaunch_as_admin
@@ -511,6 +511,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "replied": reply is not None,
             "reply": reply.model_dump(mode="json") if reply else None,
         }
+
+    @app.post("/api/speedtest")
+    async def speed_test() -> dict[str, Any]:
+        """Time each stage of a reply and say which one is slow, and why."""
+        return await speedtest.run(engine)
 
     @app.post("/api/simulate")
     async def simulate(payload: dict[str, Any]) -> dict[str, Any]:

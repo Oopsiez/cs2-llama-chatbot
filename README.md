@@ -80,8 +80,6 @@ below fit, which spill into system memory, and which only run on the CPU. See
   every attempt is a rerun, it stays quiet instead.
 - **Answer at human speed.** A delay slider, or a checkbox that makes it read the message and then
   take as long as actually typing the reply would.
-- **Own up at the end.** When the final scoreboard appears it admits it was a bot and links the
-  project. One line, once per match; editable, and switch-off-able, on the Snitch tab.
 
 ## Calling strats
 

@@ -36,6 +36,10 @@ const BINDINGS = {
   "chat-model": ["llm.ollama_model", "text"],
   "chat-enabled": ["llm.chat_enabled", "bool"],
   "speech-enabled": ["llm.speech_enabled", "bool"],
+  "chat-answers-text": ["llm.chat_answers_text", "bool"],
+  "chat-answers-voice": ["llm.chat_answers_voice", "bool"],
+  "speech-answers-text": ["llm.speech_answers_text", "bool"],
+  "speech-answers-voice": ["llm.speech_answers_voice", "bool"],
   "poll-seconds": ["game.poll_seconds", "float"],
   "teammates-stance": ["teammates.stance", "text"],
   "teammates-custom": ["teammates.custom", "text"],
@@ -119,7 +123,6 @@ const BINDINGS = {
   "snitch-weapon": ["snitch.reveal_weapon", "bool"],
   "snitch-bomb": ["snitch.reveal_bomb", "bool"],
 
-  "reveal-enabled": ["reveal.enabled", "bool"],
   "initiative-enabled": ["initiative.enabled", "bool"],
   "initiative-on": ["initiative.enabled", "bool"],
   "initiative-on-speech": ["initiative.enabled", "bool"],
@@ -131,11 +134,6 @@ const BINDINGS = {
   "initiative-quiet": ["initiative.when_quiet_seconds", "number"],
   "initiative-round": ["initiative.on_round_start", "bool"],
   "initiative-death": ["initiative.on_death", "bool"],
-  "reveal-message": ["reveal.message", "text"],
-  "reveal-channel": ["reveal.channel", "text"],
-  "reveal-mode": ["reveal.mode", "text"],
-  "reveal-instructions": ["reveal.instructions", "text"],
-  "reveal-link": ["reveal.link", "text"],
 
   "log-path": ["game.console_log_path", "text"],
   "cfg-dir": ["game.cfg_dir", "text"],
@@ -151,7 +149,6 @@ const BINDINGS = {
 
   "gsi-token": ["gsi.auth_token", "text"],
 
-  "respond-to": ["respond_to", "text"],
   "voice-speak-engine": ["voice.speak_engine", "text"],
   "voice-device": ["voice.device", "text"],
   "voice-reply-with": ["voice.reply_with", "text"],
@@ -226,6 +223,7 @@ function renderConfig() {
   }
   renderPlacement();
   renderOrderOptions();
+  renderModelOptions();
   $("speech-persona-block").style.display = config.speech_same_persona ? "none" : "";
   const remote = isRemote(config.llm.ollama_url);
   $("use-server").checked = remote;
@@ -295,7 +293,6 @@ const SECTION_NAMES = {
   game: "CS2",
   generation: "sampling",
   strategy: "strats",
-  respond_to: "respond to",
   enabled: "bot on/off",
 };
 
@@ -346,6 +343,7 @@ function bindInputs() {
         if (other !== id && otherPath === path && $(other)) writeField($(other), kind, readField(el, kind));
       if (["iq", "literacy", "reply-delay", "humanized-typing"].includes(id)) renderDials();
       if (path === "strategy.obey_commands") renderOrderOptions();
+      if (path === "llm.chat_enabled" || path === "llm.speech_enabled") renderModelOptions();
       scheduleSave();
     });
   }
@@ -445,12 +443,6 @@ function pushEvent(event) {
       `<span class="who">bot →</span> ${escapeHtml(data.text)}`,
       `reply ${data.delivered ? "" : "failed"}`,
       `${data.latency_ms}ms · ${escapeHtml(data.reason)}`,
-    );
-  } else if (event.kind === "reveal") {
-    line(
-      `<span class="who">reveal →</span> ${escapeHtml(data.text)}`,
-      `reply ${data.delivered ? "" : "failed"}`,
-      escapeHtml(data.reason),
     );
   } else if (event.kind === "strategy") {
     line(
@@ -914,6 +906,39 @@ function bindActions() {
       .join("\n");
   });
 
+  $("speed-run").addEventListener("click", async () => {
+    const button = $("speed-run");
+    button.disabled = true;
+    $("speed-note").textContent = "running - up to a minute…";
+    $("speed-output").textContent = "timing each stage…";
+    $("speed-copy").hidden = true;
+    try {
+      await saveConfig();
+      const response = await fetch("/api/speedtest", { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) {
+        $("speed-output").textContent = body.detail || `failed (${response.status})`;
+        $("speed-note").textContent = "";
+        return;
+      }
+      $("speed-output").textContent = body.report;
+      $("speed-note").textContent = body.summary;
+      $("speed-copy").hidden = false;
+    } catch (err) {
+      $("speed-output").textContent = `failed: ${err}`;
+      $("speed-note").textContent = "";
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("speed-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("speed-output").textContent);
+      $("speed-note").textContent = "copied - paste it to the developer";
+    } catch (err) {
+      $("speed-note").textContent = `could not copy: ${err}`;
+    }
+  });
   $("sim-run").addEventListener("click", async () => {
     $("sim-output").textContent = "generating…";
     await saveConfig();
@@ -955,6 +980,11 @@ async function renderLog() {
   $("log-output").textContent = body.lines
     .map(({ line, chat }) => `${chat ? "chat  " : "      "}${line}`)
     .join("\n");
+}
+
+function renderModelOptions() {
+  $("chat-answers").style.display = config.llm.chat_enabled ? "" : "none";
+  $("speech-answers").style.display = config.llm.speech_enabled ? "" : "none";
 }
 
 function renderOrderOptions() {

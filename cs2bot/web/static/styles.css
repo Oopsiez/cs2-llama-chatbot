@@ -265,3 +265,5 @@ button.action.primary { background: linear-gradient(180deg, #2a2114, #1b1710); b
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 .save-note.failed { background: #a12d2d; }
+
+.sub-options { margin: -4px 0 8px 26px; }

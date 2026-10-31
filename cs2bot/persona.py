@@ -388,31 +388,6 @@ def build_system_prompt(
     return "\n".join(lines)
 
 
-def build_reveal_turns(config: AppConfig) -> list[ChatTurn]:
-    """Ask the model to confess, in the voice it has been using all match.
-
-    The persona goes in as normal so the sign-off sounds like whoever was playing - the therapist
-    lets you down gently, the toxic one is smug about it - rather than a canned disclaimer.
-    """
-    persona = config.persona
-    lines = [persona.description.strip()]
-    if persona.style_notes.strip():
-        lines.append(persona.style_notes.strip())
-    if persona.extra_instructions.strip():
-        lines.append(persona.extra_instructions.strip())
-    lines.append(f'The persona you have been playing is called "{persona.name}".')
-    lines.append(literacy_directive(config.behavior.literacy))
-    # The link is appended afterwards, so the model must not invent one of its own.
-    lines.append(
-        "Reply with the chat message only: no quotes, no name prefix, no narration, no links, "
-        f"and {length_rule(persona.max_reply_chars, reserve=len(config.reveal.link) + 2)}."
-    )
-    return [
-        ChatTurn(role="system", content="\n".join(lines)),
-        ChatTurn(role="user", content=config.reveal.instructions.strip()),
-    ]
-
-
 OCCASIONS = {
     "round_start": "A new round is starting and nobody has said anything yet.",
     "death": "You just died this round.",
