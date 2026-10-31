@@ -13,3 +13,4 @@ models/
 *.gguf
 config.json
 *.log
+cs2bot/_release.py

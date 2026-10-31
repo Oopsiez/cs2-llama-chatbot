@@ -11,29 +11,40 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import __version__, commands, playbook
-from .config import AppConfig, load_config, save_config
+from . import RELEASE, __version__, commands, playbook
+from .config import AppConfig, fallback_log_path, load_config, save_config
 from .echo import EchoGuard
 from .events import EventBus
 from .gamestate import GameStateStore
-from .humanize import humanize, sampling_for
+from .humanize import first_sentences, first_words, for_speech, humanize, sampling_for
 from .identity import addressed_to, detect_name_from_line
 from .liveness import DeathBoard
-from .llm import LLMBackend, LLMError, SamplingParams, build_backend
+from .llm import LLMBackend, LLMError, OllamaBackend, SamplingParams, build_backend
+from .llm.catalog import known_on_server
 from .logtail import LogTailer
 from .models import BotReply, ChatChannel, ChatMessage, LifeState, MessageSource, Team
 from .novelty import is_repetitive
 from .output import ChatSender, build_sender
 from .parser import parse_chat_line
-from .persona import build_reveal_turns, build_strategy_turns, build_turns
+from .persona import (
+    build_initiative_turns,
+    build_spoken_rewrite_turns,
+    build_strategy_turns,
+    build_turns,
+    find_persona,
+    persona_choices,
+    persona_from_order,
+)
 from .roster import Roster
-from .rules import should_reply
+from .rules import is_question, should_reply
 from .snitch import announcement, is_request, where
 from .voice import VoiceListener, model_is_cached, whisper_missing
 from .voice.audio import SAMPLE_RATE, loopback_missing
 from .voice.segment import Segmenter
+from .voice.speak import Speaker
 
 POLL_INTERVAL = 0.25
+VOICE_RETRY_SECONDS = 30.0  # a listener that died (sound card gone, Whisper crash) is retried this often
 # Reading the message and deciding what to say, before any typing time.
 THINK_SECONDS = 0.8
 # How long after the bot speaks a bare "you" still counts as a reply to it.
@@ -53,6 +64,22 @@ STRATEGY_MEMORY = 4
 VOICE_SPEAKER = "voice"
 
 
+def _wrap(text: str, limit: int) -> list[str]:
+    """A plain answer cut into chat-sized lines on word boundaries."""
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        if len(candidate) > limit and current:
+            lines.append(current)
+            current = word[:limit]
+        else:
+            current = candidate[:limit]
+    if current:
+        lines.append(current)
+    return lines
+
+
 class Engine:
     def __init__(self, config: AppConfig | None = None, seed: int | None = None) -> None:
         self.config = config or load_config()
@@ -68,7 +95,6 @@ class Engine:
         self.last_spoke_at = 0.0
         self.last_announce_at = time.monotonic()
         self._last_seen_state = LifeState.UNKNOWN
-        self._revealed = False
         self.detected_name: str = ""
         self._detected_from: str = "console log"
         self.last_name_probe: str = ""
@@ -77,6 +103,11 @@ class Engine:
         self.recent_strats: list[str] = []
         self._quiet_until = float("-inf")
         self._round_started_at = float("-inf")
+        self._last_initiative_at = float("-inf")
+        self._initiative_round: tuple[str, int] | None = None
+        self._initiative_match: str = ""
+        self._was_dead = False
+        self._last_activity_at = time.monotonic()
         self._round_marker: tuple[str, int] = ("", 0)
         self._called_for: tuple[str, int] | None = None
         self.recent_lines: deque[dict[str, Any]] = deque(maxlen=RAW_LINE_MEMORY)
@@ -85,11 +116,20 @@ class Engine:
         self.last_error: str = ""
         self.llm_status: str = "not checked"
         self._backend: LLMBackend | None = None
+        self._speech_backend: LLMBackend | None = None
         self._sender: ChatSender | None = None
         self._tailer: LogTailer | None = None
+        self.log_source = ""  # "cs2" once console.log is being read, "fallback" for the bot's own log
         self._voice: VoiceListener | None = None
+        self._own_voice_logged = 0
+        self._voice_error_logged = ""
+        self._voice_retry_at = 0.0
+        self._speaker: Speaker | None = None
         self.last_voice_reply_at = float("-inf")
         self._task: asyncio.Task[None] | None = None
+        self._warm_task: asyncio.Task[None] | None = None
+        self._pull_task: asyncio.Task[None] | None = None
+        self.pull_status = ""
         # Every roll the bot makes - reply probability, typos - comes from here, so passing a
         # seed makes a run reproducible.
         self._random = random.Random(seed)
@@ -205,9 +245,7 @@ class Engine:
             return message
         if not self.own_name and self.config.game.auto_detect_name:
             self._learn_name(message.sender, "your own reply in chat")
-        return message.model_copy(
-            update={"is_self": True, "addressed_to_me": False, "mention_reason": ""}
-        )
+        return message.model_copy(update={"is_self": True, "addressed_to_me": False, "mention_reason": ""})
 
     def annotate(self, message: ChatMessage) -> ChatMessage:
         """Mark whether the sender is the user, and whether they are talking to the user."""
@@ -228,8 +266,36 @@ class Engine:
     @property
     def backend(self) -> LLMBackend:
         if self._backend is None:
-            self._backend = build_backend(self.config.llm)
+            self._backend = build_backend(self.config.llm, seed=self._random.randrange(2**32))
         return self._backend
+
+    @property
+    def speech_backend(self) -> LLMBackend:
+        """The model behind spoken lines: a second Ollama tag if one is set, else the chat model."""
+        llm = self.config.llm
+        if (
+            llm.backend != "ollama"
+            or not llm.speech_ollama_model
+            or llm.speech_ollama_model == llm.ollama_model
+        ):
+            return self.backend
+        if self._speech_backend is None:
+            self._speech_backend = build_backend(
+                llm, ollama_model=llm.speech_ollama_model, seed=self._random.randrange(2**32)
+            )
+        return self._speech_backend
+
+    @property
+    def speech_config(self) -> AppConfig:
+        """The settings spoken lines are generated with: the speech persona swapped in if it is separate."""
+        config = self.config
+        persona = config.persona if config.speech_same_persona else config.speech_persona
+        persona = persona.model_copy(update={"max_reply_chars": config.speech_max_reply_chars})
+        return config.model_copy(update={"persona": persona})
+
+    @property
+    def speech_differs(self) -> bool:
+        return not self.config.speech_same_persona or self.speech_backend is not self.backend
 
     @property
     def sender(self) -> ChatSender:
@@ -244,8 +310,12 @@ class Engine:
         if config.llm != old.llm:
             if self._backend is not None:
                 await self._backend.aclose()
+            if self._speech_backend is not None:
+                await self._speech_backend.aclose()
             self._backend = None
+            self._speech_backend = None
             self.llm_status = "not checked"
+            self.warm_llm()
         if config.game != old.game or config.behavior != old.behavior:
             self._sender = None
         if config.game.console_log_path != old.game.console_log_path:
@@ -267,23 +337,77 @@ class Engine:
             self.llm_status = await self.backend.health()
         except LLMError as exc:
             self.llm_status = f"error: {exc}"
+            switched = await self._adopt_server_model()
+            if switched:
+                try:
+                    self.llm_status = f"switched to {switched} (the one the server has) - " + (
+                        await self.backend.health()
+                    )
+                except LLMError as again:
+                    self.llm_status = f"error: {again}"
         self.bus.publish("status", self.status())
         return self.llm_status
+
+    async def _adopt_server_model(self) -> str:
+        """When the configured tag is not on the Ollama server but one of the catalog's is,
+        take that one - a stale name from an older build should not stop the first reply."""
+        backend = self.backend
+        if not isinstance(backend, OllamaBackend):
+            return ""
+        available = await backend.models()
+        tag = known_on_server(self.config.llm.ollama_model, available)
+        if not tag or tag == self.config.llm.ollama_model:
+            return ""
+        config = self.config.model_copy(deep=True)
+        config.llm.ollama_model = tag
+        await self.apply_config(config)
+        return tag
+
+    @property
+    def llm_loading(self) -> bool:
+        return self._warm_task is not None and not self._warm_task.done()
+
+    def warm_llm(self) -> None:
+        """Load the model now, in the background, so it is not the first reply that pays for it.
+
+        Loading several gigabytes onto the card while CS2 is drawing frames is what froze
+        people's machines - doing it while they are still in the menu is just a slow start.
+        """
+        if self.config.llm.backend == "mock" or not self.config.llm.warm_on_start:
+            return
+        if self._warm_task is not None and not self._warm_task.done():
+            self._warm_task.cancel()
+        self._warm_task = asyncio.create_task(self._warm(), name="cs2bot-warm-llm")
+
+    async def _warm(self) -> None:
+        self.llm_status = "loading the model…"
+        self.bus.publish("status", self.status())
+        try:
+            self.llm_status = await self.backend.warm()
+            if self.speech_backend is not self.backend and self.config.llm.speech_enabled:
+                self.llm_status += f"; speech: {await self.speech_backend.warm()}"
+        except LLMError as exc:
+            self.llm_status = f"error: {exc}"
+        except Exception as exc:  # a bad model file must not take the loop down
+            self.llm_status = f"error: {type(exc).__name__}: {exc}"
+        self.bus.publish("status", self.status())
 
     # ---- lifecycle --------------------------------------------------------------
 
     async def start(self) -> None:
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._run(), name="cs2bot-loop")
+        self.warm_llm()
 
     async def stop(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        for task in (self._task, self._warm_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        self._task = self._warm_task = None
         if self._tailer is not None:
             self._tailer.close()
             self._tailer = None
@@ -299,14 +423,25 @@ class Engine:
             except Exception as exc:  # keep the loop alive across transient failures
                 self.last_error = f"{type(exc).__name__}: {exc}"
                 self.bus.publish("error", {"message": self.last_error})
-            await asyncio.sleep(POLL_INTERVAL)
+            await asyncio.sleep(max(0.05, self.config.game.poll_seconds))
 
     async def _tick(self) -> None:
+        # Voice arrives on the speakers, not in the log, so it is pumped whether or not
+        # console.log has been found.
+        await self.pump_voice()
         path = self.config.game.console_log_path
-        if not path:
-            return
-        if self._tailer is None:
-            self._tailer = LogTailer(path)
+        if path and Path(path).exists():
+            active, source = Path(path), "cs2"
+        else:
+            active, source = fallback_log_path(), "fallback"
+            active.parent.mkdir(parents=True, exist_ok=True)
+            active.touch(exist_ok=True)
+        if self._tailer is None or self._tailer.path != active:
+            if self._tailer is not None:
+                self._tailer.close()
+            # A console.log that appears while we are on our own log is brand new: read all of it.
+            self._tailer = LogTailer(active, from_start=self.log_source == "fallback" and source == "cs2")
+        self.log_source = source
         for line in self._tailer.read_lines():
             message = parse_chat_line(line, self.own_name, self.config.game.name_aliases)
             self.lines_seen += 1
@@ -315,13 +450,128 @@ class Engine:
                 self._note_identity(line)
                 continue
             await self.handle_message(message)
+        if source != "cs2":
+            return
         await self._maybe_ask_for_name()
-        await self.pump_voice()
         await self.maybe_call_strategy()
         await self.maybe_announce()
-        await self.maybe_reveal()
+        await self.maybe_initiate()
 
     # ---- voice comms ------------------------------------------------------------
+
+    @property
+    def speaker(self) -> Speaker:
+        settings = self.config.voice
+        if self._speaker is None:
+            self._speaker = Speaker()
+        self._speaker.device = settings.speak_device
+        self._speaker.monitor = settings.speak_monitor
+        self._speaker.monitor_device = settings.monitor_device
+        self._speaker.resample = settings.resample_48k
+        self._speaker.talk_key = settings.talk_key
+        self._speaker.engine = settings.speak_engine
+        self._speaker.voice = settings.speak_voice
+        self._speaker.rate = settings.speak_rate
+        return self._speaker
+
+    def _reply_modes(self, message: ChatMessage) -> tuple[bool, bool]:
+        """`(typed, spoken)` once each model's own switches are applied: the model must be on and
+        must be set to answer where this message came from (typed chat or voice comms)."""
+        typed, spoken = self._wanted_modes(message)
+        chat_on, speech_on = self._models_answering(message.is_voice)
+        return typed and chat_on, spoken and speech_on
+
+    def _models_answering(self, voice: bool) -> tuple[bool, bool]:
+        """`(chat model, speech model)` - which of the two react to a voice (or typed) message."""
+        llm = self.config.llm
+        chat = llm.chat_enabled and (llm.chat_answers_voice if voice else llm.chat_answers_text)
+        speech = llm.speech_enabled and (llm.speech_answers_voice if voice else llm.speech_answers_text)
+        return chat, speech
+
+    def _wanted_modes(self, message: ChatMessage) -> tuple[bool, bool]:
+        """`(typed, spoken)` for a reply, per the Voice tab's reply-with setting.
+
+        All-chat replies are always typed: the other team cannot hear team voice.
+        """
+        if not self._team_only(message):
+            return True, False
+        mode = self.config.voice.reply_with
+        if mode == "voice":
+            return False, True
+        if mode == "all":
+            return True, True
+        return True, False
+
+    def log_note(self, text: str) -> None:
+        """Append to the bot's own log while CS2's is not there, so the Log tab still shows what
+        happened (never chat-shaped, so it is not answered)."""
+        if self.log_source != "fallback":
+            return
+        try:
+            with fallback_log_path().open("a", encoding="utf-8") as handle:
+                handle.write(f"cs2bot {datetime.now().strftime('%H:%M:%S')} {text}\n")
+        except OSError:
+            pass
+
+    def _speech_params(self, params: SamplingParams) -> SamplingParams:
+        """Sampling for a spoken line: looser than typed chat (or it reads like prose), with a token
+        budget that fits the spoken length rather than the typed one, so it is not cut mid-thought."""
+        words = self.config.speech_max_words
+        budget = words * 2 + 16 if words > 0 else 96
+        return replace(
+            params,
+            temperature=max(params.temperature, 1.0),
+            repeat_penalty=1.1,
+            max_tokens=max(params.max_tokens, budget),
+        )
+
+    async def rewrite_for_speech(self, text: str) -> str:
+        """The typed reply reworded as something said out loud; the typed text if the model fails."""
+        if not self.config.speech_rewrite or not text:
+            return text
+        config = self.speech_config
+        try:
+            raw = await self.speech_backend.generate(
+                build_spoken_rewrite_turns(config, text), self._speech_params(self._sampling_params())
+            )
+        except LLMError as exc:
+            self.log_note(f"could not reword for speech: {exc}")
+            return text
+        spoken = humanize(
+            raw,
+            literacy=config.behavior.literacy,
+            max_chars=0,
+            seed=self._random.randrange(2**32),
+            name=self.own_name,
+            spoken=True,
+        )
+        return spoken or text
+
+    async def speak(self, text: str) -> tuple[bool, str]:
+        text = first_sentences(text, self.config.speech_max_sentences) or text
+        text = first_words(text, self.config.speech_max_words) or text
+        text = for_speech(text)
+        spoken, detail = await self.speaker.say(text)
+        self.log_note(f"said: {text}" if spoken else f"could not say: {detail}")
+        self.bus.publish("spoken" if spoken else "error", {"text": text, "detail": detail})
+        return spoken, detail
+
+    async def deliver(self, text: str, message: ChatMessage, spoken_text: str = "") -> tuple[bool, str]:
+        """Send a reply the way the settings say: typed, spoken, or both.
+
+        `spoken_text` is what the voice says when it was written separately (speech persona or
+        speech model); blank means it says the typed line.
+        """
+        typed, spoken = self._reply_modes(message)
+        delivered, detail = (False, "")
+        if typed:
+            delivered, detail = await self.sender.send(text, team_only=self._team_only(message))
+            self.log_note(f"typed: {text}" if delivered else f"could not type: {detail}")
+        if spoken:
+            said, said_detail = await self.speak(spoken_text or text)
+            delivered = delivered or said
+            detail = f"{detail}, {said_detail}".strip(", ") if typed else said_detail
+        return delivered, detail
 
     @property
     def voice(self) -> VoiceListener:
@@ -329,22 +579,100 @@ class Engine:
             settings = self.config.voice
             self._voice = VoiceListener(
                 device=settings.device,
+                capture=settings.capture,
+                process=settings.capture_process,
                 model_name=settings.model,
                 segmenter=Segmenter(SAMPLE_RATE, floor=settings.noise_floor),
+                gate=self.speaker.was_talking,
             )
         return self._voice
 
     async def pump_voice(self) -> None:
         """Start or stop listening as the settings say, and answer anything heard."""
-        if not (self.config.enabled and self.config.voice.enabled):
+        if not (self.config.enabled and self.listens_to_voice):
             if self._voice is not None:
                 self._voice.stop()
             return
         self.voice.start()
+        if self.voice.error:
+            now = time.time()
+            if self.voice.error != self._voice_error_logged:
+                retry = f"retrying in {VOICE_RETRY_SECONDS:.0f} s"
+                self.log_note(f"stopped listening: {self.voice.error} ({retry})")
+                self._voice_error_logged = self.voice.error
+                self._voice_retry_at = now + VOICE_RETRY_SECONDS
+            elif now >= self._voice_retry_at:
+                self._voice_retry_at = now + VOICE_RETRY_SECONDS
+                self.voice.restart()
+                if not self.voice.error:
+                    self.log_note("listening again")
+                    self._voice_error_logged = ""
+        elif self._voice_error_logged:
+            self.log_note("listening again")
+            self._voice_error_logged = ""
+        ignored = self.voice.own_voice_ignored
+        if ignored != self._own_voice_logged:
+            self.log_note(f"ignored my own voice ({ignored - self._own_voice_logged}x)")
+            self._own_voice_logged = ignored
         for utterance in self.voice.drain():
-            await self.handle_voice(utterance.text)
+            if self.speaker.heard_itself(utterance.text, utterance.heard_at, utterance.seconds):
+                self.log_note(f"ignored my own voice: {utterance.text}")
+                self.bus.publish("skipped", {"sender": "voice", "reason": "that was the bot's own voice"})
+                continue
+            age = time.time() - utterance.heard_at
+            stale = self.config.voice.stale_seconds
+            if stale > 0 and age > stale:
+                self.log_note(f"skipped (heard {age:.0f} s ago, too late to answer): {utterance.text}")
+                self.bus.publish("skipped", {"sender": "voice", "reason": f"transcribed {age:.0f} s late"})
+                continue
+            started = time.perf_counter()
+            reply = await self.handle_voice(utterance.text, utterance.source)
+            if reply is not None:
+                self.log_note(
+                    f"answered {time.time() - utterance.heard_at:.0f} s after they spoke "
+                    f"(transcribing {age:.0f} s, replying {time.perf_counter() - started:.0f} s)"
+                )
 
-    async def handle_voice(self, text: str) -> BotReply | None:
+    @property
+    def listens_to_voice(self) -> bool:
+        """Voice comms are heard when *Listen to voice comms* is on and at least one model is set
+        to answer them."""
+        return self.config.voice.enabled and self.answers_voice
+
+    @property
+    def answers_text(self) -> bool:
+        """Some model is switched on and set to answer typed chat."""
+        return any(self._models_answering(voice=False))
+
+    @property
+    def answers_voice(self) -> bool:
+        """Some model is switched on and set to answer voice comms."""
+        return any(self._models_answering(voice=True))
+
+    def pull_model(self, tag: str) -> str:
+        """Start downloading `tag` on the Ollama server the config points at; progress lands in
+        `pull_status` (and the status feed) so the panel can show it."""
+        backend = self.backend
+        if not isinstance(backend, OllamaBackend):
+            self.pull_status = "error: models are only installed through Ollama"
+            return self.pull_status
+        if self._pull_task is not None and not self._pull_task.done():
+            return self.pull_status
+        self.pull_status = f"{tag}: starting…"
+        self._pull_task = asyncio.create_task(self._pull(backend, tag), name="cs2bot-pull")
+        return self.pull_status
+
+    async def _pull(self, backend: OllamaBackend, tag: str) -> None:
+        try:
+            async for progress in backend.pull(tag):
+                self.pull_status = f"{tag}: {progress}"
+                self.bus.publish("status", self.status())
+            self.pull_status = f"{tag}: installed"
+        except LLMError as exc:
+            self.pull_status = f"error: {exc}"
+        self.bus.publish("status", self.status())
+
+    async def handle_voice(self, text: str, source: str = "") -> BotReply | None:
         """Treat a transcript as if it had been typed in team chat.
 
         Everything downstream - persona, strats, orders, novelty - is the same machinery the
@@ -352,6 +680,8 @@ class Engine:
         answer in all chat would be talking to the wrong five people.
         """
         text = " ".join(text.split())
+        where = source.removeprefix("hearing ").strip()
+        self.log_note(f"heard [{where}]: {text}" if where else f"heard: {text}")
         if len(text.split()) < self.config.voice.min_words:
             return None
         return await self.handle_message(
@@ -374,6 +704,7 @@ class Engine:
             "supported": not missing,
             "unsupported_reason": missing,
             "running": False,
+            "bot_running": self._task is not None and not self._task.done(),
             "device": settings.device,
             "model": settings.model,
             "model_ready": model_is_cached(settings.model),
@@ -386,6 +717,7 @@ class Engine:
         if self._voice is not None:
             status.update(self._voice.status())
             status["enabled"] = settings.enabled
+        status.update(self.speaker.status())
         return status
 
     def _cooldown_for(self, message: ChatMessage) -> tuple[float, float]:
@@ -397,12 +729,18 @@ class Engine:
     # ---- message handling -------------------------------------------------------
 
     async def handle_message(self, message: ChatMessage) -> BotReply | None:
+        self._last_activity_at = time.monotonic()
         message = self.annotate(self.flag_own_echo(self.track_state(message)))
         self.history.append(message)
         del self.history[:-50]
         self.bus.publish("chat", message.model_dump(mode="json"))
 
         if not self.config.enabled:
+            return None
+        if not (self.answers_voice if message.is_voice else self.answers_text):
+            where = "voice comms" if message.is_voice else "typed chat"
+            reason = f"no model is set to answer {where} (Models on the Persona tab)"
+            self.bus.publish("skipped", {"message": message.model_dump(mode="json"), "reason": reason})
             return None
 
         taken, called = await self._handle_command(message)
@@ -427,8 +765,10 @@ class Engine:
             and self.config.snitch.answer_when_asked
             and is_request(message.text, self.config.snitch.request_phrases)
         )
-        urgent = asked_where or (
-            message.addressed_to_me and self.config.behavior.always_reply_when_addressed
+        urgent = (
+            asked_where
+            or (message.addressed_to_me and self.config.behavior.always_reply_when_addressed)
+            or (message.is_voice and is_question(message.text))
         )
 
         now = time.monotonic()
@@ -446,26 +786,35 @@ class Engine:
             )
             return None
 
-        self.last_reply_at = now
+        if self.llm_loading:
+            self.bus.publish(
+                "skipped",
+                {"message": message.model_dump(mode="json"), "reason": "model still loading"},
+            )
+            return None
+
         if message.is_voice:
             self.last_voice_reply_at = now
+        else:
+            self.last_reply_at = now
         started = time.perf_counter()
+        typed, spoken = self._reply_modes(message)
+        spoken_text = ""
         try:
-            text = await self.generate_reply(message, local_state)
+            text = await self.generate_reply(message, local_state, spoken=spoken and not typed)
+            if typed and spoken:
+                if self.speech_differs:
+                    spoken_text = await self.generate_reply(message, local_state, spoken=True)
+                else:
+                    spoken_text = await self.rewrite_for_speech(text)
         except LLMError as exc:
             self.last_error = str(exc)
             self.bus.publish("error", {"message": str(exc)})
             return None
 
         if not text:
-            reason = (
-                "kept repeating itself"
-                if self.last_generation_repeated
-                else "model returned nothing"
-            )
-            self.bus.publish(
-                "skipped", {"message": message.model_dump(mode="json"), "reason": reason}
-            )
+            reason = "kept repeating itself" if self.last_generation_repeated else "model returned nothing"
+            self.bus.publish("skipped", {"message": message.model_dump(mode="json"), "reason": reason})
             return None
 
         self._remember_reply(text)
@@ -473,7 +822,7 @@ class Engine:
         self.echo.remember(text)
         await self._pause_before_sending(text, elapsed=time.perf_counter() - started)
 
-        delivered, detail = await self.sender.send(text, team_only=self._team_only(message))
+        delivered, detail = await self.deliver(text, message, spoken_text)
         reply = BotReply(
             in_reply_to=message,
             text=text,
@@ -561,6 +910,8 @@ class Engine:
             self._quiet_until = float("-inf")
             self.bus.publish("command", {"kind": "talk", "by": message.sender})
             return True, None
+        if command.kind == commands.PERSONA:
+            return await self._change_persona(command, message)
 
         if settings.round_start_only and not self.in_round_start:
             self.bus.publish(
@@ -572,6 +923,46 @@ class Engine:
             )
             return True, None
         return True, await self.call_strategy(asked_by=message, site=command.site)
+
+    async def _change_persona(
+        self, command: commands.Command, message: ChatMessage
+    ) -> tuple[bool, BotReply | None]:
+        """Wear the personality a player asked for, or tell them which ones there are."""
+        available = persona_choices(self.config.saved_personas)
+        if not command.persona:
+            return True, await self._say_command_answer(
+                f"personas: {', '.join(available)} - say !persona <name>", message
+            )
+        wanted = find_persona(command.persona, self.config.saved_personas)
+        if wanted is None:
+            # "be careful" is a teammate talking, not a persona nobody has; only an explicit
+            # `!persona x` or a "you are now ..." order is worth acting on.
+            if not command.explicit:
+                return False, None
+            # Not a name on the list, so it is a description: the bot becomes exactly that.
+            wanted = persona_from_order(command.instruction or command.persona, self.config.persona)
+            saved = {**self.config.saved_personas, wanted.name: wanted}
+            await self.apply_config(self.config.model_copy(update={"saved_personas": saved}))
+        await self.apply_config(self.config.model_copy(update={"persona": wanted}))
+        self.bus.publish("command", {"kind": "persona", "by": message.sender, "to": wanted.name})
+        return True, await self._say_command_answer(f"ok, {wanted.name} it is", message)
+
+    async def _say_command_answer(self, text: str, asked_by: ChatMessage) -> BotReply:
+        """Answer an order in the bot's own words - no model, so it lands even when it is down."""
+        lines = _wrap(text, self.config.game.chat_char_limit)
+        team_only = asked_by.is_voice or commands.answer_in_team_chat(self.config.strategy, asked_by.channel)
+        delivered, detail = True, ""
+        for line in lines:
+            self.echo.remember(line)
+            delivered, detail = await self.sender.send(line, team_only=team_only)
+            if not delivered:
+                break
+        self.last_spoke_at = time.time()
+        if asked_by.is_voice:
+            self.last_voice_reply_at = time.monotonic()
+        else:
+            self.last_reply_at = time.monotonic()
+        return BotReply(in_reply_to=asked_by, text="\n".join(lines), delivered=delivered, reason=detail)
 
     async def maybe_call_strategy(self) -> None:
         """Call the round's strat unprompted, once, if that was asked for in the settings."""
@@ -588,16 +979,12 @@ class Engine:
         self._called_for = self._round_marker
         await self.call_strategy()
 
-    async def call_strategy(
-        self, asked_by: ChatMessage | None = None, site: str = ""
-    ) -> BotReply | None:
+    async def call_strategy(self, asked_by: ChatMessage | None = None, site: str = "") -> BotReply | None:
         """Pick a real call for the map and side we are on, say it, and send it."""
         settings = self.config.strategy
         player = self.game_state.player
         side = player.team if player.team in (Team.T, Team.CT) else self._fallback_side()
-        strategy = playbook.pick(
-            player.map_name, side, site=site, avoid=self.recent_strats, rng=self._random
-        )
+        strategy = playbook.pick(player.map_name, side, site=site, avoid=self.recent_strats, rng=self._random)
         if strategy is None:
             return None
 
@@ -663,9 +1050,7 @@ class Engine:
             return plain
         try:
             raw = await self.backend.generate(
-                build_strategy_turns(
-                    self.config, self.game_state.player, strategy, asked_by, names
-                ),
+                build_strategy_turns(self.config, self.game_state.player, strategy, asked_by, names),
                 self._sampling_params(),
             )
         except LLMError as exc:
@@ -677,6 +1062,7 @@ class Engine:
                 literacy=self.config.behavior.literacy,
                 max_chars=self.config.persona.max_reply_chars,
                 seed=self._random.randrange(2**32),
+                name=self.own_name,
             )
             for line in raw.splitlines()
             if line.strip()
@@ -701,10 +1087,7 @@ class Engine:
             return
 
         now = time.monotonic()
-        due = (
-            settings.announce_interval > 0
-            and now - self.last_announce_at >= settings.announce_interval
-        )
+        due = settings.announce_interval > 0 and now - self.last_announce_at >= settings.announce_interval
         if not (due or (settings.announce_on_death and just_died)):
             return
 
@@ -716,58 +1099,95 @@ class Engine:
         self.echo.remember(text)
         delivered, detail = await self.sender.send(text, team_only=settings.channel == "team")
         self.last_spoke_at = time.time()
-        self.bus.publish(
-            "snitch", {"text": text, "delivered": delivered, "reason": detail}
+        self.bus.publish("snitch", {"text": text, "delivered": delivered, "reason": detail})
+
+    # ---- starting conversations ---------------------------------------------------
+
+    def _initiative_occasion(self) -> str:
+        """Which occasion, if any, is worth speaking up for right now."""
+        settings = self.config.initiative
+        now = time.monotonic()
+        local_state = self.game_state.local_state(self.config.dead_alive.assume_alive_without_gsi)
+        dead = local_state is LifeState.DEAD
+        died = dead and not self._was_dead
+        self._was_dead = dead
+        marker = self._round_marker
+        fresh_round = self.in_round_start and marker != self._initiative_round
+        if fresh_round:
+            self._initiative_round = marker
+        if now - self._last_initiative_at < settings.min_gap_seconds:
+            return ""
+        if settings.on_death and died:
+            return "death"
+        if self.config.behavior.game_mode and fresh_round:
+            situation = self.game_state.player.match_situation
+            for occasion, word in (("match_start", "just started"), ("match_point", "match point")):
+                key = f"{occasion}:{self.game_state.player.map_name}:{self._initiative_match_key()}"
+                if word in situation and self._initiative_match != key:
+                    self._initiative_match = key
+                    return occasion
+        if settings.on_round_start and fresh_round:
+            return "round_start"
+        if settings.when_quiet_seconds > 0 and now - self._last_activity_at >= settings.when_quiet_seconds:
+            return "quiet"
+        return ""
+
+    def _initiative_match_key(self) -> str:
+        player = self.game_state.player
+        return f"{player.score_ct}-{player.score_t}"
+
+    async def maybe_initiate(self) -> None:
+        """Chime in unprompted, when the settings allow and the moment calls for it."""
+        settings = self.config.initiative
+        if not (self.config.enabled and settings.enabled) or self.quiet or self.llm_loading:
+            return
+        if self.game_state.player.is_warmup or self.game_state.player.map_phase == "gameover":
+            return
+        occasion = self._initiative_occasion()
+        if not occasion:
+            return
+        self._last_initiative_at = time.monotonic()  # a passed-up chance still waits the gap
+        if self._random.random() > settings.chance:
+            return
+        local_state = self.game_state.local_state(self.config.dead_alive.assume_alive_without_gsi)
+        turns = build_initiative_turns(
+            self.config,
+            self.game_state.player,
+            local_state,
+            occasion,
+            self.history,
+            self.own_name,
+            self.recent_replies,
         )
-
-    async def maybe_reveal(self) -> None:
-        """Own up on the end-of-match scoreboard, once.
-
-        `gameover` keeps arriving for as long as the scoreboard is up, and the next match resets
-        the phase, which is what re-arms this.
-        """
-        settings = self.config.reveal
-        phase = self.game_state.player.map_phase
-        over = phase == "gameover"
-        if not over:
-            self._revealed = False
+        try:
+            raw = await self.backend.generate(turns, self._sampling_params())
+        except LLMError as exc:
+            self.last_error = str(exc)
+            self.bus.publish("error", {"message": str(exc)})
             return
-        if self._revealed or not (self.config.enabled and settings.enabled):
+        text = humanize(
+            raw,
+            literacy=self.config.behavior.literacy,
+            max_chars=self.config.persona.max_reply_chars,
+            seed=self._random.randrange(2**32),
+            name=self.own_name,
+        )
+        if not text or (
+            self.config.behavior.avoid_repeats
+            and is_repetitive(text, self.recent_replies, self.config.behavior.repeat_similarity)
+        ):
             return
-
-        text = await self._reveal_text()
-        if not text:
-            return
-        self._revealed = True
+        channel = ChatChannel.TEAM if settings.channel == "team" else ChatChannel.ALL
+        own = ChatMessage(raw="", sender=self.own_name or "me", text=text, channel=channel, is_self=True)
         self._remember_reply(text)
         self.echo.remember(text)
-        delivered, detail = await self.sender.send(text, team_only=settings.channel == "team")
+        delivered, detail = await self.deliver(text, own)
         self.last_spoke_at = time.time()
-        self.bus.publish("reveal", {"text": text, "delivered": delivered, "reason": detail})
-
-    async def _reveal_text(self) -> str:
-        """The confession itself, written in character unless a fixed line was configured."""
-        settings = self.config.reveal
-        written = settings.message.strip()
-        if settings.mode == "character":
-            try:
-                generated = await self.backend.generate(
-                    build_reveal_turns(self.config), self._sampling_params()
-                )
-            except LLMError as exc:
-                # The match is over either way; the canned line is better than silence.
-                self.last_error = str(exc)
-                generated = ""
-            written = humanize(
-                generated,
-                literacy=self.config.behavior.literacy,
-                max_chars=max(40, self.config.persona.max_reply_chars - len(settings.link) - 1),
-                seed=self._random.randrange(2**32),
-            ) or written
-        link = settings.link.strip()
-        if link and link not in written:
-            written = f"{written} {link}".strip()
-        return written
+        self._last_activity_at = time.monotonic()
+        self.history.append(own)
+        self.bus.publish(
+            "initiative", {"text": text, "occasion": occasion, "delivered": delivered, "reason": detail}
+        )
 
     def track_state(self, message: ChatMessage) -> ChatMessage:
         """Learn the sender's life state from `[DEAD]`, and remember it for the round."""
@@ -777,34 +1197,49 @@ class Engine:
         self.deaths.note_phase(self.game_state.player.round_phase)
         return self.deaths.observe(message)
 
-    async def generate_reply(self, message: ChatMessage, local_state: LifeState) -> str:
-        """Generate a reply, retrying while it echoes something the bot recently said."""
-        behavior = self.config.behavior
+    def is_teammate(self, message: ChatMessage) -> bool:
+        """Team chat and voice are team-only by construction; all-chat is a teammate only when
+        that name has been seen in team chat this map."""
+        if message.is_voice or message.channel is ChatChannel.TEAM:
+            return True
+        return bool(message.sender) and self.roster.knows(message.sender)
+
+    async def generate_reply(self, message: ChatMessage, local_state: LifeState, spoken: bool = False) -> str:
+        """Generate a reply, retrying while it echoes something the bot recently said.
+
+        `spoken` writes it for the voice: the speech persona and speech model, when those are separate.
+        """
+        config = self.speech_config if spoken else self.config
+        backend = self.speech_backend if spoken else self.backend
+        behavior = config.behavior
         turns = build_turns(
-            self.config,
+            config,
             self.game_state.player,
             local_state,
             message,
             self.history[:-1],
             self.own_name,
             self.recent_replies,
+            is_teammate=self.is_teammate(message),
         )
         attempts = 1 + (behavior.repeat_retries if behavior.avoid_repeats else 0)
         self.last_generation_repeated = False
         text = ""
         for attempt in range(attempts):
             params = self._sampling_params()
+            if spoken:
+                params = self._speech_params(params)
             if attempt:
                 # Nudge it out of the groove it just fell into.
-                params = replace(
-                    params, temperature=min(1.6, params.temperature + 0.15 * attempt)
-                )
-            raw = await self.backend.generate(turns, params)
+                params = replace(params, temperature=min(1.6, params.temperature + 0.15 * attempt))
+            raw = await backend.generate(turns, params)
             text = humanize(
                 raw,
                 literacy=behavior.literacy,
-                max_chars=self.config.persona.max_reply_chars,
+                max_chars=config.persona.max_reply_chars,
                 seed=self._random.randrange(2**32),
+                name=self.own_name,
+                spoken=spoken,
             )
             if not behavior.avoid_repeats or not text:
                 return text
@@ -861,6 +1296,25 @@ class Engine:
     def log_attached(self) -> bool:
         return self._tailer is not None and self._tailer.is_open
 
+    @property
+    def listener(self) -> VoiceListener | None:
+        return self._voice
+
+    @property
+    def log_reading(self) -> str:
+        return str(self._tailer.path) if self._tailer is not None else ""
+
+    def log_reason(self) -> str:
+        """Why console.log is not being read, in the words the pill shows."""
+        path = self.config.game.console_log_path
+        if not path:
+            return "no console.log path set - CS2 install not found, set it on the Advanced tab"
+        if not Path(path).exists():
+            return "CS2 has not written console.log yet - add -condebug to its launch options"
+        if not self.log_attached:
+            return "press Start bot"
+        return ""
+
     def log_file_state(self) -> dict[str, Any]:
         """Whether the console log is there and growing - the first thing to check when the
         panel stays empty."""
@@ -882,21 +1336,25 @@ class Engine:
         player = self.game_state.player
         return {
             "version": __version__,
+            "release": RELEASE,
             "enabled": self.config.enabled,
             "running": self._task is not None and not self._task.done(),
             "llm_backend": self.config.llm.backend,
             "llm_status": self.llm_status,
+            "pull_status": self.pull_status,
+            "llm_loading": self.llm_loading,
             "sender": self.sender.describe(),
             "log_path": self.config.game.console_log_path,
             "log_attached": self.log_attached,
+            "log_source": self.log_source,
+            "log_reason": self.log_reason(),
+            "log_reading": self.log_reading,
             "lines_seen": self.lines_seen,
             **self.log_file_state(),
             "own_name": self.own_name,
             "name_source": self.name_source,
             "name_probe": self.last_name_probe,
-            "local_state": self.game_state.local_state(
-                self.config.dead_alive.assume_alive_without_gsi
-            ).value,
+            "local_state": self.game_state.local_state(self.config.dead_alive.assume_alive_without_gsi).value,
             "dead_players": self.deaths.dead_players,
             "callout": where(player, self.config.callouts),
             "has_position": player.position is not None,

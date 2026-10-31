@@ -1,4 +1,13 @@
 const $ = (id) => document.getElementById(id);
+const LOCAL_OLLAMA = "http://127.0.0.1:11434";
+function isRemote(url) {
+  try {
+    const host = new URL(url).hostname;
+    return !["127.0.0.1", "localhost", "::1", "0.0.0.0", ""].includes(host);
+  } catch (_) {
+    return false;
+  }
+}
 
 let config = null;
 let presets = {};
@@ -13,6 +22,27 @@ const BINDINGS = {
   "persona-extra": ["persona.extra_instructions", "text"],
   "persona-banned": ["persona.banned_words", "list"],
   "persona-maxchars": ["persona.max_reply_chars", "int"],
+  "persona-game-aware": ["persona.game_aware", "bool"],
+  "speech-same-persona": ["speech_same_persona", "bool"],
+  "speech-max-sentences": ["speech_max_sentences", "int"],
+  "speech-max-words": ["speech_max_words", "int"],
+  "speech-rewrite": ["speech_rewrite", "bool"],
+  "speech-persona-name": ["speech_persona.name", "text"],
+  "speech-persona-description": ["speech_persona.description", "text"],
+  "speech-persona-style": ["speech_persona.style_notes", "text"],
+  "speech-persona-extra": ["speech_persona.extra_instructions", "text"],
+  "speech-persona-game-aware": ["speech_persona.game_aware", "bool"],
+  "speech-model": ["llm.speech_ollama_model", "text"],
+  "chat-model": ["llm.ollama_model", "text"],
+  "chat-enabled": ["llm.chat_enabled", "bool"],
+  "speech-enabled": ["llm.speech_enabled", "bool"],
+  "chat-answers-text": ["llm.chat_answers_text", "bool"],
+  "chat-answers-voice": ["llm.chat_answers_voice", "bool"],
+  "speech-answers-text": ["llm.speech_answers_text", "bool"],
+  "speech-answers-voice": ["llm.speech_answers_voice", "bool"],
+  "poll-seconds": ["game.poll_seconds", "float"],
+  "teammates-stance": ["teammates.stance", "text"],
+  "teammates-custom": ["teammates.custom", "text"],
 
   iq: ["behavior.intelligence", "int"],
   literacy: ["behavior.literacy", "int"],
@@ -75,7 +105,12 @@ const BINDINGS = {
   "strat-name-players": ["strategy.name_players", "bool"],
   "strat-side": ["strategy.fallback_side", "text"],
   "strat-obey": ["strategy.obey_commands", "bool"],
+  "obey-orders": ["strategy.obey_commands", "bool"],
+  "obey-orders-speech": ["strategy.obey_commands", "bool"],
+  "orders-listen": ["strategy.listen_channel", "text"],
+  "orders-persona": ["strategy.obey_persona_commands", "bool"],
   "strat-quiet": ["strategy.quiet_seconds", "float"],
+  "strat-persona-cmd": ["strategy.obey_persona_commands", "bool"],
 
   "snitch-enabled": ["snitch.enabled", "bool"],
   "snitch-asked": ["snitch.answer_when_asked", "bool"],
@@ -88,12 +123,17 @@ const BINDINGS = {
   "snitch-weapon": ["snitch.reveal_weapon", "bool"],
   "snitch-bomb": ["snitch.reveal_bomb", "bool"],
 
-  "reveal-enabled": ["reveal.enabled", "bool"],
-  "reveal-message": ["reveal.message", "text"],
-  "reveal-channel": ["reveal.channel", "text"],
-  "reveal-mode": ["reveal.mode", "text"],
-  "reveal-instructions": ["reveal.instructions", "text"],
-  "reveal-link": ["reveal.link", "text"],
+  "initiative-enabled": ["initiative.enabled", "bool"],
+  "initiative-on": ["initiative.enabled", "bool"],
+  "initiative-on-speech": ["initiative.enabled", "bool"],
+  "game-mode": ["behavior.game_mode", "bool"],
+  "game-mode-speech": ["behavior.game_mode", "bool"],
+  "initiative-channel": ["initiative.channel", "text"],
+  "initiative-gap": ["initiative.min_gap_seconds", "number"],
+  "initiative-chance": ["initiative.chance", "number"],
+  "initiative-quiet": ["initiative.when_quiet_seconds", "number"],
+  "initiative-round": ["initiative.on_round_start", "bool"],
+  "initiative-death": ["initiative.on_death", "bool"],
 
   "log-path": ["game.console_log_path", "text"],
   "cfg-dir": ["game.cfg_dir", "text"],
@@ -101,6 +141,7 @@ const BINDINGS = {
   "name-aliases": ["game.name_aliases", "list"],
   "auto-detect-name": ["game.auto_detect_name", "bool"],
   "bind-key": ["game.bind_key", "text"],
+  "bind-key-general": ["game.bind_key", "text"],
   "char-limit": ["game.chat_char_limit", "int"],
   "send-delay": ["game.chat_send_delay", "float"],
   "output-backend": ["game.output_backend", "text"],
@@ -108,13 +149,26 @@ const BINDINGS = {
 
   "gsi-token": ["gsi.auth_token", "text"],
 
-  "voice-enabled": ["voice.enabled", "bool"],
+  "voice-speak-engine": ["voice.speak_engine", "text"],
   "voice-device": ["voice.device", "text"],
+  "voice-reply-with": ["voice.reply_with", "text"],
+  "voice-speak-device": ["voice.speak_device", "text"],
+  "voice-speak-monitor": ["voice.speak_monitor", "bool"],
+  "voice-monitor-device": ["voice.monitor_device", "text"],
+  "voice-resample-48k": ["voice.resample_48k", "bool"],
+  "voice-talk-key": ["voice.talk_key", "text"],
+  "voice-capture": ["voice.capture", "text"],
+  "voice-capture-app": ["voice.capture_process", "text"],
+  "voice-enabled": ["voice.enabled", "bool"],
+  "voice-enabled-speech": ["voice.enabled", "bool"],
+  "voice-speak-voice": ["voice.speak_voice", "text"],
+  "voice-speak-rate": ["voice.speak_rate", "number"],
   "voice-model": ["voice.model", "text"],
+  "voice-answer": ["voice.answer", "text"],
   "voice-triggers": ["voice.trigger_words", "list"],
-  "voice-obey": ["voice.obey_commands", "bool"],
   "voice-cooldown": ["voice.cooldown_seconds", "float"],
   "voice-min-words": ["voice.min_words", "int"],
+  "voice-stale-seconds": ["voice.stale_seconds", "float"],
   "voice-floor": ["voice.noise_floor", "float"],
 };
 
@@ -160,10 +214,20 @@ function writeField(el, kind, value) {
 }
 
 function renderConfig() {
+  renderPresetChoices();
+  keepChosen($("speech-model"), config.llm.speech_ollama_model);
+  keepChosen($("chat-model"), config.llm.ollama_model);
   for (const [id, [path, kind]] of Object.entries(BINDINGS)) {
     const el = $(id);
     if (el) writeField(el, kind, getPath(config, path));
   }
+  renderPlacement();
+  renderOrderOptions();
+  renderModelOptions();
+  $("speech-persona-block").style.display = config.speech_same_persona ? "none" : "";
+  const remote = isRemote(config.llm.ollama_url);
+  $("use-server").checked = remote;
+  $("server-block").style.display = remote ? "" : "none";
   $("reply-all").checked = config.behavior.reply_channels.includes("all");
   $("reply-team").checked = config.behavior.reply_channels.includes("team");
   renderDials();
@@ -186,11 +250,33 @@ function renderDials() {
 }
 
 function renderSavedPersonas() {
-  const select = $("persona-saved");
-  const names = Object.keys(config.saved_personas || {});
-  select.innerHTML = names.length
-    ? names.map((n) => `<option value="${n}">${n}</option>`).join("")
-    : '<option value="">(nothing saved)</option>';
+  renderPresetChoices();
+}
+
+function personaChoices() {
+  const option = (name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+  const saved = Object.keys(config.saved_personas || {});
+  return (
+    `<optgroup label="Built in">${Object.keys(presets).map(option).join("")}</optgroup>` +
+    (saved.length ? `<optgroup label="Your personas">${saved.map(option).join("")}</optgroup>` : "")
+  );
+}
+
+function renderPresetChoices() {
+  $("preset").innerHTML = '<option value="">— choose a preset —</option>' + personaChoices();
+  const current = config.persona.name;
+  const names = [...Object.keys(presets), ...Object.keys(config.saved_personas || {})];
+  $("persona-pick").innerHTML =
+    (names.includes(current) ? "" : `<option value="">${escapeHtml(current || "custom")}</option>`) + personaChoices();
+  $("persona-pick").value = names.includes(current) ? current : "";
+}
+
+function wearPersona(name) {
+  const preset = (config.saved_personas || {})[name] || presets[name];
+  if (!preset) return;
+  config.persona = structuredClone(preset);
+  renderConfig();
+  scheduleSave();
 }
 
 function scheduleSave() {
@@ -198,17 +284,53 @@ function scheduleSave() {
   saving = setTimeout(saveConfig, 350);
 }
 
+const SECTION_NAMES = {
+  persona: "personality",
+  speech_persona: "speech personality",
+  behavior: "behaviour",
+  llm: "models",
+  voice: "voice",
+  game: "CS2",
+  generation: "sampling",
+  strategy: "strats",
+  enabled: "bot on/off",
+};
+
+let saveNoteTimer = null;
+let saveInFlight = false;
+
+function showSaveNote(text, failed = false) {
+  const note = $("save-note");
+  if (!note) return;
+  note.textContent = text;
+  note.classList.toggle("failed", failed);
+  note.hidden = false;
+  clearTimeout(saveNoteTimer);
+  saveNoteTimer = setTimeout(() => (note.hidden = true), failed ? 8000 : 3500);
+}
+
 async function saveConfig() {
-  const response = await fetch("/api/config", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
+  saving = null;
+  saveInFlight = true;
+  let response;
+  try {
+    response = await fetch("/api/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+  } finally {
+    saveInFlight = false;
+  }
   if (!response.ok) {
     pushEvent({ kind: "error", data: { message: `saving settings failed (${response.status})` } });
+    showSaveNote(`not saved (${response.status}) - change it again`, true);
     return;
   }
-  config = await response.json();
+  const body = await response.json();
+  if (saving === null) config = body.config;
+  const what = (body.changed || []).map((name) => SECTION_NAMES[name] || name.replaceAll("_", " "));
+  showSaveNote(what.length ? `saved: ${what.join(", ")} - in effect now` : "saved - nothing changed");
 }
 
 function bindInputs() {
@@ -217,7 +339,11 @@ function bindInputs() {
     if (!el) continue;
     el.addEventListener("input", () => {
       setPath(config, path, readField(el, kind));
+      for (const [other, [otherPath]] of Object.entries(BINDINGS))
+        if (other !== id && otherPath === path && $(other)) writeField($(other), kind, readField(el, kind));
       if (["iq", "literacy", "reply-delay", "humanized-typing"].includes(id)) renderDials();
+      if (path === "strategy.obey_commands") renderOrderOptions();
+      if (path === "llm.chat_enabled" || path === "llm.speech_enabled") renderModelOptions();
       scheduleSave();
     });
   }
@@ -231,6 +357,37 @@ function bindInputs() {
   }
 }
 
+function placementOf(llm) {
+  if (llm.cpu_only) return "cpu";
+  if (!llm.gpu_auto && llm.n_gpu_layers >= 0) return "split";
+  return "gpu";
+}
+
+function applyPlacement(mode) {
+  const llm = config.llm;
+  if (mode === "cpu") {
+    llm.cpu_only = true;
+  } else if (mode === "split") {
+    llm.cpu_only = false;
+    llm.gpu_auto = false;
+    llm.n_gpu_layers = Math.max(1, Number($("split-layers").value || 16));
+  } else {
+    llm.cpu_only = false;
+    llm.gpu_auto = true;
+    llm.n_gpu_layers = -1;
+  }
+  renderPlacement();
+}
+
+function renderPlacement() {
+  const mode = placementOf(config.llm);
+  $("llm-placement").value = mode;
+  $("split-layers-label").style.display = mode === "split" ? "" : "none";
+  if (mode === "split") $("split-layers").value = config.llm.n_gpu_layers;
+  else if (!$("split-layers").value) $("split-layers").value = 16;
+  $("n_gpu_layers").value = config.llm.cpu_only ? 0 : config.llm.n_gpu_layers;
+}
+
 function bindTabs() {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -238,7 +395,8 @@ function bindTabs() {
       document.querySelectorAll(".panel").forEach((panel) => {
         panel.dataset.active = String(panel.dataset.panel === tab.dataset.tab);
       });
-      if (tab.dataset.tab === "voice") renderVoice();
+      if (tab.dataset.tab === "speech") renderVoice();
+      if (tab.dataset.tab === "advanced") renderGpu();
     });
   });
 }
@@ -286,12 +444,6 @@ function pushEvent(event) {
       `reply ${data.delivered ? "" : "failed"}`,
       `${data.latency_ms}ms · ${escapeHtml(data.reason)}`,
     );
-  } else if (event.kind === "reveal") {
-    line(
-      `<span class="who">reveal →</span> ${escapeHtml(data.text)}`,
-      `reply ${data.delivered ? "" : "failed"}`,
-      escapeHtml(data.reason),
-    );
   } else if (event.kind === "strategy") {
     line(
       `<span class="who">strat →</span> ${escapeHtml(data.text)}`,
@@ -301,10 +453,13 @@ function pushEvent(event) {
       ),
     );
   } else if (event.kind === "command") {
+    const orders = {
+      quiet: `${escapeHtml(data.by)} told the bot to be quiet`,
+      talk: `${escapeHtml(data.by)} told the bot to talk again`,
+      persona: `${escapeHtml(data.by)} made the bot ${escapeHtml(data.to || "")}`,
+    };
     line(
-      data.kind === "quiet"
-        ? `${escapeHtml(data.by)} told the bot to be quiet`
-        : `${escapeHtml(data.by)} told the bot to talk again`,
+      orders[data.kind] || escapeHtml(data.kind),
       "gamestate",
       data.kind === "quiet" ? escapeHtml(`for ${data.for}s`) : "",
     );
@@ -327,11 +482,11 @@ function pushEvent(event) {
   } else if (event.kind === "identity") {
     line(`your name looks like "${escapeHtml(data.name)}"`, "gamestate", escapeHtml(data.source));
   } else if (event.kind === "gamestate") {
-    line(
-      `game state: ${escapeHtml(data.state)}${data.health != null ? ` (${data.health} hp)` : ""}`,
-      "gamestate",
-      escapeHtml([data.map_name, data.round_phase].filter(Boolean).join(" · ")),
-    );
+    const extra = [data.map_name, data.round_phase].filter(Boolean).join(" · ");
+    $("gamestate-line").textContent =
+      data.state === "unknown" || !data.state
+        ? "game state: unknown (CS2 is not sending game state - check the GSI setup on the Game tab)"
+        : `game state: ${data.state}${data.health != null ? ` (${data.health} hp)` : ""}${extra ? ` - ${extra}` : ""}`;
   }
 }
 
@@ -343,13 +498,16 @@ function renderStatus(status) {
   };
   setPill("pill-state", `you: ${status.local_state}`, status.local_state === "dead" ? "bad" : "good");
   setPill("pill-gsi", status.gsi_connected ? "gsi: connected" : "gsi: waiting", status.gsi_connected ? "good" : "warn");
-  setPill("pill-log", status.log_attached ? "log: attached" : "log: detached", status.log_attached ? "good" : "warn");
+  const logText =
+    status.log_source === "fallback" ? "log: own log (CS2 log missing)" : status.log_attached ? "log: attached" : "log: detached";
+  setPill("pill-log", logText, status.log_attached && status.log_source === "cs2" ? "good" : "warn");
+  $("pill-log").title = status.log_reason || "reading CS2's console.log";
   setPill(
     "pill-llm",
     `llm: ${status.llm_backend}`,
     status.llm_status.startsWith("error") ? "bad" : status.llm_status === "not checked" ? "" : "good",
   );
-  setPill("pill-sender", `output: ${status.sender}`);
+  if (status.pull_status) $("pull-note").textContent = status.pull_status;
   setPill(
     "pill-name",
     `you: ${status.own_name || "unknown"}`,
@@ -374,7 +532,9 @@ function connect() {
     }
     if (event.kind === "status") return renderStatus(event.data);
     if (event.kind === "config") {
-      config = event.data;
+      // The bot changed its own settings (order from chat, model fallback). Edits that are still
+      // on their way to the server must not be overwritten by the copy from before them.
+      if (saving === null && !saveInFlight) config = event.data;
       return;
     }
     pushEvent(event);
@@ -397,12 +557,38 @@ function bindActions() {
 
   $("clear-feed").addEventListener("click", () => ($("feed").innerHTML = ""));
 
-  $("preset").addEventListener("change", () => {
-    const preset = presets[$("preset").value];
-    if (!preset) return;
-    config.persona = structuredClone(preset);
-    renderConfig();
-    scheduleSave();
+  $("preset").addEventListener("change", () => wearPersona($("preset").value));
+  $("persona-pick").addEventListener("change", () => wearPersona($("persona-pick").value));
+
+  $("refresh-models").addEventListener("click", renderModels);
+  fillSpeechModels();
+  $("pull-speech-model").addEventListener("click", async () => {
+    const tag = $("speech-model").value || config.llm.ollama_model;
+    $("pull-note").textContent = `installing ${tag}…`;
+    const body = await (await fetch("/api/llm/pull", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: tag }) })).json();
+    $("pull-note").textContent = body.status;
+  });
+  $("speech-same-persona").addEventListener("change", () => {
+    $("speech-persona-block").style.display = $("speech-same-persona").checked ? "none" : "";
+  });
+  $("refresh-gpu").addEventListener("click", renderGpu);
+
+  $("use-remote").addEventListener("click", async () => {
+    $("use-server").checked = true;
+    $("server-block").style.display = "";
+    let host = $("remote-host").value.trim();
+    if (!host) return;
+    if (!/^https?:\/\//.test(host)) host = `http://${host}`;
+    if (!/:\d+$/.test(host)) host = `${host}:11434`;
+    config.llm.backend = "ollama";
+    config.llm.ollama_url = host;
+    config.llm.cpu_only = false;
+    $("llm-backend").value = "ollama";
+    $("ollama-url").value = host;
+    $("remote-note").textContent = "checking…";
+    await saveConfig();
+    const response = await fetch("/api/llm/check", { method: "POST" });
+    $("remote-note").textContent = (await response.json()).status;
   });
 
   $("check-llm").addEventListener("click", async () => {
@@ -428,24 +614,21 @@ function bindActions() {
     config.saved_personas[name] = structuredClone(config.persona);
     $("persona-save-name").value = "";
     renderSavedPersonas();
-    $("persona-saved").value = name;
-    $("persona-note").textContent = `saved "${name}"`;
-  });
-
-  $("persona-load").addEventListener("click", () => {
-    const saved = config.saved_personas[$("persona-saved").value];
-    if (!saved) return;
-    config.persona = structuredClone(saved);
-    renderConfig();
-    scheduleSave();
+    $("preset").value = name;
+    $("persona-note").textContent = `saved "${name}" - it is in the Preset list`;
   });
 
   $("persona-delete").addEventListener("click", async () => {
-    const name = $("persona-saved").value;
-    if (!name || !confirm(`Delete persona "${name}"?`)) return;
+    const name = $("preset").value;
+    if (!(name in (config.saved_personas || {}))) {
+      $("persona-note").textContent = "pick one of your personas in the Preset list first";
+      return;
+    }
+    if (!confirm(`Delete persona "${name}"?`)) return;
     await fetch(`/api/personas/${encodeURIComponent(name)}`, { method: "DELETE" });
     delete config.saved_personas[name];
     renderSavedPersonas();
+    $("persona-note").textContent = `deleted "${name}"`;
   });
 
   $("callout-add").addEventListener("click", async () => {
@@ -484,6 +667,163 @@ function bindActions() {
       : `heard "${body.heard}" — said nothing back`;
   });
 
+  $("voice-cable-install").addEventListener("click", async () => {
+    $("voice-cable-status").textContent = "downloading VB-Cable… accept the Windows prompt when it appears";
+    const body = await (await fetch("/api/voice/cable/install", { method: "POST" })).json();
+    $("voice-cable-status").textContent = body.detail;
+  });
+  $("voice-cable-use").addEventListener("click", async () => {
+    const body = await (await fetch("/api/voice/cable")).json();
+    if (!body.input_id) {
+      $("voice-cable-status").textContent = "no CABLE Input device found - install VB-Cable and restart Windows first";
+      return;
+    }
+    config.voice.speak_device = body.input_id;
+    await renderVoice();
+    $("voice-cable-status").textContent = "playing into CABLE Input - now set CS2's microphone to CABLE Output and save";
+  });
+  $("voice-capture").addEventListener("change", () => {
+    $("voice-capture-app").disabled = $("voice-capture").value === "pc";
+  });
+  $("voice-engine-install").addEventListener("click", async () => {
+    const id = $("voice-speak-engine").value;
+    $("voice-engine-note").textContent = "downloading… this can take a few minutes";
+    $("voice-engine-install").disabled = true;
+    const body = await (
+      await fetch("/api/voice/engines/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engine: id, voice: $("voice-speak-voice").value }),
+      })
+    ).json();
+    $("voice-engine-install").disabled = false;
+    $("voice-engine-note").textContent = body.detail;
+    await renderVoice();
+  });
+  const sendClone = async (payload) => {
+    $("voice-clone-note").textContent = "saving the clip…";
+    const save_as = $("voice-clone-name").value.trim();
+    const body = await (
+      await fetch("/api/voice/clone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, save_as }),
+      })
+    ).json();
+    $("voice-clone-note").textContent = body.detail;
+    if (body.ok && save_as) {
+      $("voice-clone-name").value = "";
+      config = (await (await fetch("/api/config")).json()).config;
+    }
+    await renderVoice();
+  };
+  $("voice-clone-delete").addEventListener("click", async () => {
+    const body = await (
+      await fetch("/api/voice/clone/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voice: $("voice-speak-voice").value }),
+      })
+    ).json();
+    $("voice-clone-note").textContent = body.detail;
+    if (body.ok) config = (await (await fetch("/api/config")).json()).config;
+    await renderVoice();
+  });
+  $("voice-clone-file").addEventListener("change", () => {
+    const file = $("voice-clone-file").files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => sendClone({ file: reader.result, name: file.name });
+    reader.readAsDataURL(file);
+  });
+  $("voice-clone-url-go").addEventListener("click", () => {
+    const url = $("voice-clone-url").value.trim();
+    if (url) sendClone({ url });
+  });
+  $("voice-clone-last").addEventListener("click", () => sendClone({ source: "last" }));
+  $("voice-speak-voice").addEventListener("change", () => renderVoice());
+  $("voice-speak-engine").addEventListener("change", async () => {
+    config.voice.speak_engine = $("voice-speak-engine").value;
+    config.voice.speak_voice = "";
+    await saveConfig();
+    await renderVoice();
+  });
+  $("llm-placement").addEventListener("change", () => applyPlacement($("llm-placement").value));
+  $("split-layers").addEventListener("change", () => applyPlacement("split"));
+  $("check-updates").addEventListener("click", () => checkServerVersion(true));
+  $("update-badge").addEventListener("click", () => {
+    document.querySelector('[data-tab="server"]').click();
+  });
+  $("test-server").addEventListener("click", async () => {
+    $("server-test-note").textContent = "testing the server…";
+    await saveConfig();
+    const response = await fetch("/api/llm/check", { method: "POST" });
+    $("server-test-note").textContent = (await response.json()).status;
+    await checkServerVersion();
+  });
+  $("use-server").addEventListener("change", async () => {
+    const on = $("use-server").checked;
+    $("server-block").style.display = on ? "" : "none";
+    if (!on) {
+      config.llm.backend = "ollama";
+      $("llm-backend").value = "ollama";
+      config.llm.ollama_url = LOCAL_OLLAMA;
+      $("ollama-url").value = LOCAL_OLLAMA;
+      $("server-test-note").textContent = "back to this PC";
+      await saveConfig();
+    }
+  });
+  $("update-server").addEventListener("click", async () => {
+    $("server-version").textContent = "asking the server to update…";
+    $("update-server").hidden = true;
+    $("update-badge").hidden = true;
+    const response = await fetch("/api/server/update", { method: "POST" });
+    const data = await response.json();
+    $("server-version").textContent = data.error
+      ? data.error
+      : `${data.status} - it downloads and installs on its own; test again in a few minutes`;
+  });
+  $("voice-preview").addEventListener("click", async () => {
+    const voice = $("voice-speak-voice").value;
+    $("voice-speak-output").textContent = "fetching the voice if needed, then playing on your speakers…";
+    const body = await (
+      await fetch("/api/voice/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voice,
+          engine: $("voice-speak-engine").value,
+          rate: Number($("voice-speak-rate").value || 0),
+        }),
+      })
+    ).json();
+    $("voice-speak-output").textContent = body.detail;
+    await renderVoice();
+  });
+  $("voice-talk-key-detect").addEventListener("click", async () => {
+    $("voice-talk-key-note").textContent = "reading CS2's keybinds…";
+    const body = await (await fetch("/api/voice/talk-key")).json();
+    if (body.key) {
+      config.voice.talk_key = body.key;
+      $("voice-talk-key").value = body.key;
+      $("voice-talk-key-note").textContent = `detected "${body.key}" in ${body.where}`;
+      await saveConfig();
+    } else {
+      $("voice-talk-key-note").textContent = body.where;
+    }
+  });
+  $("voice-speak-test").addEventListener("click", async () => {
+    $("voice-speak-output").textContent = "speaking…";
+    const response = await fetch("/api/voice/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "mic check, this is the bot" }),
+    });
+    const body = await response.json();
+    $("voice-speak-output").textContent = body.spoken
+      ? `${body.detail} - did your team hear it?`
+      : `could not speak: ${body.detail}`;
+  });
   $("voice-restart").addEventListener("click", async () => {
     await saveConfig();
     await fetch("/api/voice/restart", { method: "POST" });
@@ -566,6 +906,39 @@ function bindActions() {
       .join("\n");
   });
 
+  $("speed-run").addEventListener("click", async () => {
+    const button = $("speed-run");
+    button.disabled = true;
+    $("speed-note").textContent = "running - up to a minute…";
+    $("speed-output").textContent = "timing each stage…";
+    $("speed-copy").hidden = true;
+    try {
+      await saveConfig();
+      const response = await fetch("/api/speedtest", { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) {
+        $("speed-output").textContent = body.detail || `failed (${response.status})`;
+        $("speed-note").textContent = "";
+        return;
+      }
+      $("speed-output").textContent = body.report;
+      $("speed-note").textContent = body.summary;
+      $("speed-copy").hidden = false;
+    } catch (err) {
+      $("speed-output").textContent = `failed: ${err}`;
+      $("speed-note").textContent = "";
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("speed-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("speed-output").textContent);
+      $("speed-note").textContent = "copied - paste it to the developer";
+    } catch (err) {
+      $("speed-note").textContent = `could not copy: ${err}`;
+    }
+  });
   $("sim-run").addEventListener("click", async () => {
     $("sim-output").textContent = "generating…";
     await saveConfig();
@@ -589,8 +962,11 @@ function bindActions() {
 async function renderLog() {
   const body = await (await fetch("/api/log")).json();
   const size = body.log_exists ? `${body.log_size} bytes, last written ${body.log_modified}` : "missing";
-  $("log-note").textContent = `${body.path || "no path set"} — ${size}`;
-  if (!body.log_exists) {
+  $("log-note").textContent =
+    body.source === "fallback"
+      ? `${body.reason} — meanwhile reading the bot's own log at ${body.reading}`
+      : `${body.path || "no path set"} — ${size}`;
+  if (!body.log_exists && body.source !== "fallback") {
     $("log-output").textContent =
       "CS2 has not created this file. Add -condebug to the launch options and restart the game.";
     return;
@@ -606,6 +982,54 @@ async function renderLog() {
     .join("\n");
 }
 
+function renderModelOptions() {
+  $("chat-answers").style.display = config.llm.chat_enabled ? "" : "none";
+  $("speech-answers").style.display = config.llm.speech_enabled ? "" : "none";
+}
+
+function renderOrderOptions() {
+  for (const id of ["obey-options", "obey-options-speech"])
+    $(id).style.display = config.strategy.obey_commands ? "" : "none";
+}
+
+function renderEngineInstall(engine, status) {
+  const hf = (status.engines || []).find((e) => e.id === engine);
+  const button = $("voice-engine-install");
+  const note = $("voice-engine-note");
+  const kokoro = status.kokoro || {};
+  const wording = (ready, downloading, size) =>
+    ready ? "installed" : downloading ? "downloading…" : `not installed - ${size} MB, press Install`;
+  if (engine === "kokoro") {
+    button.hidden = kokoro.ready;
+    note.textContent = wording(kokoro.ready, kokoro.downloading, kokoro.size_mb);
+  } else if (engine === "piper") {
+    const voice = ((status.tts || {}).voices || []).find((v) => v.id === $("voice-speak-voice").value);
+    button.hidden = !voice || voice.ready;
+    note.textContent = voice ? wording(voice.ready, voice.downloading, voice.size_mb) : "";
+  } else if (engine === "windows") {
+    button.hidden = true;
+    note.textContent = "installed (part of Windows)";
+  } else if (hf) {
+    button.hidden = hf.ready;
+    note.textContent = hf.error ? `install failed: ${hf.error}` : wording(hf.ready, hf.downloading, hf.size_mb);
+  } else {
+    button.hidden = true;
+    note.textContent = "";
+  }
+  const clone = status.clone || {};
+  $("voice-clone-row").hidden = !(hf && hf.clones);
+  const chosen = $("voice-speak-voice").value || "";
+  $("voice-clone-delete").hidden = !(hf && hf.clones && chosen.startsWith("clone:"));
+  if (hf && hf.clones && chosen.startsWith("clone:"))
+    $("voice-clone-note").textContent = `using the saved voice "${
+      ((hf.voices || []).find((v) => v.id === chosen) || { label: chosen }).label
+    }" - clone another with a name in "Save as" to add more`;
+  else if (hf && hf.clones)
+    $("voice-clone-note").textContent = clone.ready
+      ? `clip ready: ${clone.seconds} s${clone.short ? " (short - 7+ s clones cleaner)" : ""}${clone.source ? ` - ${clone.source}` : ""}`
+      : "no clip yet - add one or the bot cannot speak with this engine";
+}
+
 async function renderVoice() {
   const body = await (await fetch("/api/voice")).json();
   const select = $("voice-device");
@@ -615,18 +1039,112 @@ async function renderVoice() {
       .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`)
       .join("");
   select.value = config.voice.device;
+  const apps = $("voice-capture-app");
+  const current = config.voice.capture_process || "cs2.exe";
+  const appNames = new Set([current, ...(body.apps || [])]);
+  apps.innerHTML = [...appNames].map((a) => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("");
+  apps.value = current;
+  apps.disabled = (config.voice.capture || "cs2") === "pc";
+  $("voice-capture-note").textContent = body.status.note || "";
+  const out = $("voice-speak-device");
+  out.innerHTML =
+    '<option value="">default speakers (your team will not hear it)</option>' +
+    body.devices
+      .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`)
+      .join("");
+  out.value = config.voice.speak_device;
+  const mon = $("voice-monitor-device");
+  mon.innerHTML =
+    '<option value="">default speakers</option>' +
+    body.devices
+      .map((d) => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`)
+      .join("");
+  mon.value = config.voice.monitor_device;
+  if (body.devices_error) $("voice-speak-output").textContent = `no output devices listed: ${body.devices_error}`;
+  const voices = $("voice-speak-voice");
+  const engine = config.voice.speak_engine || "kokoro";
+  const tts = body.status.tts || { voices: [] };
+  const kokoro = body.status.kokoro || { voices: [] };
+  const engineReady = {
+    kokoro: kokoro.ready,
+    piper: tts.voices.some((v) => v.ready),
+    windows: true,
+    ...Object.fromEntries((body.status.engines || []).map((e) => [e.id, e.ready])),
+  };
+  for (const option of $("voice-speak-engine").options) {
+    option.textContent = `${option.textContent.replace(/ \[(installed|not installed)\]$/, "")} [${
+      engineReady[option.value] ? "installed" : "not installed"
+    }]`;
+  }
+  $("voice-speak-engine").value = engine;
+  let options = "";
+  if (engine === "piper")
+    options = tts.voices
+      .map((v) => {
+        const note = v.ready ? "" : v.downloading ? " (downloading…)" : ` (not installed, ${v.size_mb} MB)`;
+        return `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`;
+      })
+      .join("");
+  else if (engine === "kokoro") {
+    const note = kokoro.ready ? "" : kokoro.downloading ? " (downloading…)" : " (not installed)";
+    const tiers = [["best", "Best - most human"], ["better", "Better"], ["good", "Good"]];
+    options = tiers
+      .map(
+        ([tier, title]) =>
+          `<optgroup label="${title}">` +
+          kokoro.voices
+            .filter((v) => v.tier === tier)
+            .map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}${note}</option>`)
+            .join("") +
+          "</optgroup>",
+      )
+      .join("");
+  } else if (engine === "windows")
+    options =
+      '<option value="">Windows default</option>' +
+      (body.voices || []).map((v) => `<option value="windows:${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  else {
+    const hf = (body.status.engines || []).find((e) => e.id === engine) || { voices: [] };
+    options = hf.voices.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label)}</option>`).join("");
+  }
+  voices.innerHTML = options;
+  renderEngineInstall(engine, body.status);
+  const known = [...voices.options].some((o) => o.value === config.voice.speak_voice);
+  voices.value = known ? config.voice.speak_voice : voices.options[0] ? voices.options[0].value : "";
+  config.voice.speak_voice = voices.value;
   const status = body.status;
+  fetch("/api/voice/cable")
+    .then((r) => r.json())
+    .then((cable) => {
+      $("voice-cable-status").textContent = cable.installed
+        ? `virtual microphone installed: ${cable.devices.join(", ")}`
+        : "virtual microphone not installed yet";
+    })
+    .catch(() => {});
+  if (status.speak_error)
+    $("voice-speak-output").textContent = status.speak_error.startsWith("monitor")
+      ? `spoken into the virtual mic, but your own copy did not play - ${status.speak_error}`
+      : `could not speak: ${status.speak_error}`;
+  else if (!status.speak_supported)
+    $("voice-speak-output").textContent = `cannot talk here: ${status.speak_unsupported_reason}`;
+  else if (status.said)
+    $("voice-speak-output").textContent = `said ${status.said} line${status.said === 1 ? "" : "s"}, last: "${status.last_said}"`;
   const lines = [];
-  if (!status.supported) lines.push(`cannot listen here: ${status.unsupported_reason}`);
-  else if (status.error) lines.push(`stopped: ${status.error}`);
+  if (status.error) lines.push(`stopped: ${status.error}`);
+  else if (!status.supported) lines.push(`cannot listen here: ${status.unsupported_reason}`);
   else if (status.downloading) lines.push(`downloading the ${status.model} speech model…`);
   else if (status.running) lines.push("listening");
+  else if (status.enabled && !status.bot_running) lines.push("not listening: the bot is not started");
   else if (status.enabled) lines.push("starting…");
   else lines.push("not listening");
   lines.push(
     `speech model: ${status.model} (${status.model_ready ? "ready" : "downloads on first use"})`,
     `heard ${status.heard} time${status.heard === 1 ? "" : "s"}${status.last_text ? `, last: "${status.last_text}"` : ""}`,
   );
+  if (status.note) lines.push(status.note);
+  if (status.running && status.level !== undefined)
+    lines.push(`input level: ${Math.round(Math.min(1, status.level) * 100)}%${status.level < 0.0001 ? " (silence)" : ""}`);
+  if (status.transcribe_note) lines.push(status.transcribe_note);
   $("voice-status").textContent = lines.join("\n");
 }
 
@@ -644,14 +1162,158 @@ async function renderCallouts() {
   $("callout-output").textContent = [head, where, "recorded:"].concat(recorded).join("\n");
 }
 
+const VERDICT_CLASS = { fits: "fits", tight: "tight", "cpu only": "cpu", "too big": "no", unknown: "no" };
+
+async function fillSpeechModels() {
+  const body = await (await fetch("/api/catalog")).json();
+  fillSpeechModelOptions(body.models);
+}
+
+const TIERS = [["best", "Best"], ["better", "Better"], ["good", "Good"]];
+
+function optionsFor(models) {
+  return models.map((m) => `<option value="${escapeHtml(m.ollama)}">${escapeHtml(m.label)}</option>`).join("");
+}
+
+function keepChosen(select, chosen) {
+  if (chosen && ![...select.options].some((o) => o.value === chosen)) {
+    select.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(chosen)}">${escapeHtml(chosen)}</option>`);
+  }
+  select.value = chosen;
+}
+
+function fillSpeechModelOptions(models) {
+  const groups = TIERS.filter(([tier]) => models.some((m) => m.speech_tier === tier))
+    .map(([tier, name]) => `<optgroup label="${name}">${optionsFor(models.filter((m) => m.speech_tier === tier))}</optgroup>`)
+    .join("");
+  $("speech-model").innerHTML = `<option value="">Same as the chat model</option>` + groups;
+  keepChosen($("speech-model"), config.llm.speech_ollama_model);
+  $("chat-model").innerHTML = optionsFor(models);
+  keepChosen($("chat-model"), config.llm.ollama_model);
+}
+
+const UPDATE_POLL_MS = 4 * 60 * 60 * 1000;
+
+async function checkServerVersion(byHand = false) {
+  if (byHand) $("server-version").textContent = "checking…";
+  let data;
+  try {
+    data = await (await fetch("/api/updates")).json();
+  } catch (error) {
+    $("server-version").textContent = `could not check: ${error}`;
+    return;
+  }
+  const server = data.server || {};
+  const latest = data.latest || {};
+  const lines = [`you: ${data.client}`];
+  if (server.error) lines.push(`server: unknown - ${server.error}`);
+  else if (server.updating) lines.push(`server: updating (${(server.log || []).slice(-1)[0] || "…"})`);
+  else lines.push(`server: ${server.version}${data.server_behind ? " - OUT OF DATE" : data.in_sync ? " - same as you" : ""}`);
+  lines.push(latest.error ? `latest release: unknown - ${latest.error}` : `latest release: ${latest.version}`);
+  if (data.client_behind) lines.push(`a newer client is out - get it at ${latest.url}`);
+  $("server-version").textContent = lines.join("\n");
+  const serverStale = data.server_behind && !server.updating && !server.error;
+  $("update-server").hidden = !serverStale;
+  $("update-badge").hidden = !serverStale;
+  $("update-badge").textContent = serverStale ? `server out of date (${server.version})` : "";
+}
+
+async function renderModels() {
+  $("hardware-note").textContent = "looking…";
+  const body = await (await fetch("/api/models")).json();
+  const hw = body.hardware;
+  const card = hw.vram_gb
+    ? `${hw.gpu || "GPU"}: ${hw.vram_gb}GB, about ${hw.vram_for_model_gb}GB free once CS2 has taken ${hw.cs2_reserve_gb}GB`
+    : "no GPU memory reported - the model would run on the CPU";
+  const ram = hw.ram_gb ? `${hw.ram_gb}GB system RAM` : "system RAM unknown";
+  $("hardware-note").textContent = `${card}\n${ram}`;
+  fillSpeechModelOptions(body.models);
+  $("model-picks").innerHTML = body.models
+    .map((model) => {
+      const tag = model.key === body.recommended ? " · best fit here" : "";
+      return `<div class="pick">
+        <div class="top">
+          <span class="name">${escapeHtml(model.label)}${escapeHtml(tag)}</span>
+          <span class="verdict ${VERDICT_CLASS[model.verdict] || "no"}">${escapeHtml(model.verdict)}</span>
+        </div>
+        <div class="why">${escapeHtml(model.why)} — ${escapeHtml(model.note)}</div>
+        <div class="specs">${model.params} · ${model.download_gb}GB download · ${model.vram_gb}GB VRAM or ${model.ram_gb}GB RAM · ${escapeHtml(model.ollama)}</div>
+        <div class="actions"><button class="action" data-use-model="${escapeHtml(model.key)}">Use this one</button></div>
+      </div>`;
+    })
+    .join("");
+  for (const button of $("model-picks").querySelectorAll("[data-use-model]")) {
+    const model = body.models.find((m) => m.key === button.dataset.useModel);
+    button.addEventListener("click", () => {
+      config.llm.backend = "ollama";
+      config.llm.ollama_model = model.ollama;
+      keepChosen($("chat-model"), model.ollama);
+      renderConfig();
+      scheduleSave();
+      $("llm-note").textContent = `set to ${model.ollama} - pull it with: ollama pull ${model.ollama}`;
+    });
+  }
+}
+
+async function gpuAction(path, body) {
+  const result = await (await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })).json();
+  $("gpu-note").textContent = result.detail;
+  await renderGpu();
+}
+
+async function renderGpu() {
+  const body = await (await fetch("/api/gpu")).json();
+  const card = body.vram_gb ? `${body.gpu}: ${body.vram_gb}GB` : "no GPU memory reported";
+  const used = body.nvidia_smi
+    ? `${(body.used_mb / 1024).toFixed(1)}GB in use by ${body.processes.length} process(es)`
+    : "nvidia-smi not found - per-process use is only readable on NVIDIA cards";
+  $("gpu-note").textContent = `${card}\n${used}`;
+  $("gpu-models").innerHTML = body.models.length
+    ? body.models
+        .map(
+          (m) => `<div class="pick"><div class="top">
+            <span class="name">${escapeHtml(m.name)}</span>
+            <span class="specs">${m.vram_gb}GB on the card of ${m.size_gb}GB</span></div>
+            <div class="actions"><button class="action" data-unload="${escapeHtml(m.name)}">Unload</button></div>
+          </div>`
+        )
+        .join("")
+    : '<div class="note">nothing loaded (or Ollama is not running)</div>';
+  $("gpu-processes").innerHTML = body.processes.length
+    ? body.processes
+        .map(
+          (p) => `<div class="pick"><div class="top">
+            <span class="name">${escapeHtml(p.name)} <span class="specs">pid ${p.pid}</span></span>
+            <span class="specs">${(p.used_mb / 1024).toFixed(1)}GB</span></div>
+            <div class="actions">${
+              p.protected
+                ? '<span class="note">kept - the game or the bot needs it</span>'
+                : `<button class="action" data-kill="${p.pid}">End process</button>`
+            }</div>
+          </div>`
+        )
+        .join("")
+    : '<div class="note">nothing to show</div>';
+  for (const button of $("gpu-models").querySelectorAll("[data-unload]")) {
+    button.addEventListener("click", () => gpuAction("/api/gpu/unload", { model: button.dataset.unload }));
+  }
+  for (const button of $("gpu-processes").querySelectorAll("[data-kill]")) {
+    button.addEventListener("click", () => gpuAction("/api/gpu/kill", { pid: Number(button.dataset.kill) }));
+  }
+}
+
 async function init() {
   const response = await fetch("/api/config");
   const body = await response.json();
   config = body.config;
   presets = body.presets;
-  $("preset").innerHTML =
-    '<option value="">— choose a preset —</option>' +
-    Object.keys(presets).map((name) => `<option value="${name}">${name}</option>`).join("");
+  renderPresetChoices();
+  checkServerVersion();
+  setInterval(checkServerVersion, UPDATE_POLL_MS);
   renderConfig();
   bindInputs();
   bindTabs();

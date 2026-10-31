@@ -3,11 +3,31 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 from .base import ChatTurn, LLMBackend, LLMError, SamplingParams
+
+THREAD_PRIORITY_BELOW_NORMAL = -1
+
+
+def threads_for_the_model() -> int:
+    """Half the cores: the model gets a fair share and CS2 keeps the other half."""
+    return max(1, (os.cpu_count() or 4) // 2)
+
+
+def _step_aside() -> None:
+    """Drop this worker's priority so inference never stalls the game's frames."""
+    if sys.platform != "win32":
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        kernel32.SetThreadPriority(kernel32.GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL)
+    except (AttributeError, OSError):  # pragma: no cover - depends on the desktop
+        return
 
 
 class LlamaCppBackend(LLMBackend):
@@ -23,13 +43,14 @@ class LlamaCppBackend(LLMBackend):
         self.model_path = model_path
         self.n_ctx = n_ctx
         self.n_gpu_layers = n_gpu_layers
-        self.n_threads = n_threads or (os.cpu_count() or 4)
+        self.n_threads = n_threads or threads_for_the_model()
         self._llama: Any | None = None
         self._lock = asyncio.Lock()
 
     def _load(self) -> Any:
         if self._llama is not None:
             return self._llama
+        _step_aside()
         if not self.model_path or not Path(self.model_path).is_file():
             raise LLMError(f"GGUF model not found: {self.model_path or '<unset>'}")
         try:
@@ -49,6 +70,7 @@ class LlamaCppBackend(LLMBackend):
 
     def _complete(self, turns: list[ChatTurn], params: SamplingParams) -> str:
         llama = self._load()
+        _step_aside()
         result = llama.create_chat_completion(
             messages=[{"role": t.role, "content": t.content} for t in turns],
             temperature=params.temperature,

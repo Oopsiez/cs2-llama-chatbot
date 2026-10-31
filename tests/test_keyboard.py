@@ -121,3 +121,48 @@ async def test_a_delivered_reply_writes_the_cfg_and_presses_the_bound_key(tmp_pa
     assert delivered
     assert pressed == ["k"]
     assert (tmp_path / "message.cfg").read_text() == 'say_team "nice shot"'
+
+
+class _StickyUser32(_FakeUser32):
+    """Windows that only registers the press on the second try and the release on the second."""
+
+    def __init__(self) -> None:
+        super().__init__([])
+        self.downs = 0
+        self.ups = 0
+
+    def SendInput(self, _count, events, _size) -> int:  # noqa: N802
+        self.calls += 1
+        if events._obj.union.ki.dwFlags & keyboard.KEYEVENTF_KEYUP:
+            self.ups += 1
+        else:
+            self.downs += 1
+        return 1
+
+    def MapVirtualKeyW(self, _code, _kind) -> int:  # noqa: N802
+        return 0x50
+
+    def GetAsyncKeyState(self, _vk) -> int:  # noqa: N802
+        return 0x8000 if self.downs >= 2 and self.ups < 2 else 0
+
+
+def test_holding_a_key_checks_it_went_down_and_came_back_up(monkeypatch):
+    user32 = _StickyUser32()
+    _fake_windows(monkeypatch, user32)
+    monkeypatch.setattr(keyboard.time, "sleep", lambda _s: None)
+
+    with keyboard.hold("p"):
+        assert user32.downs == 2
+    assert user32.ups == 2
+
+
+def test_a_refused_scan_code_falls_back_to_the_legacy_api(monkeypatch):
+    user32 = _FakeUser32([0, 1])
+    user32.legacy = []
+    user32.keybd_event = lambda vk, scan, flags, extra: user32.legacy.append((scan, flags))
+    _fake_windows(monkeypatch, user32)
+    monkeypatch.setattr(ctypes, "get_last_error", lambda: 0, raising=False)
+
+    keyboard.press("p")
+
+    assert user32.legacy and user32.legacy[0][0] == keyboard.scan_code("p")

@@ -13,17 +13,56 @@ import random
 import re
 
 _ADJACENT = {
-    "a": "sq", "b": "vn", "c": "xv", "d": "sf", "e": "wr", "f": "dg", "g": "fh", "h": "gj",
-    "i": "uo", "j": "hk", "k": "jl", "l": "k", "m": "n", "n": "bm", "o": "ip", "p": "o",
-    "q": "wa", "r": "et", "s": "ad", "t": "ry", "u": "yi", "v": "cb", "w": "qe", "x": "zc",
-    "y": "tu", "z": "x",
+    "a": "sq",
+    "b": "vn",
+    "c": "xv",
+    "d": "sf",
+    "e": "wr",
+    "f": "dg",
+    "g": "fh",
+    "h": "gj",
+    "i": "uo",
+    "j": "hk",
+    "k": "jl",
+    "l": "k",
+    "m": "n",
+    "n": "bm",
+    "o": "ip",
+    "p": "o",
+    "q": "wa",
+    "r": "et",
+    "s": "ad",
+    "t": "ry",
+    "u": "yi",
+    "v": "cb",
+    "w": "qe",
+    "x": "zc",
+    "y": "tu",
+    "z": "x",
 }
 
 _ABBREVIATIONS = {
-    "you": "u", "your": "ur", "you're": "ur", "are": "r", "okay": "ok", "please": "pls",
-    "thanks": "ty", "thank": "ty", "because": "cuz", "people": "ppl", "probably": "prob",
-    "really": "rly", "about": "abt", "with": "w", "though": "tho", "right": "rite",
-    "what": "wat", "want": "wanna", "going": "gonna", "yes": "ya", "know": "kno",
+    "you": "u",
+    "your": "ur",
+    "you're": "ur",
+    "are": "r",
+    "okay": "ok",
+    "please": "pls",
+    "thanks": "ty",
+    "thank": "ty",
+    "because": "cuz",
+    "people": "ppl",
+    "probably": "prob",
+    "really": "rly",
+    "about": "abt",
+    "with": "w",
+    "though": "tho",
+    "right": "rite",
+    "what": "wat",
+    "want": "wanna",
+    "going": "gonna",
+    "yes": "ya",
+    "know": "kno",
 }
 
 
@@ -102,15 +141,229 @@ def _typo(word: str, rng: random.Random) -> str:
     return word[:index] + word[index + 1 :]  # dropped key
 
 
-def humanize(text: str, literacy: int, max_chars: int, seed: int | None = None) -> str:
-    """Apply the literacy-dependent degradation and trim to the chat limit."""
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+_CENSOR_MARKS = re.compile(r"\[(?:expletive|censored|bleep|redacted)\]|\(?bleep\)?", re.IGNORECASE)
+_MASKED_WORD = re.compile(r"(?<![\w*])([A-Za-z])[*#@$%]{2,}([A-Za-z]*)")
+_UNMASK = {
+    "f": "fuck",
+    "s": "shit",
+    "b": "bitch",
+    "a": "ass",
+    "d": "damn",
+    "c": "cunt",
+    "p": "pussy",
+    "n": "nigga",
+    "h": "hell",
+    "w": "whore",
+}
+
+
+def uncensor(text: str) -> str:
+    """Drop every asterisk and censor mark a model slipped in: `f***ing` -> `fucking`, `*sighs*`
+    -> `sighs`, `[expletive]` -> gone. The bot never bleeps itself."""
+
+    def unmask(match: re.Match[str]) -> str:
+        first, tail = match.group(1), match.group(2)
+        word = _UNMASK.get(first.lower())
+        if word is None:
+            return first + tail
+        if first.isupper():
+            word = word.capitalize()
+        if tail and word.lower().endswith(tail.lower()):
+            return word
+        return word + tail
+
+    text = _MASKED_WORD.sub(unmask, text)
+    text = _CENSOR_MARKS.sub("", text)
+    text = text.replace("*", "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+_DROPPED_G = re.compile(r"\b([A-Za-z]{2,}?)in['\u2019]?(?=\W|$)")
+_NOT_DROPPED_G = {
+    "again",
+    "begin",
+    "within",
+    "cabin",
+    "basin",
+    "robin",
+    "satin",
+    "latin",
+    "resin",
+    "cousin",
+    "margin",
+    "origin",
+    "virgin",
+    "ruin",
+    "coin",
+    "join",
+    "rain",
+    "brain",
+    "train",
+    "main",
+    "chain",
+    "plain",
+    "gain",
+    "pain",
+    "spain",
+    "stain",
+    "vain",
+    "grain",
+    "drain",
+    "twin",
+    "skin",
+    "thin",
+    "spin",
+    "grin",
+    "chin",
+    "shin",
+    "pin",
+    "win",
+    "bin",
+    "fin",
+    "gin",
+    "sin",
+    "tin",
+    "dolphin",
+    "muffin",
+    "penguin",
+    "protein",
+    "captain",
+    "certain",
+    "mountain",
+    "curtain",
+    "bargain",
+    "fountain",
+    "villain",
+    "explain",
+    "contain",
+    "remain",
+    "obtain",
+    "maintain",
+    "entertain",
+    "complain",
+    "sustain",
+    "terrain",
+    "domain",
+    "login",
+    "admin",
+    "assassin",
+    "bulletin",
+    "vitamin",
+    "javelin",
+    "aspirin",
+    "penicillin",
+    "goblin",
+    "kremlin",
+    "berlin",
+    "dublin",
+    "austin",
+    "kevin",
+    "martin",
+    "justin",
+    "colin",
+    "benjamin",
+    "gavin",
+    "calvin",
+    "melvin",
+    "marvin",
+    "franklin",
+    "destin",
+    "mirin",
+    "ravin",
+}
+
+
+def for_speech(text: str) -> str:
+    """`text` the way a voice engine should read it: dropped g's spelled back ("makin'" ->
+    "making", "nothin" -> "nothing") so it is not read as "mac-in"; everything else untouched."""
+
+    def respell(match: re.Match[str]) -> str:
+        word = match.group(0)
+        bare = word.rstrip("'\u2019")
+        if bare.lower() in _NOT_DROPPED_G or bare.lower().endswith("ing"):
+            return word
+        return bare + "g"
+
+    return _DROPPED_G.sub(respell, text)
+
+
+_FRAGMENT_WORDS = 3
+
+
+def sentences_of(text: str) -> list[str]:
+    """`text` split into sentences; a stub such as "Nice!" or "Okay." rides with what follows it."""
+    out: list[str] = []
+    for piece in _SENTENCE_END.split(text.strip()):
+        if out and len(out[-1].split()) < _FRAGMENT_WORDS:
+            out[-1] = f"{out[-1]} {piece}"
+        else:
+            out.append(piece)
+    return out
+
+
+def first_sentences(text: str, limit: int) -> str:
+    """The first `limit` sentences of `text` (0 = all of it), so a spoken line stays a line."""
+    if limit <= 0:
+        return text
+    return " ".join(sentences_of(text)[:limit]).strip()
+
+
+def first_words(text: str, limit: int) -> str:
+    """The first `limit` words of `text` (0 = all of it), ending at the last sentence end that fits
+    when there is one, so a cut line still sounds finished."""
+    words = text.split()
+    if limit <= 0 or len(words) <= limit:
+        return text
+    kept = " ".join(words[:limit])
+    ends = [m.end() for m in re.finditer(r"[.!?]+(?=\s|$)", kept)]
+    if ends and ends[-1] >= len(kept) // 2:
+        return kept[: ends[-1]].strip()
+    return kept.rstrip(",;:-") + "..."
+
+
+SPECIAL_TOKEN = re.compile(r"<\|[^|<>]{1,32}\|>")  # <|im_end|>, <|eot_id|> ... leaked by some GGUFs
+
+
+def strip_own_name(text: str, name: str) -> str:
+    """`text` without the bot's own name as a prefix ("Name: ...") or a sign-off ("... - Name",
+    "... Name", "...Name!"); models love to sign what they say."""
+    if not name.strip():
+        return text
+    own = re.escape(name.strip())
+    text = re.sub(rf"^\W{{0,2}}{own}\W{{0,2}}\s*[:\-\u2013\u2014]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(
+        rf"[\s,\-\u2013\u2014~]*\W{{0,2}}{own}\W{{0,3}}\s*$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text.strip()
+
+
+def humanize(
+    text: str,
+    literacy: int,
+    max_chars: int,
+    seed: int | None = None,
+    name: str = "",
+    spoken: bool = False,
+) -> str:
+    """Apply the literacy-dependent degradation and trim to the chat limit (`max_chars` 0 = none).
+    A `spoken` line keeps full words, case and punctuation: "u r rite" is typing, not speech."""
     rng = random.Random(seed)
     level = max(0, min(100, literacy))
-    result = re.sub(r"\s+", " ", text).strip().strip('"')
+    result = re.sub(r"\s+", " ", SPECIAL_TOKEN.sub(" ", text)).strip().strip('"')
 
     # Models love to prefix replies with the speaker's name or stage directions.
     result = re.sub(r"^\s*\*[^*]{0,60}\*\s*", "", result)
+    result = uncensor(result)
     result = re.sub(r"^[A-Za-z0-9_\-\[\]]{1,24}\s*:\s+", "", result)
+    result = strip_own_name(result, name)
+    if spoken:
+        level = 100
 
     if level < 60:
         words = result.split(" ")
@@ -128,7 +381,7 @@ def humanize(text: str, literacy: int, max_chars: int, seed: int | None = None) 
 
     word_cap = max(3, int(round(4 + level * 0.26)))
     words = result.split(" ")
-    if len(words) > word_cap:
+    if max_chars > 0 and len(words) > word_cap:
         result = " ".join(words[:word_cap])
 
     if max_chars > 0 and len(result) > max_chars:
