@@ -471,6 +471,8 @@ function pushEvent(event) {
     );
   } else if (event.kind === "skipped") {
     line(`skipped ${escapeHtml(data.message.sender)}`, "skipped", escapeHtml(data.reason));
+  } else if (event.kind === "note") {
+    line(escapeHtml(data.message), "gamestate", "");
   } else if (event.kind === "repeat") {
     line(
       `too similar, retrying: ${escapeHtml(data.text)}`,

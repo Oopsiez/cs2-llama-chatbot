@@ -650,3 +650,16 @@ async def test_spoken_token_budget_fits_the_word_cap():
     assert engine._speech_params(engine._sampling_params()).max_tokens == 96
     engine.config.speech_max_words = 10
     assert engine._speech_params(engine._sampling_params()).max_tokens == 36
+
+
+@pytest.mark.asyncio
+async def test_a_personality_change_forgets_what_the_old_one_said():
+    engine = build_engine()
+    engine.history.append(chat(sender="Gavin", text="hi"))
+    engine.history.append(chat(sender="SteamySlayer", text="yo", is_self=True))
+    engine.recent_replies.append("yo")
+    updated = engine.config.model_copy(deep=True)
+    updated.persona.description = "You are a calm, polite coach."
+    await engine.apply_config(updated, persist=False)
+    assert [m.sender for m in engine.history] == ["Gavin"]
+    assert engine.recent_replies == []

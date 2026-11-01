@@ -322,6 +322,13 @@ class Engine:
             if self._tailer is not None:
                 self._tailer.close()
             self._tailer = None
+        if (
+            config.persona != old.persona
+            or config.speech_persona != old.speech_persona
+            or config.speech_same_persona != old.speech_same_persona
+            or config.teammates != old.teammates
+        ):
+            self.forget_own_replies()
         if config.voice != old.voice:
             # A new device, model or gate means a new listener - and this is also how a failed
             # one is cleared, since saving the Voice tab is the user saying "try again".
@@ -331,6 +338,17 @@ class Engine:
         if persist:
             save_config(config)
         self.bus.publish("config", config.model_dump(mode="json"))
+
+    def forget_own_replies(self) -> None:
+        """Drop what the bot said so far: its earlier lines go to the model as its own turns, so
+        after a personality change it would keep imitating the old voice from them."""
+        had = sum(1 for message in self.history if message.is_self)
+        self.history = [message for message in self.history if not message.is_self]
+        self.recent_replies.clear()
+        if had:
+            note = f"personality changed - forgot {had} earlier replies so the new one takes over"
+            self.log_note(note)
+            self.bus.publish("note", {"message": note})
 
     async def check_llm(self) -> str:
         try:
