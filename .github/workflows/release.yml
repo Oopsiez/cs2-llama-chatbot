@@ -24,7 +24,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: Set-Content cs2bot/_release.py "RELEASE = `"${{ github.ref_name }}`""
-      - run: pip install ".[voice]" pyinstaller
+      - run: pip install ".[voice]" pyinstaller pytest
+      # The log follower uses Win32 file sharing that the Linux CI cannot exercise.
+      - run: python -m pytest -q tests/test_logtail.py
       # DirectML runs the ONNX voices on any Windows GPU; same import name, so swap it in after.
       - run: pip uninstall -y onnxruntime && pip install onnxruntime-directml
       - run: python scripts/build_exe.py
