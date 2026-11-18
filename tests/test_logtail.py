@@ -99,7 +99,7 @@ def test_cs2_can_delete_the_log_while_the_bot_reads_it(tmp_path):
     from cs2bot.logtail import open_shared
 
     log = tmp_path / "console.log"
-    log.write_text("x\n", encoding="utf-8")
+    log.write_bytes(b"x\n")
     with open_shared(log) as handle:
         log.unlink()
         assert handle.read() == b"x\n"
