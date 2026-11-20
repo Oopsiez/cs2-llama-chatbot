@@ -8,11 +8,10 @@ import time
 from collections import deque
 from dataclasses import replace
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from . import RELEASE, __version__, commands, playbook
-from .config import AppConfig, fallback_log_path, load_config, save_config
+from .config import AppConfig, chat_log_path, fallback_log_path, load_config, save_config
 from .echo import EchoGuard
 from .events import EventBus
 from .gamestate import GameStateStore
@@ -20,6 +19,7 @@ from .humanize import first_sentences, first_words, for_speech, humanize, sampli
 from .identity import addressed_to, detect_name_from_line
 from .liveness import DeathBoard
 from .llm import LLMBackend, LLMError, OllamaBackend, SamplingParams, build_backend
+from .llm.base import strip_special_tokens
 from .llm.catalog import known_on_server
 from .logtail import LogTailer
 from .models import BotReply, ChatChannel, ChatMessage, LifeState, MessageSource, Team
@@ -447,9 +447,9 @@ class Engine:
         # Voice arrives on the speakers, not in the log, so it is pumped whether or not
         # console.log has been found.
         await self.pump_voice()
-        path = self.config.game.console_log_path
-        if path and Path(path).exists():
-            active, source = Path(path), "cs2"
+        found = chat_log_path(self.config.game.console_log_path)
+        if found is not None:
+            active, source = found, "cs2"
         else:
             active, source = fallback_log_path(), "fallback"
             active.parent.mkdir(parents=True, exist_ok=True)
@@ -568,7 +568,7 @@ class Engine:
     async def speak(self, text: str) -> tuple[bool, str]:
         text = first_sentences(text, self.config.speech_max_sentences) or text
         text = first_words(text, self.config.speech_max_words) or text
-        text = for_speech(text)
+        text = for_speech(strip_special_tokens(text))
         spoken, detail = await self.speaker.say(text)
         self.log_note(f"said: {text}" if spoken else f"could not say: {detail}")
         self.bus.publish("spoken" if spoken else "error", {"text": text, "detail": detail})
@@ -1327,8 +1327,11 @@ class Engine:
         path = self.config.game.console_log_path
         if not path:
             return "no console.log path set - CS2 install not found, set it on the Advanced tab"
-        if not Path(path).exists():
-            return "CS2 has not written console.log yet - add -condebug to its launch options"
+        if chat_log_path(path) is None:
+            return (
+                "CS2 has not written console.log yet - add -condebug to its launch options "
+                "(or +con_logfile cs2bot_chat.log if -condebug crashes the game)"
+            )
         if not self.log_attached:
             return "press Start bot"
         return ""
@@ -1336,11 +1339,11 @@ class Engine:
     def log_file_state(self) -> dict[str, Any]:
         """Whether the console log is there and growing - the first thing to check when the
         panel stays empty."""
-        path = self.config.game.console_log_path
-        if not path:
+        path = chat_log_path(self.config.game.console_log_path)
+        if path is None:
             return {"log_exists": False, "log_size": 0, "log_modified": ""}
         try:
-            stat = Path(path).stat()
+            stat = path.stat()
         except OSError:
             return {"log_exists": False, "log_size": 0, "log_modified": ""}
         modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)

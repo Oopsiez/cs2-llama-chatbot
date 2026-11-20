@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .base import ChatTurn, LLMBackend, LLMError, SamplingParams
+from .base import ChatTurn, LLMBackend, LLMError, SamplingParams, strip_special_tokens
 
 THREAD_PRIORITY_BELOW_NORMAL = -1
 
@@ -80,7 +80,7 @@ class LlamaCppBackend(LLMBackend):
             max_tokens=params.max_tokens,
             stop=params.stop,
         )
-        return (result["choices"][0]["message"]["content"] or "").strip()
+        return strip_special_tokens(result["choices"][0]["message"]["content"] or "")
 
     async def generate(self, turns: list[ChatTurn], params: SamplingParams) -> str:
         # llama.cpp contexts are not re-entrant, so serialise calls and keep the event loop free.

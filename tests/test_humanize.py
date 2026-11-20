@@ -124,3 +124,22 @@ def test_dropped_gs_are_spelled_back_for_the_voice_engine():
         == "again Kevin, win the pin, join the main train"
     )
     assert for_speech("making it, Nothin'!") == "making it, Nothing!"
+
+
+def test_leaked_template_markers_are_removed_whole_or_mangled():
+    from cs2bot.llm.base import strip_special_tokens
+
+    for leaked in [
+        "nice shot </|im_end|",
+        "nice shot <|im_end|>",
+        "nice shot <|eot_id|>",
+        "nice shot |im_end|>",
+        "nice shot <|im_end",
+        "nice shot </im_end|>",
+        "nice shot <|",
+        "nice shot <|im_start|>assistant",
+    ]:
+        assert strip_special_tokens(leaked).replace("assistant", "").strip() == "nice shot", leaked
+    assert strip_special_tokens("push b | end of round, then rotate") == "push b | end of round, then rotate"
+    assert strip_special_tokens("2 < 3 and a|b") == "2 < 3 and a|b"
+    assert humanize("rotate B now </|im_end|", literacy=100, max_chars=0) == "rotate B now"

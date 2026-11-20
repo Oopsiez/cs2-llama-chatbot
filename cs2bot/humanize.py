@@ -12,6 +12,8 @@ from __future__ import annotations
 import random
 import re
 
+from .llm.base import strip_special_tokens
+
 _ADJACENT = {
     "a": "sq",
     "b": "vn",
@@ -324,9 +326,6 @@ def first_words(text: str, limit: int) -> str:
     return kept.rstrip(",;:-") + "..."
 
 
-SPECIAL_TOKEN = re.compile(r"<\|[^|<>]{1,32}\|>")  # <|im_end|>, <|eot_id|> ... leaked by some GGUFs
-
-
 def strip_own_name(text: str, name: str) -> str:
     """`text` without the bot's own name as a prefix ("Name: ...") or a sign-off ("... - Name",
     "... Name", "...Name!"); models love to sign what they say."""
@@ -355,7 +354,7 @@ def humanize(
     A `spoken` line keeps full words, case and punctuation: "u r rite" is typing, not speech."""
     rng = random.Random(seed)
     level = max(0, min(100, literacy))
-    result = re.sub(r"\s+", " ", SPECIAL_TOKEN.sub(" ", text)).strip().strip('"')
+    result = re.sub(r"\s+", " ", strip_special_tokens(text)).strip().strip('"')
 
     # Models love to prefix replies with the speaker's name or stage directions.
     result = re.sub(r"^\s*\*[^*]{0,60}\*\s*", "", result)

@@ -970,7 +970,7 @@ async function renderLog() {
       : `${body.path || "no path set"} — ${size}`;
   if (!body.log_exists && body.source !== "fallback") {
     $("log-output").textContent =
-      "CS2 has not created this file. Add -condebug to the launch options and restart the game.";
+      "CS2 has not created this file. Add -condebug (or +con_logfile cs2bot_chat.log if -condebug crashes CS2) to the launch options and restart the game.";
     return;
   }
   if (!body.lines.length) {

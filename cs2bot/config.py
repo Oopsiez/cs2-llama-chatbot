@@ -332,6 +332,22 @@ def fallback_log_path() -> Path:
     return config_path().parent / "cs2bot-console.log"
 
 
+CON_LOGFILE_NAME = "cs2bot_chat.log"
+
+
+def chat_log_path(configured: str) -> Path | None:
+    """The chat log CS2 is writing: `console.log` from `-condebug`, or `cs2bot_chat.log` beside it
+    from `+con_logfile cs2bot_chat.log` (for PCs where `-condebug` crashes the game). The newest
+    one wins when both exist; None when neither does."""
+    if not configured:
+        return None
+    path = Path(configured)
+    found = [p for p in (path, path.with_name(CON_LOGFILE_NAME)) if p.is_file()]
+    if not found:
+        return None
+    return max(found, key=lambda p: p.stat().st_mtime)
+
+
 def default_cs2_dir() -> Path | None:
     """Best-effort guess at `.../Counter-Strike Global Offensive/game/csgo`."""
     candidates: list[Path] = []

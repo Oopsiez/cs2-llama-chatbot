@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
-from .base import ChatTurn, LLMBackend, LLMError, SamplingParams
+from .base import ChatTurn, LLMBackend, LLMError, SamplingParams, strip_special_tokens
 
 
 class OllamaBackend(LLMBackend):
@@ -72,7 +72,7 @@ class OllamaBackend(LLMBackend):
         except httpx.HTTPError as exc:
             raise LLMError(f"Ollama request failed - {self._why(exc)}") from exc
         data = response.json()
-        return (data.get("message", {}).get("content") or "").strip()
+        return strip_special_tokens(data.get("message", {}).get("content") or "")
 
     async def health(self) -> str:
         try:

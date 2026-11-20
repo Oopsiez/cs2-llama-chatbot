@@ -27,6 +27,8 @@ on first run.
 
 1. **Add `-condebug` to the launch options.** Steam → right-click Counter-Strike 2 → Properties →
    Launch Options → type `-condebug`. This makes CS2 write the chat log the bot reads.
+   If `-condebug` makes CS2 close mid-match on your PC, use `+con_logfile cs2bot_chat.log`
+   instead - the bot finds that file on its own.
 2. **Bind a key.** Open the developer console in CS2 and paste: `bind p "exec message.cfg"`
    (any key works - just set the same one in the panel).
 3. **Press *Install GSI config*** on the panel's Game tab, then restart CS2. That is what lets the
