@@ -3,11 +3,31 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import logging.handlers
 import threading
 import webbrowser
 
-from .config import load_config, save_config
+from .config import config_path, load_config, save_config
 from .web.app import create_app
+
+
+def _log_to_file() -> None:
+    """Keep the bot's own warnings (voice capture, engines) in cs2bot.log next to the config,
+    where a user can find them after the console window is gone."""
+    path = config_path().parent / "cs2bot.log"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(
+            path, maxBytes=1_000_000, backupCount=1, encoding="utf-8"
+        )
+    except OSError:
+        return
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root = logging.getLogger()
+    root.addHandler(handler)
+    if root.level > logging.INFO or root.level == logging.NOTSET:
+        root.setLevel(logging.INFO)
 
 
 def main() -> None:
@@ -18,6 +38,7 @@ def main() -> None:
         "--no-browser", action="store_true", help="do not open the panel in a browser"
     )
     args = parser.parse_args()
+    _log_to_file()
 
     import uvicorn
 

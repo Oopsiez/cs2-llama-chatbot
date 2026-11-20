@@ -20,6 +20,8 @@ from . import audio
 from .segment import Segmenter
 from .transcribe import Transcriber, WhisperTranscriber, model_is_cached, whisper_missing
 
+CLONE_BUFFER_SECONDS = 12.0
+
 log = logging.getLogger(__name__)
 
 # How many finished utterances may wait for the model before the oldest is dropped.
@@ -33,9 +35,21 @@ class Utterance:
     text: str
     seconds: float
     heard_at: float = field(default_factory=time.time)
+    source: str = ""  # what was being captured when it was heard (the listener's note)
 
 
 BlockSource = Callable[[], Iterator[list[float]]]
+
+
+@dataclass
+class _Run:
+    """One spell of listening: the threads started together share these and nothing else."""
+
+    stop: threading.Event = field(default_factory=threading.Event)
+    pending: queue.Queue[tuple[Sequence[float], float]] = field(
+        default_factory=lambda: queue.Queue(maxsize=PENDING_LIMIT)
+    )
+    heard: queue.Queue[Utterance] = field(default_factory=queue.Queue)
 
 
 class VoiceListener:
@@ -45,25 +59,35 @@ class VoiceListener:
         self,
         *,
         device: str = "",
+        capture: str = "pc",
+        process: str = "cs2.exe",
         transcriber: Transcriber | None = None,
         source: BlockSource | None = None,
         segmenter: Segmenter | None = None,
         model_name: str = "small.en",
+        gate: Callable[[float, float], bool] | None = None,
     ) -> None:
         self.device = device
         self.model_name = model_name
         self._transcriber = transcriber
-        self._source = source or (lambda: audio.blocks(device))
+        self.capture = capture
+        self.note = ""
+        self.process = process
+        self._source = source or (lambda: audio.capture(device, capture, self._set_note, process))
         self._segmenter = segmenter or Segmenter(audio.SAMPLE_RATE)
-        self._pending: queue.Queue[Sequence[float]] = queue.Queue(maxsize=PENDING_LIMIT)
-        self._heard: queue.Queue[Utterance] = queue.Queue()
-        self._stop = threading.Event()
+        self._run = _Run()
         self._threads: list[threading.Thread] = []
         self.error: str = ""
         self.loading: bool = False
         self.utterances_heard = 0
         self.last_text = ""
         self.last_heard_at = 0.0
+        # The most recent teammate speech, newest last, kept to CLONE_BUFFER_SECONDS so a voice
+        # clone can be built from several short callouts rather than one.
+        self.last_audio: list[float] = []
+        self._gate = gate
+        self.own_voice_ignored = 0
+        self.level = 0.0  # loudest sample in the last block, 0..1, so the panel can show a meter
 
     # ---- lifecycle --------------------------------------------------------------
 
@@ -80,20 +104,24 @@ class VoiceListener:
         """
         if self.running or self.error:
             return
-        self._stop.clear()
         self._segmenter.reset()
+        # A fresh run, with its own stop flag and queues: a worker from a previous run that
+        # is still winding down - Whisper can sit in one transcription for many seconds -
+        # then cannot be woken by this one, nor deliver speech heard before the bot was told
+        # to stop listening.
+        run = self._run = _Run()
         self._threads = [
-            threading.Thread(target=self._listen, name="cs2bot-voice-listen", daemon=True),
-            threading.Thread(target=self._transcribe, name="cs2bot-voice-whisper", daemon=True),
+            threading.Thread(target=self._listen, args=(run,), name="cs2bot-voice-listen", daemon=True),
+            threading.Thread(target=self._transcribe, args=(run,), name="cs2bot-voice-whisper", daemon=True),
         ]
         for thread in self._threads:
             thread.start()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._run.stop.set()
         for thread in self._threads:
             thread.join(timeout=2.0)
-        self._threads = []
+        self._threads = [thread for thread in self._threads if thread.is_alive()]
 
     def restart(self) -> None:
         """Try again after a failure - the sound card may have come back."""
@@ -106,39 +134,55 @@ class VoiceListener:
         out = []
         while True:
             try:
-                out.append(self._heard.get_nowait())
+                out.append(self._run.heard.get_nowait())
             except queue.Empty:
                 return out
 
     # ---- threads ----------------------------------------------------------------
 
-    def _listen(self) -> None:
+    def _set_note(self, note: str) -> None:
+        self.note = note
+
+    def _listen(self, run: _Run) -> None:
         try:
             for block in self._source():
-                if self._stop.is_set():
+                if run.stop.is_set():
                     break
+                self.level = max((abs(x) for x in block), default=0.0)
                 for utterance in self._segmenter.feed(block):
-                    self._offer(utterance)
+                    self._offer(run, utterance)
+            else:
+                raise RuntimeError("the audio capture ended on its own")
         except Exception as exc:
             self.error = f"{type(exc).__name__}: {exc}"
             log.warning("voice capture stopped: %s", self.error)
+            # Without capture there is nothing left to transcribe, and a worker polling an
+            # empty queue forever would keep the listener looking alive.
+            run.stop.set()
 
-    def _offer(self, samples: Sequence[float]) -> None:
-        """Queue an utterance, throwing away the stalest one if the model is behind."""
+    def _offer(self, run: _Run, samples: Sequence[float], ended_at: float | None = None) -> None:
+        """Queue an utterance, throwing away the stalest one if the model is behind.
+
+        Anything that overlapped the bot's own clip (the `gate` says when it was talking) is
+        dropped here, before Whisper spends seconds on it."""
+        ended_at = time.time() if ended_at is None else ended_at
+        if self._gate is not None and self._gate(ended_at - len(samples) / audio.SAMPLE_RATE, ended_at):
+            self.own_voice_ignored += 1
+            return
         while True:
             try:
-                self._pending.put_nowait(samples)
+                run.pending.put_nowait((samples, ended_at))
                 return
             except queue.Full:
                 try:
-                    self._pending.get_nowait()
+                    run.pending.get_nowait()
                 except queue.Empty:  # pragma: no cover - raced with the worker
                     pass
 
-    def _transcribe(self) -> None:
-        while not self._stop.is_set():
+    def _transcribe(self, run: _Run) -> None:
+        while not run.stop.is_set():
             try:
-                samples = self._pending.get(timeout=0.2)
+                samples, ended_at = run.pending.get(timeout=0.2)
             except queue.Empty:
                 continue
             try:
@@ -148,17 +192,24 @@ class VoiceListener:
                 # stop the whole listener rather than failing on every word spoken all match.
                 self.error = f"{type(exc).__name__}: {exc}"
                 log.warning("transcription failed: %s", self.error)
-                self._stop.set()
+                run.stop.set()
                 return
             finally:
                 self.loading = False
-            if not text:
+            if not text or run.stop.is_set():
                 continue
             self.utterances_heard += 1
             self.last_text = text
             self.last_heard_at = time.time()
-            self._heard.put(
-                Utterance(text=text, seconds=len(samples) / audio.SAMPLE_RATE)
+            keep = int(CLONE_BUFFER_SECONDS * audio.SAMPLE_RATE)
+            self.last_audio = (self.last_audio + list(samples))[-keep:]
+            run.heard.put(
+                Utterance(
+                    text=text,
+                    seconds=len(samples) / audio.SAMPLE_RATE,
+                    heard_at=ended_at,
+                    source=self.note,
+                )
             )
 
     def _model(self) -> Transcriber:
@@ -176,11 +227,19 @@ class VoiceListener:
         return {
             "running": self.running,
             "device": self.device,
+            "capture": self.capture,
+            "note": self.note,
             "model": self.model_name,
             "model_ready": model_is_cached(self.model_name),
             "downloading": self.loading,
             "heard": self.utterances_heard,
+            "own_voice_ignored": self.own_voice_ignored,
+            "level": round(self.level, 4),
             "last_text": self.last_text,
+            "clip_seconds": round(len(self.last_audio) / audio.SAMPLE_RATE, 1),
+            "transcribe_note": (
+                self._transcriber.last_timing if isinstance(self._transcriber, WhisperTranscriber) else ""
+            ),
             "last_heard_at": self.last_heard_at,
             "error": self.error,
         }

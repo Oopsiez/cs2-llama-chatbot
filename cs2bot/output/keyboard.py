@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from typing import cast
 
 # Spelled out rather than taken from `ctypes.wintypes`, which refuses to import off Windows and
 # would take the tests and the type check with it.
@@ -24,28 +28,122 @@ INPUT_KEYBOARD = 1
 
 # Set 1 scan codes. `0xE0` marks the keys the keyboard sends with an extended prefix.
 SCAN_CODES: dict[str, int] = {
-    "escape": 0x01, "1": 0x02, "2": 0x03, "3": 0x04, "4": 0x05, "5": 0x06, "6": 0x07, "7": 0x08,
-    "8": 0x09, "9": 0x0A, "0": 0x0B, "-": 0x0C, "=": 0x0D, "backspace": 0x0E, "tab": 0x0F,
-    "q": 0x10, "w": 0x11, "e": 0x12, "r": 0x13, "t": 0x14, "y": 0x15, "u": 0x16, "i": 0x17,
-    "o": 0x18, "p": 0x19, "[": 0x1A, "]": 0x1B, "enter": 0x1C, "ctrl": 0x1D, "a": 0x1E, "s": 0x1F,
-    "d": 0x20, "f": 0x21, "g": 0x22, "h": 0x23, "j": 0x24, "k": 0x25, "l": 0x26, ";": 0x27,
-    "'": 0x28, "`": 0x29, "shift": 0x2A, "\\": 0x2B, "z": 0x2C, "x": 0x2D, "c": 0x2E, "v": 0x2F,
-    "b": 0x30, "n": 0x31, "m": 0x32, ",": 0x33, ".": 0x34, "/": 0x35, "rshift": 0x36, "alt": 0x38,
-    "space": 0x39, "capslock": 0x3A, "f1": 0x3B, "f2": 0x3C, "f3": 0x3D, "f4": 0x3E, "f5": 0x3F,
-    "f6": 0x40, "f7": 0x41, "f8": 0x42, "f9": 0x43, "f10": 0x44, "f11": 0x57, "f12": 0x58,
-    "kp_end": 0x4F, "kp_downarrow": 0x50, "kp_pgdn": 0x51, "kp_leftarrow": 0x4B, "kp_5": 0x4C,
-    "kp_rightarrow": 0x4D, "kp_home": 0x47, "kp_uparrow": 0x48, "kp_pgup": 0x49, "kp_ins": 0x52,
-    "kp_del": 0x53, "kp_slash": 0xE035, "kp_multiply": 0x37, "kp_minus": 0x4A, "kp_plus": 0x4E,
-    "kp_enter": 0xE01C, "ins": 0xE052, "del": 0xE053, "home": 0xE047, "end": 0xE04F,
-    "pgup": 0xE049, "pgdn": 0xE051, "uparrow": 0xE048, "downarrow": 0xE050,
-    "leftarrow": 0xE04B, "rightarrow": 0xE04D, "rctrl": 0xE01D, "ralt": 0xE038,
+    "escape": 0x01,
+    "1": 0x02,
+    "2": 0x03,
+    "3": 0x04,
+    "4": 0x05,
+    "5": 0x06,
+    "6": 0x07,
+    "7": 0x08,
+    "8": 0x09,
+    "9": 0x0A,
+    "0": 0x0B,
+    "-": 0x0C,
+    "=": 0x0D,
+    "backspace": 0x0E,
+    "tab": 0x0F,
+    "q": 0x10,
+    "w": 0x11,
+    "e": 0x12,
+    "r": 0x13,
+    "t": 0x14,
+    "y": 0x15,
+    "u": 0x16,
+    "i": 0x17,
+    "o": 0x18,
+    "p": 0x19,
+    "[": 0x1A,
+    "]": 0x1B,
+    "enter": 0x1C,
+    "ctrl": 0x1D,
+    "a": 0x1E,
+    "s": 0x1F,
+    "d": 0x20,
+    "f": 0x21,
+    "g": 0x22,
+    "h": 0x23,
+    "j": 0x24,
+    "k": 0x25,
+    "l": 0x26,
+    ";": 0x27,
+    "'": 0x28,
+    "`": 0x29,
+    "shift": 0x2A,
+    "\\": 0x2B,
+    "z": 0x2C,
+    "x": 0x2D,
+    "c": 0x2E,
+    "v": 0x2F,
+    "b": 0x30,
+    "n": 0x31,
+    "m": 0x32,
+    ",": 0x33,
+    ".": 0x34,
+    "/": 0x35,
+    "rshift": 0x36,
+    "alt": 0x38,
+    "space": 0x39,
+    "capslock": 0x3A,
+    "f1": 0x3B,
+    "f2": 0x3C,
+    "f3": 0x3D,
+    "f4": 0x3E,
+    "f5": 0x3F,
+    "f6": 0x40,
+    "f7": 0x41,
+    "f8": 0x42,
+    "f9": 0x43,
+    "f10": 0x44,
+    "f11": 0x57,
+    "f12": 0x58,
+    "kp_end": 0x4F,
+    "kp_downarrow": 0x50,
+    "kp_pgdn": 0x51,
+    "kp_leftarrow": 0x4B,
+    "kp_5": 0x4C,
+    "kp_rightarrow": 0x4D,
+    "kp_home": 0x47,
+    "kp_uparrow": 0x48,
+    "kp_pgup": 0x49,
+    "kp_ins": 0x52,
+    "kp_del": 0x53,
+    "kp_slash": 0xE035,
+    "kp_multiply": 0x37,
+    "kp_minus": 0x4A,
+    "kp_plus": 0x4E,
+    "kp_enter": 0xE01C,
+    "ins": 0xE052,
+    "del": 0xE053,
+    "home": 0xE047,
+    "end": 0xE04F,
+    "pgup": 0xE049,
+    "pgdn": 0xE051,
+    "uparrow": 0xE048,
+    "downarrow": 0xE050,
+    "leftarrow": 0xE04B,
+    "rightarrow": 0xE04D,
+    "rctrl": 0xE01D,
+    "ralt": 0xE038,
 }
 
 ALIASES = {
-    "return": "enter", "esc": "escape", "spacebar": "space", "up": "uparrow", "down": "downarrow",
-    "left": "leftarrow", "right": "rightarrow", "insert": "ins", "delete": "del",
-    "pageup": "pgup", "pagedown": "pgdn", "control": "ctrl", "lctrl": "ctrl", "lshift": "shift",
-    "lalt": "alt", "semicolon": ";",
+    "return": "enter",
+    "esc": "escape",
+    "spacebar": "space",
+    "up": "uparrow",
+    "down": "downarrow",
+    "left": "leftarrow",
+    "right": "rightarrow",
+    "insert": "ins",
+    "delete": "del",
+    "pageup": "pgup",
+    "pagedown": "pgdn",
+    "control": "ctrl",
+    "lctrl": "ctrl",
+    "lshift": "shift",
+    "lalt": "alt",
+    "semicolon": ";",
 }
 
 
@@ -111,6 +209,69 @@ ERROR_ACCESS_DENIED = 5
 
 
 RELEASE_ATTEMPTS = 3
+MAPVK_VSC_TO_VK_EX = 3
+
+
+def _send(user32: object, code: int, key_up: bool) -> bool:
+    """One key event through SendInput, falling back to the legacy `keybd_event` when Windows
+    returns 0 without an error - the symptom of a scan-code event an overlay refused."""
+    event = _event(code, key_up=key_up)
+    sent = int(user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_Input)))  # type: ignore[attr-defined]
+    if sent or int(ctypes.get_last_error()) == ERROR_ACCESS_DENIED:  # type: ignore[attr-defined]
+        return bool(sent)
+    legacy = getattr_keybd_event(user32)
+    if legacy is None:
+        return False
+    flags = KEYEVENTF_SCANCODE | (KEYEVENTF_KEYUP if key_up else 0)
+    legacy(0, code & 0xFF, flags | (KEYEVENTF_EXTENDEDKEY if code > 0xFF else 0), 0)
+    return True
+
+
+def getattr_keybd_event(user32: object) -> Callable[..., object] | None:
+    try:
+        return cast(Callable[..., object], user32.keybd_event)  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
+
+
+def is_down(user32: object, code: int) -> bool | None:
+    """Whether Windows currently sees the key as pressed, or None when it cannot tell."""
+    try:
+        vk = int(user32.MapVirtualKeyW(code, MAPVK_VSC_TO_VK_EX))  # type: ignore[attr-defined]
+        if not vk:
+            return None
+        return bool(int(user32.GetAsyncKeyState(vk)) & 0x8000)  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
+
+
+@contextmanager
+def hold(key: str) -> Iterator[None]:
+    """Keep `key` down for the block - a push-to-talk key while a clip plays.
+
+    The press is checked against what Windows reports and sent again if the game did not get
+    it, and the release is retried until the key really is up - a stuck talk key both keeps the
+    mic open and makes Windows drop the next synthetic press.
+    """
+    code = scan_code(key)
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
+    except AttributeError as exc:  # pragma: no cover - only reachable off Windows
+        raise KeyPressError("sending keystrokes only works on Windows") from exc
+    for _attempt in range(RELEASE_ATTEMPTS):
+        if not _send(user32, code, key_up=False):
+            raise KeyPressError(_refusal(int(ctypes.get_last_error())))  # type: ignore[attr-defined]
+        if is_down(user32, code) is not False:
+            break
+        time.sleep(0.02)
+    try:
+        yield
+    finally:
+        for _ in range(RELEASE_ATTEMPTS):
+            _send(user32, code, key_up=True)
+            if is_down(user32, code) is not True:
+                break
+            time.sleep(0.02)
 
 
 def press(key: str) -> None:
@@ -126,9 +287,8 @@ def press(key: str) -> None:
     except AttributeError as exc:  # pragma: no cover - only reachable off Windows
         raise KeyPressError("sending keystrokes only works on Windows") from exc
 
-    def send(key_up: bool) -> int:
-        event = _event(code, key_up=key_up)
-        return int(user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_Input)))
+    def send(key_up: bool) -> bool:
+        return _send(user32, code, key_up)
 
     if not send(key_up=False):
         raise KeyPressError(_refusal(int(ctypes.get_last_error())))  # type: ignore[attr-defined]
